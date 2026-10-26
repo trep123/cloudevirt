@@ -116,6 +116,7 @@ MIDDLEWARE = [
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
+    'common.middleware.RequestIDMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
@@ -157,7 +158,18 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.SessionAuthentication',
     ],
+    # 统一异常结构：{error:{code,message,details,request_id}}
+    'EXCEPTION_HANDLER': 'common.exceptions.api_exception_handler',
+    'DEFAULT_PAGINATION_CLASS': 'common.pagination.StandardPagination',
+    'PAGE_SIZE': 20,
+    # 时间统一 ISO 8601 UTC
+    'DATETIME_FORMAT': '%Y-%m-%dT%H:%M:%SZ',
+    # 输出 UTF-8 原文，不做 \uXXXX 转义
+    'UNICODE_JSON': False,
 }
+
+# 列表接口每页条数上限，防止一次性拉取全表
+API_MAX_PAGE_SIZE = int(os.environ.get('API_MAX_PAGE_SIZE', '100'))
 
 LANGUAGE_CODE = 'zh-hans'
 TIME_ZONE = 'UTC'
@@ -170,15 +182,22 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
+    'filters': {
+        'request_context': {
+            '()': 'common.logging.RequestContextFilter',
+        },
+    },
     'formatters': {
         'standard': {
-            'format': '%(asctime)s %(levelname)s %(name)s %(message)s',
+            'format': '%(asctime)s %(levelname)s %(name)s request_id=%(request_id)s '
+            'task_id=%(task_id)s %(message)s',
         },
     },
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
             'formatter': 'standard',
+            'filters': ['request_context'],
         },
     },
     'root': {'handlers': ['console'], 'level': os.environ.get('DJANGO_LOG_LEVEL', 'INFO')},

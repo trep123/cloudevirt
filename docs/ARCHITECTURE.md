@@ -167,9 +167,20 @@ UNKNOWN → ONLINE ⇄ DEGRADED → OFFLINE；MAINTENANCE 为人工置位，不�
 }
 ```
 
-Agent 侧等价结构：`{"code":"LIBVIRT_UNAVAILABLE","message":"...","request_id":"..."}`（同一 API 内不得混用两种结构）。
+Agent 侧等价结构：{"code":"LIBVIRT_UNAVAILABLE","message":"...","request_id":"..."}（同一 API 内不得混用两种结构）。
 
-### 5.4 错误码与状态码
+### 5.4 统一约定（模块 L 已落地）
+
+| 项 | 约定 |
+| --- | --- |
+| 编码 | JSON UTF-8，不做 \uXXXX 转义；时间 ISO 8601 UTC（`%Y-%m-%dT%H:%M:%SZ`） |
+| 分页 | 参数 `page`、`page_size`；默认 20 条，上限 `API_MAX_PAGE_SIZE`（默认 100，环境变量可覆盖） |
+| 链路追踪 | 请求/响应头 `X-Request-ID`；服务端生成（32 位十六进制），调用方传入且格式合法时复用；错误体必含 `request_id` |
+| 幂等 | 写操作可携带 `Idempotency-Key` 请求头，服务端语义在模块 J 实现（活跃任务内唯一） |
+| 错误页 | API 前缀下 404/500 均返回 JSON 错误结构，不返回 HTML 错误页 |
+| 实现位置 | `common/errors.py`（错误码与 `AppError`）、`common/exceptions.py`（统一处理器）、`common/pagination.py`、`common/middleware.py`、`common/logging.py` |
+
+### 5.5 错误码与状态码
 
 | 错误码 | HTTP | 含义 |
 | --- | --- | --- |

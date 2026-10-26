@@ -49,7 +49,7 @@
 | I | 生命周期操作 | NEW | 阶段 3 | G、H、J | 真实 KVM（验收） | 后端 + Agent + 前端 |
 | J | 任务队列、幂等与恢复 | NEW | 阶段 2（完善于 4） | A | 无 | 后端 tasks |
 | K | 前端页面与 API 客户端 | NEW | 阶段 2（完善于 3） | B、L | 无 | apps/web |
-| L | API 统一规范 | NEW | 阶段 1 | A | 无 | 后端 common |
+| L | API 统一规范 | NEW→完成（2026-10-26） | 阶段 1 | A | 无 | 后端 common |
 | M | 网络管理 | NEW | 阶段 3（完善于 5） | D | libvirt 网络 / 网桥 | 后端 networks、Agent |
 | N | 监控、对账和告警 | NEW | 阶段 4（完善于 6） | C、J | 无 | 后端 monitoring |
 | O | 安全加固 | NEW | 阶段 4 | B、D、L | 生产环境（验收） | 全栈 |

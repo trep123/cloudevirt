@@ -73,7 +73,7 @@ make lint             # 全量静态检查（ruff + gofmt + go vet）
 - 后端：业务异常继承 `AppError` 并携带错误码，由 DRF 异常处理器统一转换为 `{error:{code,message,details,request_id}}`。
 - Agent：错误码（如 `INVALID_ARGUMENT`、`LIBVIRT_UNAVAILABLE`）集中映射为 HTTP 状态，响应体为 `{code,message,request_id}`。
 - 前端：统一在 `src/api/` 解析错误码，展示可读信息、错误码与 request_id，不展示堆栈。
-- 错误码与状态码对照见 docs/ARCHITECTURE.md 第 5.4 节。
+- 错误码与状态码对照见 docs/ARCHITECTURE.md 第 5.5 节；分页、request_id 等统一约定见第 5.4 节。
 
 ## 6. 已知限制
 
