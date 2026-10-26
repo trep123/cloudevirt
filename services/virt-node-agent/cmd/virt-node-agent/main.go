@@ -42,6 +42,7 @@ func main() {
 		DiskDir:          cfg.DiskDir,
 		AllowDestructive: cfg.AllowDestructive,
 		Domains:          client,
+		Virtualizer:      client,
 		Logger:           logger,
 	})
 

@@ -5,6 +5,7 @@
 package storage
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -15,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/tl2004/cloude-virt/services/virt-node-agent/internal/apierr"
 )
@@ -146,4 +148,93 @@ func Remove(root, relative string) error {
 		return apierr.New(apierr.CodeOperationFailed, fmt.Sprintf("删除文件失败: %v", err), err)
 	}
 	return nil
+}
+
+// CreateDisk 创建稀疏 QCOW2 磁盘；文件已存在时视为成功（幂等）。
+//
+// Args:
+//
+//	path: 已通过 SafePath 校验的绝对路径。
+//	sizeGiB: 虚拟容量（GiB），必须为正数。
+//
+// Returns:
+//
+//	创建或已存在时返回 nil。
+func CreateDisk(ctx context.Context, path string, sizeGiB int) error {
+	if sizeGiB <= 0 {
+		return apierr.New(apierr.CodeInvalidArgument, "磁盘容量必须为正数", nil)
+	}
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return apierr.New(apierr.CodeOperationFailed, "磁盘状态检查失败", err)
+	}
+
+	commandCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+	argument := fmt.Sprintf("%dG", sizeGiB)
+	output, err := exec.CommandContext(
+		commandCtx, "qemu-img", "create", "-f", "qcow2", "--", path, argument,
+	).CombinedOutput()
+	if err != nil {
+		return apierr.New(
+			apierr.CodeOperationFailed,
+			fmt.Sprintf("创建磁盘失败: %s", strings.TrimSpace(string(output))),
+			err,
+		)
+	}
+	return nil
+}
+
+// DiskInfo 返回实际格式与虚拟容量，用于创建后的复核。
+func DiskInfo(ctx context.Context, path string) (string, int64, error) {
+	commandCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	// --force-share 允许读取正在被 QEMU 打开的镜像
+	output, err := exec.CommandContext(
+		commandCtx, "qemu-img", "info", "--force-share", "--output=json", "--", path,
+	).Output()
+	if err != nil {
+		return "", 0, apierr.New(apierr.CodeOperationFailed, "读取磁盘信息失败", err)
+	}
+	var parsed qemuImgOutput
+	if err := json.Unmarshal(output, &parsed); err != nil {
+		return "", 0, apierr.New(apierr.CodeOperationFailed, "磁盘信息解析失败", err)
+	}
+	return strings.ToUpper(parsed.Format), parsed.VirtualSizeBytes, nil
+}
+
+// SafePathAllowMissing 与 SafePath 类似，但允许目标文件尚不存在（用于创建磁盘）。
+//
+// 父目录必须存在且解析后仍位于根目录内，避免通过目录符号链接逃逸。
+func SafePathAllowMissing(root, relative string) (string, error) {
+	if strings.TrimSpace(root) == "" {
+		return "", apierr.New(apierr.CodeInternalError, "存储根目录未配置", nil)
+	}
+	if strings.TrimSpace(relative) == "" {
+		return "", apierr.New(apierr.CodeInvalidArgument, "文件路径不能为空", nil)
+	}
+	if filepath.IsAbs(relative) {
+		return "", apierr.New(apierr.CodeInvalidArgument, "文件路径必须是相对路径", nil)
+	}
+	rootCleaned := filepath.Clean(root)
+	cleaned := filepath.Clean(filepath.Join(rootCleaned, relative))
+	if cleaned != rootCleaned && !strings.HasPrefix(cleaned, rootCleaned+string(os.PathSeparator)) {
+		return "", apierr.New(apierr.CodeInvalidArgument, "路径越出允许的根目录", ErrPathEscape)
+	}
+	parent, err := filepath.EvalSymlinks(filepath.Dir(cleaned))
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", apierr.New(apierr.CodeNotFound, "目标目录不存在", err)
+		}
+		return "", apierr.New(apierr.CodeOperationFailed, "路径解析失败", err)
+	}
+	rootResolved, err := filepath.EvalSymlinks(rootCleaned)
+	if err != nil {
+		return "", apierr.New(apierr.CodeNotFound, "存储根目录不存在", err)
+	}
+	if parent != rootResolved && !strings.HasPrefix(parent, rootResolved+string(os.PathSeparator)) {
+		return "", apierr.New(apierr.CodeInvalidArgument, "符号链接越出允许的根目录", ErrPathEscape)
+	}
+	return filepath.Join(parent, filepath.Base(cleaned)), nil
 }

@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -130,4 +131,73 @@ func (c *Client) run(ctx context.Context, args ...string) (string, error) {
 		return "", apierr.New(apierr.CodeLibvirtUnavailable, fmt.Sprintf("virsh 执行失败: %s", message), runErr)
 	}
 	return stdout.String(), nil
+}
+
+// DefineDomain 定义域：写入临时文件后调用 virsh define，用完立即删除。
+//
+// Args:
+//
+//	content: 已通过校验的域 XML。
+//
+// Returns:
+//
+//	定义失败时返回稳定错误码。
+func (c *Client) DefineDomain(ctx context.Context, content string) error {
+	file, err := os.CreateTemp("", "cloudvirt-domain-*.xml")
+	if err != nil {
+		return apierr.New(apierr.CodeOperationFailed, "无法创建临时文件", err)
+	}
+	path := file.Name()
+	defer os.Remove(path)
+
+	if err := file.Chmod(0o600); err != nil {
+		file.Close()
+		return apierr.New(apierr.CodeOperationFailed, "临时文件权限设置失败", err)
+	}
+	if _, err := file.WriteString(content); err != nil {
+		file.Close()
+		return apierr.New(apierr.CodeOperationFailed, "写入域定义失败", err)
+	}
+	if err := file.Close(); err != nil {
+		return apierr.New(apierr.CodeOperationFailed, "关闭临时文件失败", err)
+	}
+
+	_, err = c.run(ctx, "define", path)
+	return err
+}
+
+// StartDomain 启动域。
+func (c *Client) StartDomain(ctx context.Context, name string) error {
+	_, err := c.run(ctx, "start", name)
+	return err
+}
+
+// DestroyDomain 强制关闭域（断电语义，调用方需完成授权与确认）。
+func (c *Client) DestroyDomain(ctx context.Context, name string) error {
+	_, err := c.run(ctx, "destroy", name)
+	return err
+}
+
+// UndefineDomain 删除域定义。
+func (c *Client) UndefineDomain(ctx context.Context, name string) error {
+	_, err := c.run(ctx, "undefine", name)
+	return err
+}
+
+// DumpXML 返回域定义 XML，用于创建后核对 UUID、内存与 vCPU。
+func (c *Client) DumpXML(ctx context.Context, name string) (string, error) {
+	return c.run(ctx, "dumpxml", name)
+}
+
+// DomainExists 判断域是否已定义。
+func (c *Client) DomainExists(ctx context.Context, name string) (bool, error) {
+	_, err := c.run(ctx, "dominfo", name)
+	if err == nil {
+		return true, nil
+	}
+	var apiError *apierr.Error
+	if errors.As(err, &apiError) && strings.Contains(strings.ToLower(apiError.Error()), "failed to get domain") {
+		return false, nil
+	}
+	return false, err
 }

@@ -19,6 +19,9 @@ import (
 // errNoDomainLister 表示未注入域查询依赖。
 var errNoDomainLister = apierr.New(apierr.CodeInternalError, "域查询依赖未初始化", nil)
 
+// errNoVirtualizer 表示未注入域操作依赖。
+var errNoVirtualizer = apierr.New(apierr.CodeInternalError, "域操作依赖未初始化", nil)
+
 // healthResponse 是健康检查响应体。
 type healthResponse struct {
 	Status  string `json:"status"`
@@ -39,6 +42,7 @@ type Dependencies struct {
 	DiskDir          string
 	AllowDestructive bool
 	Domains          DomainLister
+	Virtualizer      DomainOperator
 	Logger           *slog.Logger
 }
 
@@ -57,6 +61,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	api := http.NewServeMux()
 	api.HandleFunc("GET /api/v1/node/resources", resourcesHandler(deps))
 	api.HandleFunc("GET /api/v1/domains", domainsHandler(deps))
+	api.HandleFunc("POST /api/v1/domains", createDomainHandler(deps))
 	api.HandleFunc("POST /api/v1/images/inspect", inspectImageHandler(deps))
 	api.HandleFunc("DELETE /api/v1/images", deleteImageHandler(deps))
 
