@@ -113,6 +113,10 @@ class AgentClient:
         """请求 Agent 删除镜像文件（受宿主机破坏性开关约束）。"""
         return self.request_json('/api/v1/images', 'DELETE', {'relative_path': relative_path})
 
+    def create_domain(self, payload: dict) -> dict:
+        """请求 Agent 创建并启动域。"""
+        return self.request_json('/api/v1/domains', 'POST', payload)
+
     def domains(self) -> list[dict]:
         """读取域列表。"""
         payload = self.get_json('/api/v1/domains')

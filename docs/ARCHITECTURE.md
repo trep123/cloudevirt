@@ -119,7 +119,7 @@ UNKNOWN → ONLINE ⇄ DEGRADED → OFFLINE；MAINTENANCE 为人工置位，不�
 | POST | /api/v1/images/ | 导入/登记镜像（`images.add_image`，由节点 Agent 检查文件） | 201 / 200 |
 | POST | /api/v1/images/ | 镜像导入（上传或登记） | 202 |
 | DELETE | /api/v1/images/{id}/ | 删除镜像（`images.delete_image`，`purge_file` 显式声明是否删文件） | 204 |
-| GET/POST | /api/v1/instances/ | 实例列表 / 创建 | 200 / **202** |
+| GET/POST | /api/v1/instances/ | 实例列表（`instances.view_instance`） / 创建（`instances.add_instance`，**202 + 任务**） | 200 / 202 |
 | GET | /api/v1/instances/{id}/ | 实例详情 | 200 |
 | POST | /api/v1/instances/{id}/start/ | 启动 | 202 |
 | POST | /api/v1/instances/{id}/shutdown/ | 正常关机 | 202 |

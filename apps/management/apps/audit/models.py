@@ -36,6 +36,7 @@ class AuditAction(models.TextChoices):
     NODE_OFFLINE = 'NODE_OFFLINE', '节点离线'
     IMAGE_IMPORT = 'IMAGE_IMPORT', '导入镜像'
     IMAGE_DELETE = 'IMAGE_DELETE', '删除镜像'
+    INSTANCE_CREATE = 'INSTANCE_CREATE', '创建实例'
 
 
 class AuditEvent(models.Model):

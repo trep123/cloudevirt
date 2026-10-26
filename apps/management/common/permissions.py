@@ -163,3 +163,17 @@ class CanDeleteImage(RequiresPermission):
 
     codename = 'images.delete_image'
     target_type = 'image'
+
+
+class CanViewInstance(RequiresPermission):
+    """查看实例的权限。"""
+
+    codename = 'instances.view_instance'
+    target_type = 'instance'
+
+
+class CanCreateInstance(RequiresPermission):
+    """创建实例的权限。"""
+
+    codename = 'instances.add_instance'
+    target_type = 'instance'

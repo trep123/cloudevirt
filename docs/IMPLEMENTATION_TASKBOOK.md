@@ -45,7 +45,7 @@
 | E | 镜像管理 | NEW→部分完成（2026-10-26） | 阶段 3 | A、B、D | 上传通道与引用检查待后续 | 后端 images、Agent storage |
 | F | 存储与虚拟磁盘 | NEW | 阶段 3 | D、E | 磁盘目录与容量 | 后端 instances、Agent storage |
 | G | 实例模型与状态机 | NEW | 阶段 3 | A | 无 | 后端 instances |
-| H | 虚拟机创建 | NEW | 阶段 3 | C、D、E、F、G、J | 真实 KVM（验收） | 后端 + Agent + 前端 |
+| H | 虚拟机创建 | NEW→创建链路完成（2026-10-26） | 阶段 3 | C、D、E、F、G、J | 生命周期操作与前端待做 | 后端 + Agent |
 | I | 生命周期操作 | NEW | 阶段 3 | G、H、J | 真实 KVM（验收） | 后端 + Agent + 前端 |
 | J | 任务队列、幂等与恢复 | NEW | 阶段 2（完善于 4） | A | 无 | 后端 tasks |
 | K | 前端页面与 API 客户端 | NEW | 阶段 2（完善于 3） | B、L | 无 | apps/web |
