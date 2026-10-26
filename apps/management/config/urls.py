@@ -8,6 +8,7 @@ urlpatterns = [
     path('api/v1/health', health, name='health'),
     path('api/v1/', include('apps.accounts.urls')),
     path('api/v1/', include('apps.nodes.urls')),
+    path('api/v1/', include('apps.tasks.urls')),
 ]
 
 # API 前缀下不返回 HTML 错误页，统一使用 JSON 错误结构

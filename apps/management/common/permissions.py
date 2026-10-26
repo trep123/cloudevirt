@@ -121,3 +121,24 @@ class CanRefreshNode(RequiresPermission):
 
     codename = 'nodes.refresh_node'
     target_type = 'node'
+
+
+class CanViewTask(RequiresPermission):
+    """查看任务的权限。"""
+
+    codename = 'tasks.view_task'
+    target_type = 'task'
+
+
+class CanCancelTask(RequiresPermission):
+    """取消任务的权限。"""
+
+    codename = 'tasks.cancel_task'
+    target_type = 'task'
+
+
+class CanRetryTask(RequiresPermission):
+    """重试任务的权限。"""
+
+    codename = 'tasks.retry_task'
+    target_type = 'task'

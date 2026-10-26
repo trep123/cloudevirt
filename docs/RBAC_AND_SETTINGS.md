@@ -12,6 +12,7 @@
 | 登录/登出/改密、锁定与限流 | 已实现 | `apps/accounts/services.py`、`views.py` |
 | 权限判定与拒绝审计 | 已实现 | `common/permissions.py`（`check_permission`、`RequiresPermission`） |
 | 用户管理（创建/更新/停用/重置密码） | 已实现 | `apps/accounts/views.py` |
+| 任务查看/取消/重试 | 已实现 | `apps/tasks/views.py`，权限 `tasks.view_task` / `cancel_task` / `retry_task` |
 | 首个管理员引导 | 已实现 | `bootstrap_admin` 命令（需 `CLOUDVIRT_BOOTSTRAP_ADMIN=true`） |
 | 审计事件 | 已实现 | `apps/audit`（事件模型 + `record_audit`） |
 | 节点注册/刷新权限 | 已实现 | `nodes.add_node`、`nodes.refresh_node`（随节点模型同步到角色） |

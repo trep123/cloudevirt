@@ -125,7 +125,10 @@ UNKNOWN → ONLINE ⇄ DEGRADED → OFFLINE；MAINTENANCE 为人工置位，不�
 | POST | /api/v1/instances/{id}/force-stop/ | 强制停止（高权限 + 二次确认） | 202 |
 | POST | /api/v1/instances/{id}/reboot/ | 重启 | 202 |
 | DELETE | /api/v1/instances/{id}/ | 删除（参数显式声明是否删除磁盘） | 202 |
-| GET | /api/v1/tasks/ | 任务列表 | 200 |
+| GET | /api/v1/tasks/ | 任务列表（`tasks.view_task`） | 200 |
+| GET | /api/v1/tasks/{id}/ | 任务详情与事件流水 | 200 |
+| POST | /api/v1/tasks/{id}/cancel/ | 取消等待中任务（`tasks.cancel_task`） | 200 |
+| POST | /api/v1/tasks/{id}/retry/ | 重试失败任务（`tasks.retry_task`） | 200 |
 | GET | /api/v1/tasks/{id}/ | 任务详情与进度 | 200 |
 | GET | /api/v1/networks/ | 网络列表（白名单） | 200 |
 | GET | /api/v1/audit/ | 审计事件 | 200 |
