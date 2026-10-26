@@ -62,6 +62,11 @@ func NewRouter(deps Dependencies) http.Handler {
 	api.HandleFunc("GET /api/v1/node/resources", resourcesHandler(deps))
 	api.HandleFunc("GET /api/v1/domains", domainsHandler(deps))
 	api.HandleFunc("POST /api/v1/domains", createDomainHandler(deps))
+	api.HandleFunc("POST /api/v1/domains/{name}/start", domainActionHandler(deps, "start"))
+	api.HandleFunc("POST /api/v1/domains/{name}/shutdown", domainActionHandler(deps, "shutdown"))
+	api.HandleFunc("POST /api/v1/domains/{name}/force-stop", domainActionHandler(deps, "force-stop"))
+	api.HandleFunc("POST /api/v1/domains/{name}/reboot", domainActionHandler(deps, "reboot"))
+	api.HandleFunc("DELETE /api/v1/domains/{name}", deleteDomainHandler(deps))
 	api.HandleFunc("POST /api/v1/images/inspect", inspectImageHandler(deps))
 	api.HandleFunc("DELETE /api/v1/images", deleteImageHandler(deps))
 

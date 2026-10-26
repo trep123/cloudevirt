@@ -6,7 +6,11 @@
 
 import logging
 
-from apps.instances.executors import execute_instance_create
+from apps.instances.executors import (
+    execute_instance_action,
+    execute_instance_create,
+    execute_instance_delete,
+)
 from apps.nodes.models import Node
 from apps.nodes.services import refresh_node
 from apps.tasks.models import Task, TaskStatus, TaskType
@@ -41,6 +45,11 @@ def execute_node_refresh(task: Task) -> dict:
 EXECUTORS = {
     TaskType.NODE_REFRESH: execute_node_refresh,
     TaskType.INSTANCE_CREATE: execute_instance_create,
+    TaskType.INSTANCE_START: execute_instance_action,
+    TaskType.INSTANCE_SHUTDOWN: execute_instance_action,
+    TaskType.INSTANCE_FORCE_STOP: execute_instance_action,
+    TaskType.INSTANCE_REBOOT: execute_instance_action,
+    TaskType.INSTANCE_DELETE: execute_instance_delete,
 }
 
 

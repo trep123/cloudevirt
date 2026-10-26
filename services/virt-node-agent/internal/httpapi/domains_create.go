@@ -18,6 +18,10 @@ type DomainOperator interface {
 	StartDomain(ctx context.Context, name string) error
 	DumpXML(ctx context.Context, name string) (string, error)
 	DomainState(ctx context.Context, name string) (string, error)
+	ShutdownDomain(ctx context.Context, name string) error
+	RebootDomain(ctx context.Context, name string) error
+	DestroyDomain(ctx context.Context, name string) error
+	UndefineDomain(ctx context.Context, name string) error
 }
 
 // createDomainRequest 是创建域请求体。

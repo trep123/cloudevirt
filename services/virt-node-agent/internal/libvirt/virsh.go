@@ -172,6 +172,18 @@ func (c *Client) StartDomain(ctx context.Context, name string) error {
 	return err
 }
 
+// ShutdownDomain 发送 ACPI 关机请求（异步，需调用方轮询状态）。
+func (c *Client) ShutdownDomain(ctx context.Context, name string) error {
+	_, err := c.run(ctx, "shutdown", name)
+	return err
+}
+
+// RebootDomain 发送重启请求（异步，需调用方轮询状态）。
+func (c *Client) RebootDomain(ctx context.Context, name string) error {
+	_, err := c.run(ctx, "reboot", name)
+	return err
+}
+
 // DestroyDomain 强制关闭域（断电语义，调用方需完成授权与确认）。
 func (c *Client) DestroyDomain(ctx context.Context, name string) error {
 	_, err := c.run(ctx, "destroy", name)

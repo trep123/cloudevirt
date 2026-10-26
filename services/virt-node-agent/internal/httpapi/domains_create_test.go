@@ -46,6 +46,22 @@ func (f *fakeOperator) DomainState(ctx context.Context, name string) (string, er
 	return f.state, nil
 }
 
+func (f *fakeOperator) ShutdownDomain(ctx context.Context, name string) error {
+	return nil
+}
+
+func (f *fakeOperator) RebootDomain(ctx context.Context, name string) error {
+	return nil
+}
+
+func (f *fakeOperator) DestroyDomain(ctx context.Context, name string) error {
+	return nil
+}
+
+func (f *fakeOperator) UndefineDomain(ctx context.Context, name string) error {
+	return nil
+}
+
 func createPayload(t *testing.T) string {
 	t.Helper()
 	body := map[string]any{

@@ -156,6 +156,14 @@ def delete_image(
     Raises:
         AppError: 未指定节点或 Agent 拒绝删除。
     """
+    references = image.instances.filter(is_deleted=False).count()
+    if references:
+        raise AppError(
+            ErrorCode.IMAGE_IN_USE,
+            '镜像被实例引用，禁止删除',
+            details={'instances': references},
+        )
+
     image.status = ImageStatus.DELETING
     image.save(update_fields=['status', 'updated_at'])
 

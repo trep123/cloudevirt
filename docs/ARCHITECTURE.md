@@ -121,11 +121,11 @@ UNKNOWN → ONLINE ⇄ DEGRADED → OFFLINE；MAINTENANCE 为人工置位，不�
 | DELETE | /api/v1/images/{id}/ | 删除镜像（`images.delete_image`，`purge_file` 显式声明是否删文件） | 204 |
 | GET/POST | /api/v1/instances/ | 实例列表（`instances.view_instance`） / 创建（`instances.add_instance`，**202 + 任务**） | 200 / 202 |
 | GET | /api/v1/instances/{id}/ | 实例详情 | 200 |
-| POST | /api/v1/instances/{id}/start/ | 启动 | 202 |
+| POST | /api/v1/instances/{id}/start/ | 启动（已运行返回 200 幂等） | 202 |
 | POST | /api/v1/instances/{id}/shutdown/ | 正常关机 | 202 |
 | POST | /api/v1/instances/{id}/force-stop/ | 强制停止（高权限 + 二次确认） | 202 |
 | POST | /api/v1/instances/{id}/reboot/ | 重启 | 202 |
-| DELETE | /api/v1/instances/{id}/ | 删除（参数显式声明是否删除磁盘） | 202 |
+| DELETE | /api/v1/instances/{id}/ | 删除（`purge_disk` 显式声明是否删盘，删盘需 `delete_disk_instance`） | 202 |
 | GET | /api/v1/tasks/ | 任务列表（`tasks.view_task`） | 200 |
 | GET | /api/v1/tasks/{id}/ | 任务详情与事件流水 | 200 |
 | POST | /api/v1/tasks/{id}/cancel/ | 取消等待中任务（`tasks.cancel_task`） | 200 |

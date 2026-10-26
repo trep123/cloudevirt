@@ -37,6 +37,11 @@ class AuditAction(models.TextChoices):
     IMAGE_IMPORT = 'IMAGE_IMPORT', '导入镜像'
     IMAGE_DELETE = 'IMAGE_DELETE', '删除镜像'
     INSTANCE_CREATE = 'INSTANCE_CREATE', '创建实例'
+    INSTANCE_START = 'INSTANCE_START', '启动实例'
+    INSTANCE_SHUTDOWN = 'INSTANCE_SHUTDOWN', '关闭实例'
+    INSTANCE_FORCE_STOP = 'INSTANCE_FORCE_STOP', '强制停止实例'
+    INSTANCE_REBOOT = 'INSTANCE_REBOOT', '重启实例'
+    INSTANCE_DELETE = 'INSTANCE_DELETE', '删除实例'
 
 
 class AuditEvent(models.Model):

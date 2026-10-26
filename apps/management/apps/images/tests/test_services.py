@@ -95,6 +95,34 @@ class ImageServiceTests(TestCase):
         image.refresh_from_db()
         self.assertTrue(image.is_deleted)
 
+    def test_delete_blocked_when_image_in_use(self) -> None:
+        """被实例引用的镜像禁止删除。"""
+        from django.contrib.auth import get_user_model
+
+        from apps.instances.models import Instance, ObservedState
+
+        with mock.patch('apps.nodes.client.AgentClient.inspect_image', return_value=GOOD_INFO):
+            image = import_image(name='in-use', node=self.node, relative_path='in-use.qcow2')
+        user = get_user_model().objects.create_user(username='img-owner', password='Str0ngPassw0rd')
+        Instance.objects.create(
+            name='vm-uses-image',
+            libvirt_domain_name='cv-uses-img',
+            node=self.node,
+            image=image,
+            vcpu=1,
+            memory_mib=512,
+            disk_gib=5,
+            observed_state=ObservedState.RUNNING,
+            created_by=user,
+        )
+
+        with self.assertRaises(AppError) as ctx:
+            delete_image(image, purge_file=False)
+
+        self.assertEqual(ctx.exception.code, ErrorCode.IMAGE_IN_USE)
+        image.refresh_from_db()
+        self.assertFalse(image.is_deleted)
+
     def test_delete_without_available_node(self) -> None:
         """没有可用节点时删除应失败并保留记录。"""
         with mock.patch('apps.nodes.client.AgentClient.inspect_image', return_value=GOOD_INFO):

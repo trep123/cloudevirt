@@ -110,6 +110,11 @@ type consoleSpec struct {
 	Type string `xml:"type,attr"`
 }
 
+// ValidName 判断名称是否符合域名规则。
+func ValidName(name string) bool {
+	return namePattern.MatchString(name)
+}
+
 // ValidateSpec 校验输入字段格式与取值范围。
 func ValidateSpec(spec Spec) error {
 	if !namePattern.MatchString(spec.Name) {

@@ -15,6 +15,9 @@
 | 任务查看/取消/重试 | 已实现 | `apps/tasks/views.py`，权限 `tasks.view_task` / `cancel_task` / `retry_task` |
 | 镜像查看/导入/删除 | 已实现 | `apps/images/views.py`，权限 `images.view_image` / `add_image` / `delete_image` |
 | 实例查看/创建 | 已实现 | `apps/instances/views.py`，权限 `instances.view_instance` / `add_instance` |
+| 实例启动/关机/强停/重启 | 已实现 | 权限 `instances.start_instance` / `shutdown_instance` / `force_stop_instance` / `reboot_instance` |
+| 实例删除与删盘 | 已实现 | `instances.delete_instance`；删盘另需 `instances.delete_disk_instance`（仅 Admin） |
+| 镜像引用保护 | 已实现 | 删除被实例引用的镜像返回 409 `IMAGE_IN_USE` |
 | 首个管理员引导 | 已实现 | `bootstrap_admin` 命令（需 `CLOUDVIRT_BOOTSTRAP_ADMIN=true`） |
 | 审计事件 | 已实现 | `apps/audit`（事件模型 + `record_audit`） |
 | 节点注册/刷新权限 | 已实现 | `nodes.add_node`、`nodes.refresh_node`（随节点模型同步到角色） |
@@ -24,7 +27,7 @@
 已知限制（模块 E）：
 
 1. MVP 采用「登记节点已有文件」的导入方式（Agent 负责检查文件），**尚未实现浏览器上传通道**；
-2. 镜像删除的**引用检查（IMAGE_IN_USE）随实例模型在模块 H 接入**，在此之前不存在实例引用。
+2. 镜像引用检查已接入：删除被实例引用的镜像返回 409 `IMAGE_IN_USE`。
 
 ## 1. 角色定义
 

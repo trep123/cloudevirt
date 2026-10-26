@@ -117,6 +117,15 @@ class AgentClient:
         """请求 Agent 创建并启动域。"""
         return self.request_json('/api/v1/domains', 'POST', payload)
 
+    def domain_action(self, name: str, action: str) -> dict:
+        """执行域操作：start / shutdown / force-stop / reboot。"""
+        return self.request_json(f'/api/v1/domains/{name}/{action}', 'POST', {})
+
+    def delete_domain(self, name: str, disk_relative_path: str = '') -> dict:
+        """删除域定义，可选删除磁盘文件。"""
+        suffix = f'?disk_relative_path={disk_relative_path}' if disk_relative_path else ''
+        return self.request_json(f'/api/v1/domains/{name}{suffix}', 'DELETE')
+
     def domains(self) -> list[dict]:
         """读取域列表。"""
         payload = self.get_json('/api/v1/domains')

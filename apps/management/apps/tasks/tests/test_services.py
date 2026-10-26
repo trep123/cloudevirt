@@ -158,9 +158,7 @@ class TaskServiceTests(TestCase):
 
     def test_unregistered_task_type_fails_clearly(self) -> None:
         """未登记执行器的任务类型应明确失败而不是静默成功。"""
-        task = enqueue(
-            task_type=TaskType.RECONCILE, resource_type='instance', resource_id='13'
-        )
+        task = enqueue(task_type=TaskType.RECONCILE, resource_type='instance', resource_id='13')
 
         from apps.tasks.executors import execute_task
 
