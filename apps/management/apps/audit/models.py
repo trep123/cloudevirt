@@ -30,6 +30,10 @@ class AuditAction(models.TextChoices):
     USER_DELETE = 'USER_DELETE', '删除用户'
     USER_PASSWORD_RESET = 'USER_PASSWORD_RESET', '重置用户密码'
     ROLE_CHANGE = 'ROLE_CHANGE', '变更角色'
+    NODE_REGISTER = 'NODE_REGISTER', '注册节点'
+    NODE_UPDATE = 'NODE_UPDATE', '更新节点'
+    NODE_REFRESH = 'NODE_REFRESH', '刷新节点资源'
+    NODE_OFFLINE = 'NODE_OFFLINE', '节点离线'
 
 
 class AuditEvent(models.Model):

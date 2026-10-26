@@ -40,8 +40,8 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | A | 基础工程与部署配置 | NEW→部分完成（2026-10-26） | 阶段 1 | 无 | Ansible 初始化待补；前端工程待建 | 全仓 |
 | B | 用户认证、角色和授权 | NEW | 阶段 1（完善于 4） | A | 无 | 后端 accounts、前端登录 |
-| C | 节点管理与心跳 | NEW | 阶段 2 | A、D | Agent 可达 | 后端 nodes、Agent host |
-| D | Go 节点 Agent | NEW | 阶段 2 | A | Go 工具链、libvirt 开发库 | services/virt-node-agent |
+| C | 节点管理与心跳 | NEW→完成（2026-10-26） | 阶段 2 | A、D | 无 | 后端 nodes、Agent host |
+| D | Go 节点 Agent | NEW→部分完成（2026-10-26） | 阶段 2（创建能力在阶段 3） | A | 创建/生命周期接口待阶段 3 | services/virt-node-agent |
 | E | 镜像管理 | NEW | 阶段 3 | A、B、D | 镜像目录、qemu-img | 后端 images、Agent storage |
 | F | 存储与虚拟磁盘 | NEW | 阶段 3 | D、E | 磁盘目录与容量 | 后端 instances、Agent storage |
 | G | 实例模型与状态机 | NEW | 阶段 3 | A | 无 | 后端 instances |

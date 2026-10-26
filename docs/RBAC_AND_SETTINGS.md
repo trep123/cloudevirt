@@ -14,7 +14,7 @@
 | 用户管理（创建/更新/停用/重置密码） | 已实现 | `apps/accounts/views.py` |
 | 首个管理员引导 | 已实现 | `bootstrap_admin` 命令（需 `CLOUDVIRT_BOOTSTRAP_ADMIN=true`） |
 | 审计事件 | 已实现 | `apps/audit`（事件模型 + `record_audit`） |
-| 节点级对象授权（NodeAccess） | 待模块 C | 节点模型建立后补充 |
+| 节点注册/刷新权限 | 已实现 | `nodes.add_node`、`nodes.refresh_node`（随节点模型同步到角色） |
 | 系统设置表 | 待阶段 4 | 当前阈值走环境变量（见第 8 章） |
 | 密码策略在线配置 | 待阶段 4 | 当前走 `SECURITY_*` 环境变量 |
 

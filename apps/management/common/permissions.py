@@ -100,3 +100,24 @@ class RequiresPasswordChange(BasePermission):
         if profile is not None and profile.must_change_password:
             raise AppError(ErrorCode.PERMISSION_DENIED, '请先修改初始密码')
         return True
+
+
+class CanOperateNode(RequiresPermission):
+    """查看节点与资源的权限。"""
+
+    codename = 'nodes.view_node'
+    target_type = 'node'
+
+
+class CanRegisterNode(RequiresPermission):
+    """注册/变更/注销节点的权限。"""
+
+    codename = 'nodes.add_node'
+    target_type = 'node'
+
+
+class CanRefreshNode(RequiresPermission):
+    """主动刷新节点资源的权限。"""
+
+    codename = 'nodes.refresh_node'
+    target_type = 'node'

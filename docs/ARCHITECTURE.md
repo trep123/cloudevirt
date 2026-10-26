@@ -112,9 +112,9 @@ UNKNOWN → ONLINE ⇄ DEGRADED → OFFLINE；MAINTENANCE 为人工置位，不�
 | GET | /api/v1/health | 健康检查（免认证） | 200 |
 | POST | /api/v1/auth/login/ | 登录 | 200 |
 | POST | /api/v1/auth/logout/ | 登出 | 200 |
-| GET/POST | /api/v1/nodes/ | 节点列表 / 注册 | 200 / 201 |
+| GET/POST | /api/v1/nodes/ | 节点列表（`nodes.view_node`） / 注册（`nodes.add_node`） | 200 / 201 |
 | GET | /api/v1/nodes/{id}/ | 节点详情（含资源与采样时间） | 200 |
-| POST | /api/v1/nodes/{id}/refresh/ | 主动刷新资源 | 202 |
+| POST | /api/v1/nodes/{id}/refresh/ | 主动刷新资源（`nodes.refresh_node`，同步返回最新节点） | 200 |
 | GET | /api/v1/images/ | 镜像列表 | 200 |
 | POST | /api/v1/images/ | 镜像导入（上传或登记） | 202 |
 | DELETE | /api/v1/images/{id}/ | 删除镜像（被引用 → 409 IMAGE_IN_USE） | 202 |
