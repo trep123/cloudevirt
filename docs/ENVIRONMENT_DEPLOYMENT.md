@@ -15,7 +15,8 @@
 | Node / npm | v24.22.1 / 12.2.1 | 前端构建 |
 | Go | 1.26.8（阶段 1 已安装） | 模块 D 前置已解除 |
 | PostgreSQL | 18.6 已安装并运行，专用账户与库 `cloudvirt` 已建立 | 迁移已执行；生产实例仍待规划 |
-| /dev/kvm、virsh | 不存在 / 未安装 | 真实 KVM 验收仍 BLOCKED（容器环境无硬件虚拟化） |
+| /dev/kvm | 不存在（本机位于 KVM 虚拟机内部，未透传嵌套虚拟化） | 硬件加速无法开启；见 1.3 结论 |
+| libvirt / QEMU | libvirt 12.0.0、QEMU 10.2.1 | 可连接 qemu:///system；仅支持 TCG 模拟域（type=qemu） |
 
 ### 1.2 目标宿主机要求
 
@@ -23,6 +24,27 @@
 - 软件包：`qemu-kvm`、`libvirt-daemon-system`、`libvirt-clients`、`qemu-utils`；
 - `virsh -c qemu:///system list --all` 退出码为 0；
 - 与管理后端之间管理网可达，且 Agent 端口仅允许后端来源访问。
+
+### 1.3 关于 KVM 硬件加速的结论（2026-10-26 实测）
+
+诊断结果：
+
+| 检查 | 结果 |
+| --- | --- |
+| systemd-detect-virt | kvm（本机运行在 KVM 虚拟机内） |
+| CPU 标志 | 无 vmx / svm |
+| modprobe kvm / kvm_intel | Operation not supported |
+| kvm-ok | Your CPU does not support KVM extensions |
+
+结论：**本环境无法开启硬件加速的 KVM**，这是环境限制，不能通过配置绕过。
+
+已采用的替代方案（开发与集成验证）：
+
+1. 安装 qemu-system-x86、libvirt-daemon-system、libvirt-clients，libvirt 以 **QEMU TCG 软件模拟**运行。
+2. 已实测通过的全生命周期：qemu-img create（qcow2）→ virsh define → virsh start → 状态 running → virsh dominfo → virsh destroy → virsh undefine。
+3. scripts/precheck.sh 默认仍把缺少 /dev/kvm 判为阻断项（生产口径）；开发测试环境需显式设置 CLOUDVIRT_ALLOW_TCG=true，此时降级为告警（退出码 2），并在输出中明确“性能与行为不代表生产”。
+
+限制：TCG 下的启动耗时、CPU/IO 性能、嵌套虚拟化能力均**不能**代表生产宿主机；阶段 3 的创建/启动/删除验收在 TCG 上通过后，仍需在具备硬件加速的宿主机复验，否则标记为 NOT VERIFIED。
 
 ## 2. 依赖与锁定
 
@@ -143,7 +165,7 @@ virsh -c qemu:///system list --all
 
 | 项 | 影响 | 建议动作 |
 | --- | --- | --- |
-| 无 KVM 宿主机 | 阶段 3/5/6 真实验收 | 指定测试宿主机并开通管理网访问（仍未解除） |
+| 无 KVM 硬件加速 | 生产级验收（性能、嵌套虚拟化、真实启动耗时） | **部分解除**：已用 libvirt TCG 支撑集成验证；硬件加速验收仍需裸机宿主机 |
 | ~~Go 工具链未安装~~ | ~~模块 D 无法开工~~ | 已解除：Go 1.26.8 已安装并写入依赖基线 |
 | ~~PostgreSQL 未就绪~~ | ~~迁移与集成测试~~ | 已解除：本机 PG 18.6 + 专用账户/库，迁移已执行 |
 | 备份目标位置未定 | 阶段 6 无法演练 | 确定备份存储与访问权限 |

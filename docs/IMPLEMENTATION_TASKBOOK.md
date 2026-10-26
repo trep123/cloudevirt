@@ -25,7 +25,7 @@
 | Node / npm | v24.22.1 / 12.2.1 | 前端基线可用 |
 | Go | 未安装 | 模块 D 开工前安装并锁定版本，标 TBD(待实测回填) |
 | PostgreSQL | 客户端与服务均未就绪 | 迁移与集成测试当前 BLOCKED |
-| /dev/kvm、virsh | 不存在 / 未安装 | 真实 KVM 验收当前 BLOCKED，须在独立宿主机执行 |
+| /dev/kvm | 不存在（KVM 虚拟机内，modprobe kvm 报不支持） | **硬件加速无法开启**；已用 libvirt + QEMU TCG 替代，见 ENVIRONMENT_DEPLOYMENT.md 1.3 |
 
 ### 1.3 审计结论
 

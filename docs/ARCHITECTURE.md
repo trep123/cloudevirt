@@ -224,3 +224,4 @@ Agent 侧等价结构：`{"code":"LIBVIRT_UNAVAILABLE","message":"...","request_
 | ADR-007 | Django/DRF 与 Go 具体版本待安装时按兼容矩阵确定 | 环境实测未安装，禁止凭空写版本（TBD） | 待定 |
 | ADR-008 | 孤儿资源默认只出报告，不自动删除 | 《手册》8.3，避免误删 | 已定 |
 | ADR-009 | 认证方式：同源部署用 Session + CSRF；跨域/独立部署用 DRF Token，Token 不持久化到 localStorage | 兼顾安全与部署形态；细节见 RBAC_AND_SETTINGS.md 第 3 章 | 已定 |
+| ADR-010 | 域类型默认 kvm；仅当环境显式声明 TCG（CLOUDVIRT_ALLOW_TCG=true）时使用 qemu，且相关验收必须标注「TCG 模拟，非硬件加速」 | 本环境无 /dev/kvm，需保留开发验证通路，同时禁止把 TCG 结果当作生产结论 | 已定 |

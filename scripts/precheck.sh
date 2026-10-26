@@ -8,6 +8,9 @@ set -uo pipefail
 readonly REQUIRED_FREE_KB=$((10 * 1024 * 1024))  # /var/lib/cloudvirt 至少 10 GiB 可用
 readonly CHECK_PORTS=(8000 9100)
 
+# 开发/测试环境可显式声明使用 QEMU TCG 软件模拟，此时缺少 /dev/kvm 降级为告警
+ALLOW_TCG=${CLOUDVIRT_ALLOW_TCG:-false}
+
 fail_count=0
 warn_count=0
 
@@ -33,21 +36,30 @@ fi
 # 2) CPU 虚拟化标志
 if grep -qoE '(vmx|svm)' /proc/cpuinfo >/dev/null 2>&1; then
     log_pass "CPU 支持硬件虚拟化"
+elif [ "${ALLOW_TCG}" = "true" ]; then
+    log_warn "CPU 未报告硬件虚拟化标志（vmx/svm），按 CLOUDVIRT_ALLOW_TCG=true 降级为 TCG 模拟"
 else
     log_fail "CPU 未报告硬件虚拟化标志（vmx/svm），请检查固件设置"
 fi
 
-# 3) /dev/kvm：缺失即为阻断项，不得继续声称 KVM 可用
+# 3) /dev/kvm：默认缺失即为阻断项；开发测试环境显式声明后才降级为告警
 if [ -e /dev/kvm ]; then
-    log_pass "存在 /dev/kvm"
+    log_pass "存在 /dev/kvm（硬件加速可用）"
+elif [ "${ALLOW_TCG}" = "true" ]; then
+    log_warn "缺少 /dev/kvm，按 CLOUDVIRT_ALLOW_TCG=true 降级：仅可用于开发/测试的 QEMU TCG 模拟，性能与行为不代表生产"
 else
-    log_fail "缺少 /dev/kvm，KVM 不可用；请确认宿主机支持并开启虚拟化，或改用具备嵌套虚拟化的环境"
+    log_fail "缺少 /dev/kvm，KVM 硬件加速不可用；开发测试环境可设置 CLOUDVIRT_ALLOW_TCG=true 明确降级"
 fi
 
 # 4) libvirt
 if command -v virsh >/dev/null 2>&1; then
     if virsh -c qemu:///system list --all >/dev/null 2>&1; then
         log_pass "libvirt 可连接（qemu:///system）"
+        if virsh -c qemu:///system capabilities 2>/dev/null | grep -q "domain type='kvm'"; then
+            log_pass "libvirt 支持 KVM 加速域"
+        else
+            log_warn "libvirt 仅支持 TCG 模拟域（type=qemu），不具备硬件加速"
+        fi
     else
         log_fail "virsh 无法连接 qemu:///system，请检查 libvirtd 服务与权限"
     fi
