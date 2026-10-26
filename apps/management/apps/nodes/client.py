@@ -77,6 +77,42 @@ class AgentClient:
         """读取资源采集结果。"""
         return self.get_json('/api/v1/node/resources')
 
+    def request_json(self, path: str, method: str, body: dict | None = None) -> Any:
+        """发送带 JSON 体的请求（用于写操作）。"""
+        payload = json.dumps(body or {}).encode('utf-8') if body is not None else None
+        request = urllib.request.Request(
+            f'{self.endpoint}{path}',
+            data=payload,
+            headers={
+                'Authorization': f'Bearer {self.token}',
+                'Content-Type': 'application/json',
+            },
+            method=method,
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                raw = response.read().decode('utf-8')
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode('utf-8', errors='ignore')[:200]
+            raise AppError(
+                ErrorCode.OPERATION_FAILED,
+                '节点 Agent 拒绝了该操作',
+                details={'status': exc.code, 'response': detail},
+            ) from exc
+        except urllib.error.URLError as exc:
+            raise AppError(ErrorCode.NODE_OFFLINE, '无法连接节点 Agent') from exc
+        except TimeoutError as exc:
+            raise AppError(ErrorCode.COMMAND_TIMEOUT, '调用节点 Agent 超时') from exc
+        return json.loads(raw) if raw else {}
+
+    def inspect_image(self, relative_path: str) -> dict:
+        """请求 Agent 检查镜像文件（格式、容量、校验和）。"""
+        return self.request_json('/api/v1/images/inspect', 'POST', {'relative_path': relative_path})
+
+    def delete_image(self, relative_path: str) -> dict:
+        """请求 Agent 删除镜像文件（受宿主机破坏性开关约束）。"""
+        return self.request_json('/api/v1/images', 'DELETE', {'relative_path': relative_path})
+
     def domains(self) -> list[dict]:
         """读取域列表。"""
         payload = self.get_json('/api/v1/domains')

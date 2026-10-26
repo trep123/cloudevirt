@@ -42,7 +42,7 @@
 | B | 用户认证、角色和授权 | NEW | 阶段 1（完善于 4） | A | 无 | 后端 accounts、前端登录 |
 | C | 节点管理与心跳 | NEW→完成（2026-10-26） | 阶段 2 | A、D | 无 | 后端 nodes、Agent host |
 | D | Go 节点 Agent | NEW→部分完成（2026-10-26） | 阶段 2（创建能力在阶段 3） | A | 创建/生命周期接口待阶段 3 | services/virt-node-agent |
-| E | 镜像管理 | NEW | 阶段 3 | A、B、D | 镜像目录、qemu-img | 后端 images、Agent storage |
+| E | 镜像管理 | NEW→部分完成（2026-10-26） | 阶段 3 | A、B、D | 上传通道与引用检查待后续 | 后端 images、Agent storage |
 | F | 存储与虚拟磁盘 | NEW | 阶段 3 | D、E | 磁盘目录与容量 | 后端 instances、Agent storage |
 | G | 实例模型与状态机 | NEW | 阶段 3 | A | 无 | 后端 instances |
 | H | 虚拟机创建 | NEW | 阶段 3 | C、D、E、F、G、J | 真实 KVM（验收） | 后端 + Agent + 前端 |

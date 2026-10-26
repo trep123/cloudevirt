@@ -35,11 +35,14 @@ func main() {
 
 	client := libvirt.NewClient(time.Duration(cfg.MaxRequestSeconds) * time.Second)
 	handler := httpapi.NewRouter(httpapi.Dependencies{
-		Version:      cfg.Version,
-		Token:        cfg.Token,
-		StoragePaths: []string{cfg.ImageDir, cfg.DiskDir},
-		Domains:      client,
-		Logger:       logger,
+		Version:          cfg.Version,
+		Token:            cfg.Token,
+		StoragePaths:     []string{cfg.ImageDir, cfg.DiskDir},
+		ImageDir:         cfg.ImageDir,
+		DiskDir:          cfg.DiskDir,
+		AllowDestructive: cfg.AllowDestructive,
+		Domains:          client,
+		Logger:           logger,
 	})
 
 	server := &http.Server{

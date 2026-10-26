@@ -13,11 +13,17 @@
 | 权限判定与拒绝审计 | 已实现 | `common/permissions.py`（`check_permission`、`RequiresPermission`） |
 | 用户管理（创建/更新/停用/重置密码） | 已实现 | `apps/accounts/views.py` |
 | 任务查看/取消/重试 | 已实现 | `apps/tasks/views.py`，权限 `tasks.view_task` / `cancel_task` / `retry_task` |
+| 镜像查看/导入/删除 | 已实现 | `apps/images/views.py`，权限 `images.view_image` / `add_image` / `delete_image` |
 | 首个管理员引导 | 已实现 | `bootstrap_admin` 命令（需 `CLOUDVIRT_BOOTSTRAP_ADMIN=true`） |
 | 审计事件 | 已实现 | `apps/audit`（事件模型 + `record_audit`） |
 | 节点注册/刷新权限 | 已实现 | `nodes.add_node`、`nodes.refresh_node`（随节点模型同步到角色） |
 | 系统设置表 | 待阶段 4 | 当前阈值走环境变量（见第 8 章） |
 | 密码策略在线配置 | 待阶段 4 | 当前走 `SECURITY_*` 环境变量 |
+
+已知限制（模块 E）：
+
+1. MVP 采用「登记节点已有文件」的导入方式（Agent 负责检查文件），**尚未实现浏览器上传通道**；
+2. 镜像删除的**引用检查（IMAGE_IN_USE）随实例模型在模块 H 接入**，在此之前不存在实例引用。
 
 ## 1. 角色定义
 

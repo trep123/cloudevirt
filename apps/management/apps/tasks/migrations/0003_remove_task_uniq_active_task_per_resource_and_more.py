@@ -5,7 +5,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ('tasks', '0002_remove_task_uniq_active_task_per_resource_and_more'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
@@ -22,10 +21,43 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='task',
-            constraint=models.UniqueConstraint(condition=models.Q(('status__in', ['PENDING', 'RECONCILING', 'VALIDATING', 'PREPARING', 'CREATING', 'VERIFYING'])), fields=('resource_type', 'resource_id'), name='uniq_active_task_per_resource'),
+            constraint=models.UniqueConstraint(
+                condition=models.Q(
+                    (
+                        'status__in',
+                        [
+                            'PENDING',
+                            'RECONCILING',
+                            'VALIDATING',
+                            'PREPARING',
+                            'CREATING',
+                            'VERIFYING',
+                        ],
+                    )
+                ),
+                fields=('resource_type', 'resource_id'),
+                name='uniq_active_task_per_resource',
+            ),
         ),
         migrations.AddConstraint(
             model_name='task',
-            constraint=models.UniqueConstraint(condition=models.Q(('status__in', ['PENDING', 'RECONCILING', 'VALIDATING', 'PREPARING', 'CREATING', 'VERIFYING']), models.Q(('idempotency_key', ''), _negated=True)), fields=('idempotency_key',), name='uniq_active_idempotency_key'),
+            constraint=models.UniqueConstraint(
+                condition=models.Q(
+                    (
+                        'status__in',
+                        [
+                            'PENDING',
+                            'RECONCILING',
+                            'VALIDATING',
+                            'PREPARING',
+                            'CREATING',
+                            'VERIFYING',
+                        ],
+                    ),
+                    models.Q(('idempotency_key', ''), _negated=True),
+                ),
+                fields=('idempotency_key',),
+                name='uniq_active_idempotency_key',
+            ),
         ),
     ]

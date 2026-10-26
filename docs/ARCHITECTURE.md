@@ -115,9 +115,10 @@ UNKNOWN → ONLINE ⇄ DEGRADED → OFFLINE；MAINTENANCE 为人工置位，不�
 | GET/POST | /api/v1/nodes/ | 节点列表（`nodes.view_node`） / 注册（`nodes.add_node`） | 200 / 201 |
 | GET | /api/v1/nodes/{id}/ | 节点详情（含资源与采样时间） | 200 |
 | POST | /api/v1/nodes/{id}/refresh/ | 主动刷新资源（`nodes.refresh_node`，同步返回最新节点） | 200 |
-| GET | /api/v1/images/ | 镜像列表 | 200 |
+| GET | /api/v1/images/ | 镜像列表（`images.view_image`） | 200 |
+| POST | /api/v1/images/ | 导入/登记镜像（`images.add_image`，由节点 Agent 检查文件） | 201 / 200 |
 | POST | /api/v1/images/ | 镜像导入（上传或登记） | 202 |
-| DELETE | /api/v1/images/{id}/ | 删除镜像（被引用 → 409 IMAGE_IN_USE） | 202 |
+| DELETE | /api/v1/images/{id}/ | 删除镜像（`images.delete_image`，`purge_file` 显式声明是否删文件） | 204 |
 | GET/POST | /api/v1/instances/ | 实例列表 / 创建 | 200 / **202** |
 | GET | /api/v1/instances/{id}/ | 实例详情 | 200 |
 | POST | /api/v1/instances/{id}/start/ | 启动 | 202 |
@@ -130,6 +131,8 @@ UNKNOWN → ONLINE ⇄ DEGRADED → OFFLINE；MAINTENANCE 为人工置位，不�
 | POST | /api/v1/tasks/{id}/cancel/ | 取消等待中任务（`tasks.cancel_task`） | 200 |
 | POST | /api/v1/tasks/{id}/retry/ | 重试失败任务（`tasks.retry_task`） | 200 |
 | GET | /api/v1/tasks/{id}/ | 任务详情与进度 | 200 |
+| POST | /api/v1/images/inspect | 检查镜像文件：路径边界、`qemu-img info`、SHA-256 | 200 |
+| DELETE | /api/v1/images | 删除镜像文件（需 `CLOUDVIRT_ALLOW_DESTRUCTIVE=true`） | 200 |
 | GET | /api/v1/networks/ | 网络列表（白名单） | 200 |
 | GET | /api/v1/audit/ | 审计事件 | 200 |
 | GET | /api/v1/monitoring/overview/ | 资源与告警概览 | 200 |

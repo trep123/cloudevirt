@@ -5,7 +5,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ('tasks', '0001_initial'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
@@ -27,10 +26,43 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='task',
-            constraint=models.UniqueConstraint(condition=models.Q(('status__in', ['VALIDATING', 'PREPARING', 'VERIFYING', 'RECONCILING', 'CREATING', 'PENDING'])), fields=('resource_type', 'resource_id'), name='uniq_active_task_per_resource'),
+            constraint=models.UniqueConstraint(
+                condition=models.Q(
+                    (
+                        'status__in',
+                        [
+                            'VALIDATING',
+                            'PREPARING',
+                            'VERIFYING',
+                            'RECONCILING',
+                            'CREATING',
+                            'PENDING',
+                        ],
+                    )
+                ),
+                fields=('resource_type', 'resource_id'),
+                name='uniq_active_task_per_resource',
+            ),
         ),
         migrations.AddConstraint(
             model_name='task',
-            constraint=models.UniqueConstraint(condition=models.Q(('idempotency_key__isnull', False), ('status__in', ['VALIDATING', 'PREPARING', 'VERIFYING', 'RECONCILING', 'CREATING', 'PENDING'])), fields=('idempotency_key',), name='uniq_active_idempotency_key'),
+            constraint=models.UniqueConstraint(
+                condition=models.Q(
+                    ('idempotency_key__isnull', False),
+                    (
+                        'status__in',
+                        [
+                            'VALIDATING',
+                            'PREPARING',
+                            'VERIFYING',
+                            'RECONCILING',
+                            'CREATING',
+                            'PENDING',
+                        ],
+                    ),
+                ),
+                fields=('idempotency_key',),
+                name='uniq_active_idempotency_key',
+            ),
         ),
     ]

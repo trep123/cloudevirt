@@ -32,11 +32,14 @@ type DomainLister interface {
 
 // Dependencies 是路由所需的外部依赖。
 type Dependencies struct {
-	Version      string
-	Token        string
-	StoragePaths []string
-	Domains      DomainLister
-	Logger       *slog.Logger
+	Version          string
+	Token            string
+	StoragePaths     []string
+	ImageDir         string
+	DiskDir          string
+	AllowDestructive bool
+	Domains          DomainLister
+	Logger           *slog.Logger
 }
 
 // NewRouter 注册全部路由并返回处理器。
@@ -54,6 +57,8 @@ func NewRouter(deps Dependencies) http.Handler {
 	api := http.NewServeMux()
 	api.HandleFunc("GET /api/v1/node/resources", resourcesHandler(deps))
 	api.HandleFunc("GET /api/v1/domains", domainsHandler(deps))
+	api.HandleFunc("POST /api/v1/images/inspect", inspectImageHandler(deps))
+	api.HandleFunc("DELETE /api/v1/images", deleteImageHandler(deps))
 
 	protected := auth.TokenMiddleware(deps.Token, api)
 	mux.Handle("/api/", protected)

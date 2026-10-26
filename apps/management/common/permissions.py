@@ -142,3 +142,24 @@ class CanRetryTask(RequiresPermission):
 
     codename = 'tasks.retry_task'
     target_type = 'task'
+
+
+class CanViewImage(RequiresPermission):
+    """查看镜像的权限。"""
+
+    codename = 'images.view_image'
+    target_type = 'image'
+
+
+class CanImportImage(RequiresPermission):
+    """导入镜像的权限。"""
+
+    codename = 'images.add_image'
+    target_type = 'image'
+
+
+class CanDeleteImage(RequiresPermission):
+    """删除镜像的权限。"""
+
+    codename = 'images.delete_image'
+    target_type = 'image'

@@ -34,6 +34,8 @@ class AuditAction(models.TextChoices):
     NODE_UPDATE = 'NODE_UPDATE', '更新节点'
     NODE_REFRESH = 'NODE_REFRESH', '刷新节点资源'
     NODE_OFFLINE = 'NODE_OFFLINE', '节点离线'
+    IMAGE_IMPORT = 'IMAGE_IMPORT', '导入镜像'
+    IMAGE_DELETE = 'IMAGE_DELETE', '删除镜像'
 
 
 class AuditEvent(models.Model):
