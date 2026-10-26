@@ -27,8 +27,8 @@
 | PostgreSQL | 18.6 | 业务数据库 |
 | qemu-utils | 10.2.1 | 镜像与磁盘操作（qemu-img） |
 
-宿主机侧还需 `qemu-kvm`、`libvirt-daemon-system`、`libvirt-clients` 与可用的 `/dev/kvm`。
-当前开发容器**不具备 KVM**，`bash scripts/precheck.sh` 会以退出码 1 明确报告；真实虚拟机验收必须在具备 KVM 的宿主机执行。
+宿主机侧还需 `qemu-kvm`、`libvirt-daemon-system`、`libvirt-clients` 与可用的 `/dev/kvm`（本机已开启嵌套虚拟化并通过验证，见 docs/ENVIRONMENT_DEPLOYMENT.md 第 1.3 节）。
+缺少 `/dev/kvm` 的环境可执行 `CLOUDVIRT_ALLOW_TCG=true bash scripts/precheck.sh` 以 QEMU TCG 模拟降级运行（退出码 2，仅用于开发测试，性能不代表生产）。
 
 ## 3. 快速开始
 
@@ -77,7 +77,7 @@ make lint             # 全量静态检查（ruff + gofmt + go vet）
 
 ## 6. 已知限制
 
-- 开发容器无 `/dev/kvm` 与 libvirt：真实创建/启动/删除虚拟机的验收尚未执行（NOT VERIFIED）。
+- 真实创建/启动/删除虚拟机的端到端验收尚未执行（NOT VERIFIED）：libvirt 域生命周期已单独实测通过，业务链路待阶段 3 完成后验证。
 - 前端工程与业务模块（节点、镜像、实例、任务、权限）尚未实现，当前仅后端与 Agent 骨架可用。
 - 备份恢复、TLS/mTLS、监控告警等生产化能力属于后续阶段。
 

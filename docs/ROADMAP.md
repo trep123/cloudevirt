@@ -81,7 +81,7 @@
 
 | ID | 风险 | 影响 | 缓解措施 | 状态 |
 | --- | --- | --- | --- | --- |
-| R1 | 开发机无 /dev/kvm（位于 KVM 虚拟机内，未透传嵌套虚拟化） | 硬件加速验收无法在本机完成 | 已用 libvirt + QEMU TCG 支撑集成验证（域生命周期实测通过）；生产级验收仍需裸机宿主机，未完成前标 NOT VERIFIED | 部分缓解 |
+| ~~R1 开发机无 /dev/kvm~~ | — | — | **已解除（2026-10-26）**：嵌套虚拟化已开启，/dev/kvm 存在且 libvirt 支持 kvm 域，真实加速的域生命周期实测通过 | CLOSED |
 | R2 | Go 工具链未安装 | 模块 D 无法开工 | 阶段 1 内安装并锁定版本，写入依赖基线 | OPEN |
 | R3 | PostgreSQL 不可用 | 迁移与集成测试阻塞 | 阶段 1 用 compose 起开发库，生产用独立实例 | OPEN |
 | R4 | 并发创建导致资源超分 | 超卖、创建失败或宿主机过载 | 事务内资源预留 + 锁，周期对账（模块 H/N） | 设计已定，待实现 |
@@ -103,4 +103,5 @@
 | 阶段 | 日期 | 证据 | 结论 |
 | --- | --- | --- | --- |
 | 阶段 0 | 2026-10-26 | IMPLEMENTATION_TASKBOOK.md 第 1 章审计结论 | 通过（代码层面无历史包袱，风险低） |
-| 阶段 1（部分） | 2026-10-26 | 后端 `manage.py check` / `migrate` 通过、`/api/v1/health` 返回 200；Agent `gofmt`/`go vet`/`go test`/`go build` 通过、`/health` 返回 ok；`scripts/precheck.sh` 在无 KVM 环境以退出码 1 明确报错 | 后端与 Agent 骨架通过；前端工程与 Ansible 未完，门禁 G1 尚未完全达成 |
+| 阶段 1（部分） | 2026-10-26 | 后端 manage.py check / migrate 通过、/api/v1/health 返回 200；Agent gofmt / go vet / go test / go build 通过、/health 返回 ok | 后端与 Agent 骨架通过；前端工程与 Ansible 未完，门禁 G1 尚未完全达成 |
+| 环境复验 | 2026-10-26 | 开启嵌套虚拟化后：/dev/kvm 存在（10:232）、vmx 标志、kvm_intel 已加载、libvirt 支持 kvm 域；type=kvm 域 define→start→running→destroy→undefine 全部成功，QEMU 进程含 -enable-kvm；precheck 退出码 0（全项 PASS） | 通过，KVM 阻塞项解除 |
