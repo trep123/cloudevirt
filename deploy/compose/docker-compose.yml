@@ -1,0 +1,22 @@
+# 仅用于本地开发：提供 PostgreSQL 实例，禁止用于生产。
+services:
+  postgres:
+    image: postgres:18
+    container_name: cloudvirt-dev-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: cloudvirt
+      POSTGRES_USER: cloudvirt
+      POSTGRES_PASSWORD: change-me
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - cloudvirt-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cloudvirt -d cloudvirt"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  cloudvirt-pgdata:

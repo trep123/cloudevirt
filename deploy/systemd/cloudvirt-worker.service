@@ -1,0 +1,22 @@
+[Unit]
+Description=CloudVirt Task Worker
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=cloudvirt
+Group=cloudvirt
+WorkingDirectory=/opt/cloudvirt/apps/management
+EnvironmentFile=/etc/cloudvirt/management.env
+ExecStart=/opt/cloudvirt/.venv/bin/python manage.py run_worker
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/cloudvirt
+
+[Install]
+WantedBy=multi-user.target

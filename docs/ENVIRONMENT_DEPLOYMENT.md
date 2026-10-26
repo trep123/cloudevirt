@@ -13,9 +13,9 @@
 | OS | Ubuntu 26.04.1 LTS | 与目标环境一致 |
 | Python | 3.14.4 | 后端运行时 |
 | Node / npm | v24.22.1 / 12.2.1 | 前端构建 |
-| Go | 未安装 | 模块 D 前置，需安装并锁定版本（TBD） |
-| PostgreSQL | 客户端与服务均未就绪 | 集成测试与迁移校验当前 BLOCKED |
-| /dev/kvm、virsh | 不存在 / 未安装 | 真实 KVM 验收当前 BLOCKED |
+| Go | 1.26.8（阶段 1 已安装） | 模块 D 前置已解除 |
+| PostgreSQL | 18.6 已安装并运行，专用账户与库 `cloudvirt` 已建立 | 迁移已执行；生产实例仍待规划 |
+| /dev/kvm、virsh | 不存在 / 未安装 | 真实 KVM 验收仍 BLOCKED（容器环境无硬件虚拟化） |
 
 ### 1.2 目标宿主机要求
 
@@ -28,12 +28,12 @@
 
 | 组件 | 清单文件 | 锁文件 | 安装命令（待实测确认） |
 | --- | --- | --- | --- |
-| 后端 | `apps/management/requirements/{base,dev,prod}.txt`（或 pyproject） | 一并提交 | `pip install -r requirements/dev.txt` |
-| Agent | `services/virt-node-agent/go.mod` | `go.sum` | `go mod download` / `go build ./...` |
-| 前端 | `apps/web/package.json` | `package-lock.json` | `npm ci` |
-| 宿主机 | `deploy/ansible/` | — | `ansible-playbook`（TBD） |
+| 后端 | `apps/management/requirements/{base,dev,prod}.txt` | requirements 即锁定（`==`） | `make backend-install` |
+| Agent | `services/virt-node-agent/go.mod` | 无外部依赖，暂无 go.sum | `make agent-build` |
+| 前端 | `apps/web/package.json` | `package-lock.json` | `make web-install`（前端工程待建） |
+| 宿主机 | `deploy/ansible/` | — | 待阶段 1 补齐（TBD） |
 
-- Django / DRF / Go / libvirt 绑定库的具体版本须在安装时按 Python 3.14 与 Go 版本兼容矩阵确定，回填后进入锁文件。
+已实测锁定的版本（2026-10-26）：Django 6.1.2、djangorestframework 3.18.3、psycopg[binary] 3.3.6、gunicorn 26.2.0、ruff 0.17.2、Go 1.26.8、PostgreSQL 18.6、qemu-utils 10.2.1。
 
 ## 3. 环境变量
 
@@ -143,7 +143,7 @@ virsh -c qemu:///system list --all
 
 | 项 | 影响 | 建议动作 |
 | --- | --- | --- |
-| 无 KVM 宿主机 | 阶段 3/5/6 真实验收 | 指定测试宿主机并开通管理网访问 |
-| Go 工具链未安装 | 模块 D 无法开工与测试 | 安装并锁定版本，写入依赖清单 |
-| PostgreSQL 未就绪 | 迁移与集成测试 | compose 起开发库 + 规划生产实例 |
+| 无 KVM 宿主机 | 阶段 3/5/6 真实验收 | 指定测试宿主机并开通管理网访问（仍未解除） |
+| ~~Go 工具链未安装~~ | ~~模块 D 无法开工~~ | 已解除：Go 1.26.8 已安装并写入依赖基线 |
+| ~~PostgreSQL 未就绪~~ | ~~迁移与集成测试~~ | 已解除：本机 PG 18.6 + 专用账户/库，迁移已执行 |
 | 备份目标位置未定 | 阶段 6 无法演练 | 确定备份存储与访问权限 |

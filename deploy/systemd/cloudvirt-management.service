@@ -1,0 +1,26 @@
+[Unit]
+Description=CloudVirt Management Backend
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=cloudvirt
+Group=cloudvirt
+WorkingDirectory=/opt/cloudvirt/apps/management
+EnvironmentFile=/etc/cloudvirt/management.env
+ExecStart=/opt/cloudvirt/.venv/bin/gunicorn config.wsgi:application \
+    --bind 127.0.0.1:8000 \
+    --workers 4 \
+    --access-logfile /var/log/cloudvirt/management-access.log \
+    --error-logfile /var/log/cloudvirt/management-error.log
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/cloudvirt
+
+[Install]
+WantedBy=multi-user.target

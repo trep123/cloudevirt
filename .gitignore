@@ -1,0 +1,58 @@
+# Python / Django
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+media/
+staticfiles/
+
+# Node / 前端
+node_modules/
+dist/
+build/
+.vite/
+npm-debug.log*
+*.local
+
+# Go
+/services/virt-node-agent/bin/
+*.exe
+*.test
+*.out
+
+# 环境与密钥
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+
+# 数据库
+sqlite3/
+*.sqlite3
+
+# 虚拟磁盘与镜像（禁止入库）
+*.qcow2
+*.img
+*.iso
+*.raw
+/var/lib/cloudvirt/
+
+# 编辑器与系统
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# 日志与临时文件
+*.log
+logs/
+tmp/

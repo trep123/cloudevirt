@@ -1,0 +1,21 @@
+[Unit]
+Description=CloudVirt Node Agent
+After=network.target libvirtd.service
+Wants=libvirtd.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/cloudvirt/services/virt-node-agent
+EnvironmentFile=/etc/cloudvirt/agent.env
+ExecStart=/opt/cloudvirt/services/virt-node-agent/bin/virt-node-agent
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/cloudvirt /var/log/cloudvirt
+
+[Install]
+WantedBy=multi-user.target

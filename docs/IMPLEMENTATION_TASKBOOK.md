@@ -38,7 +38,7 @@
 
 | 编号 | 模块 | 状态 | 目标阶段 | 前置依赖 | 关键阻塞 | 主要落地位置 |
 | --- | --- | --- | --- | --- | --- | --- |
-| A | 基础工程与部署配置 | NEW | 阶段 1 | 无 | Go 工具链、PostgreSQL 实例 | 全仓 |
+| A | 基础工程与部署配置 | NEW→部分完成（2026-10-26） | 阶段 1 | 无 | Ansible 初始化待补；前端工程待建 | 全仓 |
 | B | 用户认证、角色和授权 | NEW | 阶段 1（完善于 4） | A | 无 | 后端 accounts、前端登录 |
 | C | 节点管理与心跳 | NEW | 阶段 2 | A、D | Agent 可达 | 后端 nodes、Agent host |
 | D | Go 节点 Agent | NEW | 阶段 2 | A | Go 工具链、libvirt 开发库 | services/virt-node-agent |
