@@ -171,6 +171,13 @@ REST_FRAMEWORK = {
 # 列表接口每页条数上限，防止一次性拉取全表
 API_MAX_PAGE_SIZE = int(os.environ.get('API_MAX_PAGE_SIZE', '100'))
 
+# 登录安全策略（后续迁移到系统设置表，由管理员在线调整）
+SECURITY_LOGIN_MAX_FAILED = int(os.environ.get('SECURITY_LOGIN_MAX_FAILED', '5'))
+SECURITY_LOGIN_LOCK_SECONDS = int(os.environ.get('SECURITY_LOGIN_LOCK_SECONDS', '900'))
+SECURITY_PASSWORD_MIN_LENGTH = int(os.environ.get('SECURITY_PASSWORD_MIN_LENGTH', '12'))
+SECURITY_LOGIN_MAX_ATTEMPTS = int(os.environ.get('SECURITY_LOGIN_MAX_ATTEMPTS', '10'))
+SECURITY_LOGIN_WINDOW_SECONDS = int(os.environ.get('SECURITY_LOGIN_WINDOW_SECONDS', '300'))
+
 LANGUAGE_CODE = 'zh-hans'
 TIME_ZONE = 'UTC'
 USE_I18N = True

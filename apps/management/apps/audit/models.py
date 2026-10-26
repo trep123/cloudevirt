@@ -1,0 +1,73 @@
+"""审计事件模型与动作字典。
+
+审计是安全边界的一部分：登录、权限被拒、用户管理、危险操作都必须留痕。
+"""
+
+from django.conf import settings
+from django.db import models
+
+
+class AuditResult(models.TextChoices):
+    """审计结果。"""
+
+    SUCCESS = 'SUCCESS', '成功'
+    FAILURE = 'FAILURE', '失败'
+    DENIED = 'DENIED', '被拒绝'
+
+
+class AuditAction(models.TextChoices):
+    """审计动作，后续模块按需扩展。"""
+
+    LOGIN_SUCCESS = 'LOGIN_SUCCESS', '登录成功'
+    LOGIN_FAILURE = 'LOGIN_FAILURE', '登录失败'
+    LOGOUT = 'LOGOUT', '登出'
+    PASSWORD_CHANGE = 'PASSWORD_CHANGE', '修改密码'
+    PERMISSION_DENIED = 'PERMISSION_DENIED', '权限被拒'
+    USER_CREATE = 'USER_CREATE', '创建用户'
+    USER_UPDATE = 'USER_UPDATE', '更新用户'
+    USER_DISABLE = 'USER_DISABLE', '禁用用户'
+    USER_ENABLE = 'USER_ENABLE', '启用用户'
+    USER_DELETE = 'USER_DELETE', '删除用户'
+    USER_PASSWORD_RESET = 'USER_PASSWORD_RESET', '重置用户密码'
+    ROLE_CHANGE = 'ROLE_CHANGE', '变更角色'
+
+
+class AuditEvent(models.Model):
+    """审计事件记录，只追加不修改。"""
+
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='audit_events',
+        verbose_name='操作者',
+    )
+    actor_username = models.CharField('操作者账号', max_length=150, blank=True, default='')
+    action = models.CharField('动作', max_length=64, choices=AuditAction.choices)
+    target_type = models.CharField('对象类型', max_length=32, blank=True, default='')
+    target_id = models.CharField('对象标识', max_length=64, blank=True, default='')
+    result = models.CharField(
+        '结果', max_length=16, choices=AuditResult.choices, default=AuditResult.SUCCESS
+    )
+    request_id = models.CharField('请求 ID', max_length=64, blank=True, default='')
+    task_id = models.UUIDField('任务 ID', null=True, blank=True)
+    ip = models.GenericIPAddressField('来源 IP', null=True, blank=True)
+    details = models.JSONField('详情', default=dict, blank=True)
+    created_at = models.DateTimeField('发生时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '审计事件'
+        verbose_name_plural = '审计事件'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['target_type', 'target_id', 'created_at']),
+            models.Index(fields=['actor', 'created_at']),
+            models.Index(fields=['action', 'created_at']),
+        ]
+
+    def __str__(self) -> str:
+        """返回可读摘要。"""
+        return (
+            f'{self.actor_username} {self.action} {self.target_type}:{self.target_id} {self.result}'
+        )

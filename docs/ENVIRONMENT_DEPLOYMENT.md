@@ -165,7 +165,18 @@ virsh -c qemu:///system list --all
 | 升级 | 升级前备份数据库与配置；记录应用版本、迁移版本、Agent 版本；检测 Agent 与后端 API 兼容性 |
 | 回滚 | 应用版本可回退；不可逆迁移必须有单独恢复计划，不得假设 `migrate` 总能安全逆转 |
 
-## 9. 当前 BLOCKED 项（需负责人落实）
+## 9. 部署后的固定动作（模块 A/B）
+
+| 动作 | 命令 | 说明 |
+| --- | --- | --- |
+| 迁移与角色同步 | `make backend-migrate` | 迁移后由 post_migrate 自动同步角色；新增业务模型后再执行 `python manage.py sync_roles` 补齐权限绑定 |
+| 创建首个管理员 | `CLOUDVIRT_BOOTSTRAP_ADMIN=true python manage.py bootstrap_admin --username admin` | 受部署开关保护，已存在管理员时拒绝执行；输出一次性口令并强制首次改密 |
+| 环境自检 | `make precheck` | 生产口径下缺 /dev/kvm 判失败；开发测试可用 `CLOUDVIRT_ALLOW_TCG=true` 降级 |
+
+登录采用同源 Session + CSRF（ADR-009）：前端需先请求 `/api/v1/auth/me`（或读取登录响应）获取 `csrftoken` Cookie，
+写操作时携带 `X-CSRFToken` 请求头；跨域部署改用 DRF Token 方案。
+
+## 10. 当前 BLOCKED 项（需负责人落实）
 
 | 项 | 影响 | 建议动作 |
 | --- | --- | --- |

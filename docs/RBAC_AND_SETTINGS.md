@@ -4,6 +4,20 @@
 - 上游：《手册》第 4、17 章；数据模型见 DATA_MODEL.md；页面见 FRONTEND_UX_SPEC.md。
 - 原则：**前端隐藏不是权限边界**；所有判定在后端完成，未认证 401、无权限 403。
 
+## 0. 实现状态（2026-10-26）
+
+| 能力 | 状态 | 落地位置 |
+| --- | --- | --- |
+| 角色与权限矩阵 | 已实现 | `apps/accounts/roles.py`，`sync_roles` 命令 + post_migrate 自动同步 |
+| 登录/登出/改密、锁定与限流 | 已实现 | `apps/accounts/services.py`、`views.py` |
+| 权限判定与拒绝审计 | 已实现 | `common/permissions.py`（`check_permission`、`RequiresPermission`） |
+| 用户管理（创建/更新/停用/重置密码） | 已实现 | `apps/accounts/views.py` |
+| 首个管理员引导 | 已实现 | `bootstrap_admin` 命令（需 `CLOUDVIRT_BOOTSTRAP_ADMIN=true`） |
+| 审计事件 | 已实现 | `apps/audit`（事件模型 + `record_audit`） |
+| 节点级对象授权（NodeAccess） | 待模块 C | 节点模型建立后补充 |
+| 系统设置表 | 待阶段 4 | 当前阈值走环境变量（见第 8 章） |
+| 密码策略在线配置 | 待阶段 4 | 当前走 `SECURITY_*` 环境变量 |
+
 ## 1. 角色定义
 
 | 角色 | 定位 | 典型使用者 | Django 映射 |
