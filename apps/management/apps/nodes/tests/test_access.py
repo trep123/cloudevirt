@@ -71,8 +71,8 @@ class NodeAccessTests(TestCase):
 
         # Operator 查询
         self.client.login(username='na-operator', password='Str0ngPassw0rd')
-        response = self.client.get('/api/v1/node-access?node=%d' % self.node_a.pk)
-        self.assertEqual(response.status_code, 200)
+        response = self.client.get(f'/api/v1/node-access?node={self.node_a.pk}')
+        self.assertEqual(response.status_code, 403)
 
         # Operator 创建 → 403
         response = self.client.post(

@@ -8,7 +8,7 @@ from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
 from apps.accounts.models import UserProfile
-from apps.accounts.roles import ROLE_ADMIN, ROLE_OPERATOR, ROLE_VIEWER
+from apps.accounts.roles import ROLE_ADMIN, ROLE_OPERATOR, ROLE_VIEWER, is_admin
 from apps.accounts.services import validate_password_policy
 from common.errors import AppError
 
@@ -44,6 +44,7 @@ class UserSerializer(serializers.ModelSerializer):
     )
     roles = serializers.SerializerMethodField()
     permissions = serializers.SerializerMethodField()
+    console_scope = serializers.SerializerMethodField()
 
     class Meta:
         model = get_user_model()
@@ -55,6 +56,7 @@ class UserSerializer(serializers.ModelSerializer):
             'is_active',
             'roles',
             'permissions',
+            'console_scope',
             'must_change_password',
             'last_login',
             'date_joined',
@@ -67,12 +69,10 @@ class UserSerializer(serializers.ModelSerializer):
 
     def get_permissions(self, obj) -> list[str]:
         """返回用户经角色继承的全部权限码（按字母序）。"""
-        return sorted(
-            f'{app_label}.{codename}'
-            for app_label, codename in obj.groups.values_list(
-                'permissions__content_type__app_label', 'permissions__codename'
-            )
-        )
+        return sorted(obj.get_all_permissions())
+
+    def get_console_scope(self, obj) -> str:
+        return 'admin' if is_admin(obj) else 'user'
 
 
 class UserCreateSerializer(serializers.ModelSerializer):

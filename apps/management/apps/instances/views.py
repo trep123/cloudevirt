@@ -30,9 +30,10 @@ from common.permissions import (
     RequiresPasswordChange,
     check_permission,
 )
+from common.scope import InstanceScopeMixin, instances_for
 
 
-class InstanceListCreateView(generics.ListCreateAPIView):
+class InstanceListCreateView(InstanceScopeMixin, generics.ListCreateAPIView):
     """实例列表与创建。"""
 
     permission_classes = [RequiresPasswordChange]
@@ -94,7 +95,7 @@ class InstanceListCreateView(generics.ListCreateAPIView):
         return Response(payload, status=status.HTTP_202_ACCEPTED)
 
 
-class InstanceDetailView(generics.RetrieveDestroyAPIView):
+class InstanceDetailView(InstanceScopeMixin, generics.RetrieveDestroyAPIView):
     """实例详情与删除（DELETE 语义见 request_delete）。"""
 
     permission_classes = [IsAuthenticated, RequiresPasswordChange]
@@ -172,7 +173,7 @@ class InstanceAddressesView(APIView):
 
     def get(self, request, pk: int) -> Response:
         """返回实例当前网卡地址。"""
-        instance = Instance.objects.filter(pk=pk, is_deleted=False).select_related('node').first()
+        instance = instances_for(request.user).filter(pk=pk).first()
         if instance is None:
             raise AppError(ErrorCode.NOT_FOUND)
         payload = AgentClient(instance.node.endpoint).domain_addresses(instance.libvirt_domain_name)
@@ -191,7 +192,7 @@ class InstanceInterfacesView(APIView):
 
     def get(self, request, pk: int) -> Response:
         """返回实例当前网卡接口。"""
-        instance = Instance.objects.filter(pk=pk, is_deleted=False).select_related('node').first()
+        instance = instances_for(request.user).filter(pk=pk).first()
         if instance is None:
             raise AppError(ErrorCode.NOT_FOUND)
         payload = AgentClient(instance.node.endpoint).domain_interfaces(
@@ -207,7 +208,7 @@ class InstanceConsoleView(APIView):
 
     def get(self, request, pk: int) -> Response:
         """返回 noVNC 连接路径与 VNC 口令。"""
-        instance = Instance.objects.filter(pk=pk, is_deleted=False).select_related('node').first()
+        instance = instances_for(request.user).filter(pk=pk).first()
         if instance is None:
             raise AppError(ErrorCode.NOT_FOUND)
         if not instance.vnc_password:
@@ -245,7 +246,7 @@ class InstanceActionView(APIView):
         if codename is None:
             raise AppError(ErrorCode.NOT_FOUND, '不支持的操作')
 
-        instance = Instance.objects.filter(pk=pk, is_deleted=False).select_related('node').first()
+        instance = instances_for(request.user).filter(pk=pk).first()
         if instance is None:
             raise AppError(ErrorCode.NOT_FOUND)
 
@@ -286,7 +287,7 @@ class InstanceDeleteView(APIView):
 
     def delete(self, request, pk: int) -> Response:
         """创建删除任务并返回 202。"""
-        instance = Instance.objects.filter(pk=pk, is_deleted=False).select_related('node').first()
+        instance = instances_for(request.user).filter(pk=pk).first()
         if instance is None:
             raise AppError(ErrorCode.NOT_FOUND)
 
@@ -338,7 +339,9 @@ class DiskListView(generics.ListAPIView):
 
     def get_queryset(self):
         """按实例或状态过滤。"""
-        queryset = Disk.objects.select_related('instance').filter(instance__is_deleted=False)
+        queryset = Disk.objects.select_related('instance').filter(
+            instance__in=instances_for(self.request.user)
+        )
         instance_id = self.request.query_params.get('instance')
         if instance_id:
             queryset = queryset.filter(instance_id=instance_id)

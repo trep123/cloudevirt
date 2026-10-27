@@ -2,7 +2,7 @@
 
 基于 QEMU/KVM + libvirt 的云虚拟化管理平台：Go 节点 Agent 负责宿主机受限操作，Django + DRF 管理后端负责任务编排与状态管理，React + TypeScript 前端提供操作界面。
 
-- 当前阶段：阶段 1（基础工程）骨架已完成并验证，阶段 2 起逐步实现业务模块
+- 当前阶段：单节点业务模块与控制台 UI 已实现；真实 KVM 全链路与生产验收仍以验收记录为准
 - 文档入口：[docs/README.md](./docs/README.md)
 - 状态说明：功能是否验证通过以 docs 中的验收记录为准，未验证项一律标记 NOT VERIFIED
 
@@ -31,6 +31,12 @@
 缺少 `/dev/kvm` 的环境可执行 `CLOUDVIRT_ALLOW_TCG=true bash scripts/precheck.sh` 以 QEMU TCG 模拟降级运行（退出码 2，仅用于开发测试，性能不代表生产）。
 
 ## 3. 快速开始
+
+Ubuntu 26 新系统的一键部署（在完整项目根目录执行）：
+
+    sudo bash install.sh --enable-ovs --allow-destructive
+
+参数、证书、初始口令和部署限制见 [Ubuntu 26 部署说明](docs/INSTALL_UBUNTU_26.md)。
 
 ```bash
 # 1) 后端：虚拟环境 + 依赖
@@ -83,7 +89,7 @@ make lint             # 全量静态检查（ruff + gofmt + go vet + tsc）
 ## 6. 已知限制
 
 - 真实创建/启动/删除虚拟机的端到端验收尚未执行（NOT VERIFIED）：libvirt 域生命周期已单独实测通过，业务链路待阶段 3 完成后验证。
-- 前端工程与业务模块（节点、镜像、实例、任务、权限）尚未实现，当前仅后端与 Agent 骨架可用。
+- 前端已提供统一管理员/用户控制台、真实数据总览、虚拟机列表与详情、五步创建向导、节点/存储/网络/任务/审计页面。实施说明见 [docs/CONSOLE_UI_IMPLEMENTATION.md](docs/CONSOLE_UI_IMPLEMENTATION.md)。
 - 备份恢复、TLS/mTLS、监控告警等生产化能力属于后续阶段。
 
 ## 7. 许可证

@@ -15,7 +15,8 @@ export interface Paginated<T> {
   results: T[];
 }
 
-export type NodeStatus = "UNKNOWN" | "ONLINE" | "DEGRADED" | "OFFLINE" | "MAINTENANCE";
+export type NodeStatus =
+  "UNKNOWN" | "ONLINE" | "DEGRADED" | "OFFLINE" | "MAINTENANCE";
 
 export interface Node {
   id: number;
@@ -178,6 +179,7 @@ export interface Overview {
 }
 
 export interface CurrentUser {
+  console_scope?: "admin" | "user";
   id: number;
   username: string;
   display_name: string;

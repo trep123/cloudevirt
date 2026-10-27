@@ -5,6 +5,7 @@
 - 事务内不调用 Agent，实际创建由任务执行器在事务提交后进行。
 """
 
+import hashlib
 import logging
 import re
 import secrets
@@ -12,6 +13,7 @@ import uuid as uuid_module
 from datetime import timedelta
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
@@ -25,10 +27,14 @@ from apps.instances.models import (
     ReservationStatus,
     ResourceReservation,
 )
+from apps.networks.models import Network
 from apps.networks.services import validate_network_for_instance
-from apps.tasks.models import TaskType
+from apps.nodes.access import user_can_access
+from apps.nodes.models import NodePermission
+from apps.tasks.models import Task, TaskType
 from apps.tasks.services import enqueue
 from common.errors import AppError, ErrorCode
+from common.quota import enforce_quota
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +157,13 @@ def create_instance(
         AppError: 参数非法、节点不可调度、镜像不可用或资源不足。
     """
     validate_spec(name=name, vcpu=vcpu, memory_mib=memory_mib, disk_gib=disk_gib)
+    if not user_can_access(user, node, NodePermission.OPERATE):
+        raise AppError(ErrorCode.PERMISSION_DENIED, '没有目标节点的操作权限')
+    scoped_key = (
+        hashlib.sha256(f'{user.pk}:{idempotency_key}'.encode()).hexdigest()
+        if idempotency_key
+        else None
+    )
 
     if image.status != ImageStatus.READY or image.is_deleted:
         raise AppError(
@@ -176,6 +189,35 @@ def create_instance(
 
     with transaction.atomic():
         locked_node = type(node).objects.select_for_update().get(pk=node.pk)
+        # Also serialize cross-node requests and idempotency lookup for this account.
+        get_user_model().objects.select_for_update().get(pk=user.pk)
+        if scoped_key:
+            previous = Task.objects.filter(
+                idempotency_key=scoped_key, requested_by=user, type=TaskType.INSTANCE_CREATE
+            ).first()
+            if previous:
+                instance = Instance.objects.filter(
+                    pk=previous.resource_id, created_by=user, is_deleted=False
+                ).first()
+                if instance is None or (
+                    instance.name,
+                    instance.node_id,
+                    instance.image_id,
+                    instance.vcpu,
+                    instance.memory_mib,
+                    instance.disk_gib,
+                    instance.network_name,
+                    instance.autostart,
+                ) != (name, node.pk, image.pk, vcpu, memory_mib, disk_gib, network_name, autostart):
+                    raise AppError(ErrorCode.CONFLICT, '幂等键已用于其他配置，请先核对原任务')
+                return instance, previous
+        enforce_quota(user, vcpu=vcpu, memory_mib=memory_mib, disk_gib=disk_gib)
+        if network is not None:
+            network = (
+                Network.objects.select_for_update().filter(pk=network.pk, is_deleted=False).first()
+            )
+            if network is None or not network.is_usable or network.name != network_name:
+                raise AppError(ErrorCode.CONFLICT, '网络配置已变化，请刷新后重新提交')
         if not locked_node.is_schedulable:
             raise AppError(ErrorCode.NODE_OFFLINE, '节点不可调度')
 
@@ -240,7 +282,7 @@ def create_instance(
                 'network_bridge': network.bridge if network else '',
                 'vlan_id': network.vlan_id if network else None,
             },
-            idempotency_key=idempotency_key,
+            idempotency_key=scoped_key,
         )
         instance.current_task = task
         instance.operation_status = 'PENDING'

@@ -38,7 +38,11 @@ class Command(BaseCommand):
         if user_model.objects.filter(username=username).exists():
             raise CommandError(f'账号 {username} 已存在')
 
-        password = options['password'] or generate_temporary_password()
+        password = (
+            options['password']
+            or os.environ.get('CLOUDVIRT_BOOTSTRAP_PASSWORD', '')
+            or generate_temporary_password()
+        )
         user = user_model(username=username, is_staff=True, is_superuser=True, is_active=True)
         user.set_password(password)
         user.save()

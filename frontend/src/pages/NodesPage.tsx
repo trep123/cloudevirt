@@ -1,11 +1,26 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { api } from "../api";
-import { Card, Empty, ErrorBanner, StatusBadge, describeError, formatBytes, formatTime } from "../components/ui";
+import { navigate } from "../app/router";
+import {
+  Card,
+  Empty,
+  ErrorBanner,
+  StatusBadge,
+  describeError,
+  formatBytes,
+  formatTime,
+} from "../components/ui";
 import { can } from "../permissions";
 import type { CurrentUser, Node, NodeAccess, User } from "../types";
 
-const NODE_STATUSES = ["UNKNOWN", "ONLINE", "DEGRADED", "OFFLINE", "MAINTENANCE"];
+const NODE_STATUSES = [
+  "UNKNOWN",
+  "ONLINE",
+  "DEGRADED",
+  "OFFLINE",
+  "MAINTENANCE",
+];
 
 type NodeEditForm = {
   name: string;
@@ -57,7 +72,8 @@ export function NodesPage({ user }: { user: CurrentUser }) {
 
   useEffect(() => {
     if (!canGrant) return;
-    api.users()
+    api
+      .users()
       .then((page) => setUsers(page.results))
       .catch(() => setUsers([]));
   }, [canGrant]);
@@ -112,7 +128,8 @@ export function NodesPage({ user }: { user: CurrentUser }) {
   }
 
   async function removeNode(node: Node) {
-    if (!window.confirm(`确认注销节点 ${node.name}？存在实例的节点无法注销。`)) return;
+    if (!window.confirm(`确认注销节点 ${node.name}？存在实例的节点无法注销。`))
+      return;
     setError(null);
     setNotice(null);
     try {
@@ -183,34 +200,142 @@ export function NodesPage({ user }: { user: CurrentUser }) {
     <>
       <div className="page-head">
         <h2>节点</h2>
-        <button className="action" onClick={() => void reload()}>刷新列表</button>
+        <button className="action" onClick={() => void reload()}>
+          刷新列表
+        </button>
       </div>
       <ErrorBanner message={error} />
       {notice ? <div className="banner banner-info">{notice}</div> : null}
       {canRegister ? (
         <Card title="注册节点">
-          <form className="inline" onSubmit={(e) => { e.preventDefault(); void createNode(e); }}>
-            <label>名称<input value={createName} onChange={(e) => setCreateName(e.target.value)} placeholder="node-01" required /></label>
-            <label>Agent 地址<input value={createEndpoint} onChange={(e) => setCreateEndpoint(e.target.value)} placeholder="http://10.0.0.11:9100" required /></label>
-            <button className="action primary" type="submit" disabled={busy}>{busy ? "提交中…" : "注册"}</button>
+          <form
+            className="inline"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void createNode(e);
+            }}
+          >
+            <label>
+              名称
+              <input
+                value={createName}
+                onChange={(e) => setCreateName(e.target.value)}
+                placeholder="node-01"
+                required
+              />
+            </label>
+            <label>
+              Agent 地址
+              <input
+                value={createEndpoint}
+                onChange={(e) => setCreateEndpoint(e.target.value)}
+                placeholder="http://10.0.0.11:9100"
+                required
+              />
+            </label>
+            <button className="action primary" type="submit" disabled={busy}>
+              {busy ? "提交中…" : "注册"}
+            </button>
           </form>
         </Card>
       ) : null}
       {editing && editForm ? (
         <Card title={`编辑节点：${editing.name}`}>
-          <form className="inline" onSubmit={(e) => { e.preventDefault(); void saveEdit(e); }}>
-            <label>名称<input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} required /></label>
-            <label>Agent 地址<input value={editForm.endpoint} onChange={(e) => setEditForm({ ...editForm, endpoint: e.target.value })} required /></label>
-            <label>状态
-              <select value={editForm.status} onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}>
-                {NODE_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+          <form
+            className="inline"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void saveEdit(e);
+            }}
+          >
+            <label>
+              名称
+              <input
+                value={editForm.name}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, name: e.target.value })
+                }
+                required
+              />
+            </label>
+            <label>
+              Agent 地址
+              <input
+                value={editForm.endpoint}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, endpoint: e.target.value })
+                }
+                required
+              />
+            </label>
+            <label>
+              状态
+              <select
+                value={editForm.status}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, status: e.target.value })
+                }
+              >
+                {NODE_STATUSES.map((status) => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
+                ))}
               </select>
             </label>
-            <label>采集周期(秒)<input type="number" min={5} max={3600} value={editForm.heartbeat_interval_seconds} onChange={(e) => setEditForm({ ...editForm, heartbeat_interval_seconds: Number(e.target.value) })} /></label>
-            <label>离线阈值(秒)<input type="number" min={10} max={7200} value={editForm.offline_after_seconds} onChange={(e) => setEditForm({ ...editForm, offline_after_seconds: Number(e.target.value) })} /></label>
-            <label>维护说明<input value={editForm.maintenance_note} onChange={(e) => setEditForm({ ...editForm, maintenance_note: e.target.value })} placeholder="可选" /></label>
-            <button className="action primary" type="submit" disabled={busy}>{busy ? "保存中…" : "保存"}</button>
-            <button className="action" type="button" onClick={() => { setEditing(null); setEditForm(null); }}>取消</button>
+            <label>
+              采集周期(秒)
+              <input
+                type="number"
+                min={5}
+                max={3600}
+                value={editForm.heartbeat_interval_seconds}
+                onChange={(e) =>
+                  setEditForm({
+                    ...editForm,
+                    heartbeat_interval_seconds: Number(e.target.value),
+                  })
+                }
+              />
+            </label>
+            <label>
+              离线阈值(秒)
+              <input
+                type="number"
+                min={10}
+                max={7200}
+                value={editForm.offline_after_seconds}
+                onChange={(e) =>
+                  setEditForm({
+                    ...editForm,
+                    offline_after_seconds: Number(e.target.value),
+                  })
+                }
+              />
+            </label>
+            <label>
+              维护说明
+              <input
+                value={editForm.maintenance_note}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, maintenance_note: e.target.value })
+                }
+                placeholder="可选"
+              />
+            </label>
+            <button className="action primary" type="submit" disabled={busy}>
+              {busy ? "保存中…" : "保存"}
+            </button>
+            <button
+              className="action"
+              type="button"
+              onClick={() => {
+                setEditing(null);
+                setEditForm(null);
+              }}
+            >
+              取消
+            </button>
           </form>
         </Card>
       ) : null}
@@ -237,27 +362,67 @@ export function NodesPage({ user }: { user: CurrentUser }) {
               {nodes.map((node) => (
                 <tr key={node.id}>
                   <td>
-                    <strong>{node.name}</strong>
+                    <button
+                      className="text-link"
+                      onClick={() => navigate("/admin/nodes/" + node.id)}
+                    >
+                      {node.name}
+                    </button>
                     <div className="mono muted">{node.endpoint}</div>
-                    {node.maintenance_note ? <div className="muted">维护：{node.maintenance_note}</div> : null}
+                    {node.maintenance_note ? (
+                      <div className="muted">维护：{node.maintenance_note}</div>
+                    ) : null}
                   </td>
                   <td>
                     <StatusBadge status={node.status} />
-                    {node.resource_is_stale ? <div className="muted">数据已过期</div> : null}
+                    {node.resource_is_stale ? (
+                      <div className="muted">数据已过期</div>
+                    ) : null}
                   </td>
                   <td>{node.cpu_total ?? "-"}</td>
-                  <td>{node.memory_available_mib ?? "-"} / {node.memory_total_mib ?? "-"} MiB</td>
+                  <td>
+                    {node.memory_available_mib ?? "-"} /{" "}
+                    {node.memory_total_mib ?? "-"} MiB
+                  </td>
                   <td>{formatBytes(node.storage_free_bytes)}</td>
                   <td>{formatTime(node.resource_sampled_at)}</td>
                   <td>
                     {node.agent_version || "-"}
-                    {node.last_error_message ? <div className="muted">{node.last_error_code}</div> : null}
+                    {node.last_error_message ? (
+                      <div className="muted">{node.last_error_code}</div>
+                    ) : null}
                   </td>
                   <td className="actions">
-                    {canRefresh ? <button className="action" onClick={() => void refresh(node)}>刷新资源</button> : null}
-                    {canRegister ? <button className="action" onClick={() => startEdit(node)}>编辑</button> : null}
-                    <button className="action" onClick={() => void loadAccess(node)}>授权</button>
-                    {canRegister ? <button className="action danger" onClick={() => void removeNode(node)}>注销</button> : null}
+                    {canRefresh ? (
+                      <button
+                        className="action"
+                        onClick={() => void refresh(node)}
+                      >
+                        刷新资源
+                      </button>
+                    ) : null}
+                    {canRegister ? (
+                      <button
+                        className="action"
+                        onClick={() => startEdit(node)}
+                      >
+                        编辑
+                      </button>
+                    ) : null}
+                    <button
+                      className="action"
+                      onClick={() => void loadAccess(node)}
+                    >
+                      授权
+                    </button>
+                    {canRegister ? (
+                      <button
+                        className="action danger"
+                        onClick={() => void removeNode(node)}
+                      >
+                        注销
+                      </button>
+                    ) : null}
                   </td>
                 </tr>
               ))}
@@ -267,37 +432,89 @@ export function NodesPage({ user }: { user: CurrentUser }) {
       </Card>
       {accessNode ? (
         <Card title={`节点授权：${accessNode.name}`}>
-          <p className="muted">无授权记录时全部放行；存在记录后非管理员只能访问被授权节点。</p>
+          <p className="muted">
+            无授权记录时全部放行；存在记录后非管理员只能访问被授权节点。
+          </p>
           {canGrant ? (
-            <form className="inline" onSubmit={(e) => { e.preventDefault(); void grantAccess(); }}>
-              <label>用户
-                <select value={accessUser} onChange={(e) => setAccessUser(e.target.value)} required>
+            <form
+              className="inline"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void grantAccess();
+              }}
+            >
+              <label>
+                用户
+                <select
+                  value={accessUser}
+                  onChange={(e) => setAccessUser(e.target.value)}
+                  required
+                >
                   <option value="">选择用户</option>
-                  {users.map((item) => <option key={item.id} value={item.id}>{item.username}{item.display_name ? `（${item.display_name}）` : ""}</option>)}
+                  {users.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.username}
+                      {item.display_name ? `（${item.display_name}）` : ""}
+                    </option>
+                  ))}
                 </select>
               </label>
-              <label>权限
-                <select value={accessPermission} onChange={(e) => setAccessPermission(e.target.value)}>
+              <label>
+                权限
+                <select
+                  value={accessPermission}
+                  onChange={(e) => setAccessPermission(e.target.value)}
+                >
                   <option value="OPERATE">操作</option>
                   <option value="VIEW">查看</option>
                 </select>
               </label>
-              <button className="action primary" type="submit">授权</button>
-              <button className="action" type="button" onClick={() => setAccessNode(null)}>关闭</button>
+              <button className="action primary" type="submit">
+                授权
+              </button>
+              <button
+                className="action"
+                type="button"
+                onClick={() => setAccessNode(null)}
+              >
+                关闭
+              </button>
             </form>
           ) : (
-            <button className="action" onClick={() => setAccessNode(null)}>关闭</button>
+            <button className="action" onClick={() => setAccessNode(null)}>
+              关闭
+            </button>
           )}
-          {accessRules.length === 0 ? <Empty text="无授权记录（默认全部放行）" /> : (
+          {accessRules.length === 0 ? (
+            <Empty text="无授权记录（默认全部放行）" />
+          ) : (
             <table>
-              <thead><tr><th>用户/组</th><th>权限</th><th>创建时间</th><th>操作</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>用户/组</th>
+                  <th>权限</th>
+                  <th>创建时间</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
               <tbody>
                 {accessRules.map((rule) => (
                   <tr key={rule.id}>
                     <td>{rule.username || rule.group_name || "-"}</td>
                     <td className="mono">{rule.permission}</td>
                     <td>{formatTime(rule.created_at)}</td>
-                    <td>{canGrant ? <button className="action danger" onClick={() => void revokeAccess(rule)}>撤销</button> : "-"}</td>
+                    <td>
+                      {canGrant ? (
+                        <button
+                          className="action danger"
+                          onClick={() => void revokeAccess(rule)}
+                        >
+                          撤销
+                        </button>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

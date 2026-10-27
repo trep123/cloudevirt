@@ -2,9 +2,15 @@
 
 from django.urls import include, path
 
+from common.console import AuditListView, DashboardView, QuotaView, RoleListView
 from common.views import health
 
 urlpatterns = [
+    path('api/v1/', include('common.console_urls')),
+    path('api/v1/console/dashboard', DashboardView.as_view(), name='console-dashboard'),
+    path('api/v1/console/audit', AuditListView.as_view(), name='console-audit'),
+    path('api/v1/console/roles', RoleListView.as_view(), name='console-roles'),
+    path('api/v1/console/quota', QuotaView.as_view(), name='console-quota'),
     path('api/v1/health', health, name='health'),
     path('api/v1/', include('apps.accounts.urls')),
     path('api/v1/', include('apps.nodes.urls')),

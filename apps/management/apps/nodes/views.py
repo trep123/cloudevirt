@@ -20,9 +20,10 @@ from common.permissions import (
     CanRegisterNode,
     RequiresPasswordChange,
 )
+from common.scope import NodeScopeMixin
 
 
-class NodeListCreateView(generics.ListCreateAPIView):
+class NodeListCreateView(NodeScopeMixin, generics.ListCreateAPIView):
     """节点列表与注册。"""
 
     permission_classes = [RequiresPasswordChange]
@@ -52,7 +53,7 @@ class NodeListCreateView(generics.ListCreateAPIView):
         )
 
 
-class NodeDetailView(generics.RetrieveUpdateDestroyAPIView):
+class NodeDetailView(NodeScopeMixin, generics.RetrieveUpdateDestroyAPIView):
     """节点详情与更新（DELETE 语义为注销）。"""
 
     permission_classes = [CanOperateNode, RequiresPasswordChange]
@@ -94,7 +95,7 @@ class NodeDetailView(generics.RetrieveUpdateDestroyAPIView):
         )
 
 
-class NodeRefreshView(generics.GenericAPIView):
+class NodeRefreshView(NodeScopeMixin, generics.GenericAPIView):
     """主动刷新节点资源（同步调用，受超时约束）。"""
 
     permission_classes = [CanRefreshNode, RequiresPasswordChange]
@@ -124,7 +125,7 @@ class NodeAccessListCreateView(generics.ListCreateAPIView):
     def get_permissions(self):
         if self.request.method == 'POST':
             return [CanManageNode(), RequiresPasswordChange()]
-        return [CanOperateNode(), RequiresPasswordChange()]
+        return [CanManageNode(), RequiresPasswordChange()]
 
     def get_queryset(self):
         """按节点过滤。"""

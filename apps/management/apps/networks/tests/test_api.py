@@ -46,8 +46,8 @@ class NetworkApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.json()['results']), 1)
 
-    def test_operator_can_register_network(self) -> None:
-        """学员可以登记网络白名单。"""
+    def test_operator_cannot_change_global_network(self) -> None:
+        """普通账号不能修改全局网络。"""
         self.client.login(username='net-operator', password='Str0ngPassw0rd')
 
         response = self.client.post(
@@ -56,8 +56,8 @@ class NetworkApiTests(TestCase):
             content_type='application/json',
         )
 
-        self.assertEqual(response.status_code, 201)
-        self.assertTrue(Network.objects.filter(name='new-net').exists())
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(Network.objects.filter(name='new-net').exists())
 
     def test_admin_registers_network_with_audit(self) -> None:
         """Admin 登记网络并留痕。"""

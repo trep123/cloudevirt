@@ -28,6 +28,7 @@ class TaskApiTests(TestCase):
             task_type=TaskType.NODE_REFRESH,
             resource_type='node',
             resource_id='1',
+            requested_by=self.operator,
         )
 
     def test_unauthenticated_returns_401(self) -> None:
@@ -41,11 +42,11 @@ class TaskApiTests(TestCase):
         response = self.client.get('/api/v1/tasks')
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.json()['results']), 1)
+        self.assertEqual(len(response.json()['results']), 0)
 
     def test_task_detail_includes_events(self) -> None:
         """详情应包含事件流水。"""
-        self.client.login(username='task-viewer', password='Str0ngPassw0rd')
+        self.client.login(username='task-operator', password='Str0ngPassw0rd')
 
         response = self.client.get(f'/api/v1/tasks/{self.task.pk}')
 
@@ -114,7 +115,10 @@ class TaskApiTests(TestCase):
     def test_task_list_is_ordered_by_recent(self) -> None:
         """任务列表应按创建时间倒序。"""
         other = Task.objects.create(
-            type=TaskType.NODE_REFRESH, resource_type='node', resource_id='2'
+            type=TaskType.NODE_REFRESH,
+            resource_type='node',
+            resource_id='2',
+            requested_by=self.viewer,
         )
         self.client.login(username='task-viewer', password='Str0ngPassw0rd')
 

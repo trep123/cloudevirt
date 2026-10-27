@@ -1,81 +1,80 @@
-import { useCallback, useEffect, useState } from "react";
-
-import { api } from "./api";
-import { DisksPage } from "./pages/DisksPage";
+import { useEffect, useState } from "react";
+import { api, ApiError } from "./api";
+import { usePath, navigate } from "./app/router";
+import { canEnterRoute } from "./app/permission";
+import { AppLayout } from "./layouts/AppLayout";
+import { DashboardPage } from "./features/dashboard/DashboardPage";
+import { VmsPage } from "./features/vms/VmsPage";
+import { StoragePage } from "./features/storage/StoragePage";
+import { NodeDetailPage } from "./features/nodes/NodeDetailPage";
+import { AuditPage } from "./features/audit/AuditPage";
+import { UsersAndRolesPage } from "./features/users/UsersAndRolesPage";
 import { ImagesPage } from "./pages/ImagesPage";
-import { InstancesPage } from "./pages/InstancesPage";
 import { ChangePasswordGate, LoginPage } from "./pages/LoginPage";
 import { MonitoringPage } from "./pages/MonitoringPage";
 import { NetworksPage } from "./pages/NetworksPage";
 import { NodesPage } from "./pages/NodesPage";
 import { TasksPage } from "./pages/TasksPage";
 import { TemplatesPage } from "./pages/TemplatesPage";
-import { UsersPage } from "./pages/UsersPage";
-import { roleLabel } from "./roles";
+import { describeError } from "./components/ui";
 import type { CurrentUser } from "./types";
-
-type PageKey =
-  | "instances"
-  | "nodes"
-  | "images"
-  | "templates"
-  | "networks"
-  | "disks"
-  | "tasks"
-  | "monitoring"
-  | "users";
-
-type NavItem = {
-  key: PageKey;
-  label: string;
-  group: string;
-  permission: string;
-};
-
-const GROUPS = ["资源", "运维", "管理"];
-
-const NAV: NavItem[] = [
-  { key: "instances", label: "虚拟机", group: "资源", permission: "instances.view_instance" },
-  { key: "nodes", label: "节点", group: "资源", permission: "nodes.view_node" },
-  { key: "images", label: "镜像", group: "资源", permission: "images.view_image" },
-  { key: "templates", label: "模板", group: "资源", permission: "templates.view_template" },
-  { key: "networks", label: "网络", group: "资源", permission: "networks.view_network" },
-  { key: "disks", label: "磁盘", group: "资源", permission: "instances.view_instance" },
-  { key: "tasks", label: "任务", group: "运维", permission: "tasks.view_task" },
-  { key: "monitoring", label: "监控", group: "运维", permission: "monitoring.view_alert" },
-  { key: "users", label: "用户与权限", group: "管理", permission: "accounts.manage_user" },
-];
-
 export default function App() {
-  const [user, setUser] = useState<CurrentUser | null>(null);
-  const [booted, setBooted] = useState(false);
-  const [page, setPage] = useState<PageKey>("instances");
-
+  const path = usePath(),
+    [user, setUser] = useState<CurrentUser | null>(null),
+    [booted, setBooted] = useState(false),
+    [error, setError] = useState<string | null>(null);
   useEffect(() => {
     api
       .me()
       .then(setUser)
-      .catch(() => setUser(null))
+      .catch((e) => {
+        if (!(e instanceof ApiError) || ![401, 403].includes(e.status))
+          setError(describeError(e));
+      })
       .finally(() => setBooted(true));
   }, []);
-
-  const logout = useCallback(async () => {
+  const admin = user?.console_scope === "admin",
+    prefix = admin ? "/admin" : "/app";
+  useEffect(() => {
+    if (user && ["/", "/login"].includes(path)) navigate(prefix + "/dashboard");
+  }, [user, path, prefix]);
+  useEffect(() => {
+    const expired = () => {
+      setUser(null);
+      navigate("/login");
+    };
+    window.addEventListener("cloudvirt:session-expired", expired);
+    return () =>
+      window.removeEventListener("cloudvirt:session-expired", expired);
+  }, []);
+  async function logout() {
     try {
       await api.logout();
-    } finally {
       setUser(null);
+      navigate("/login");
+    } catch (e) {
+      setError(describeError(e));
     }
-  }, []);
-
-  if (!booted) {
-    return <div className="main">加载中…</div>;
   }
-
-  if (!user) {
-    return <LoginPage onLogin={setUser} />;
-  }
-
-  if (user.must_change_password) {
+  if (!booted)
+    return (
+      <div className="login" role="status">
+        正在连接 CloudVirt…
+      </div>
+    );
+  if (!user)
+    return error ? (
+      <div className="login">
+        <h1>暂时无法连接服务</h1>
+        <p role="alert">{error}</p>
+        <button className="action" onClick={() => location.reload()}>
+          重新连接
+        </button>
+      </div>
+    ) : (
+      <LoginPage onLogin={setUser} />
+    );
+  if (user.must_change_password)
     return (
       <ChangePasswordGate
         user={user}
@@ -83,51 +82,71 @@ export default function App() {
         onLogout={() => void logout()}
       />
     );
-  }
-
-  const visibleNav = NAV.filter((item) => user.permissions.includes(item.permission));
-
+  const key = path.split("/")[2] || "dashboard";
+  const forbidden = !canEnterRoute(user, path);
+  let content;
+  if (forbidden || path === "/403")
+    content = (
+      <div className="card">
+        <h2>403 · 无权访问</h2>
+        <p>当前账号没有此页面的访问权限。</p>
+      </div>
+    );
+  else if (path === "/404" || !path.startsWith(prefix + "/"))
+    content = (
+      <div className="card">
+        <h2>404 · 页面不存在</h2>
+      </div>
+    );
+  else if (key === "dashboard") content = <DashboardPage admin={admin} />;
+  else if (key === "vms") content = <VmsPage user={user} path={path} />;
+  else if (key === "nodes" && admin)
+    content = path.split("/")[3] ? (
+      <NodeDetailPage id={Number(path.split("/")[3])} />
+    ) : (
+      <NodesPage user={user} />
+    );
+  else if (key === "images" && admin) content = <ImagesPage user={user} />;
+  else if (key === "networks" && admin) content = <NetworksPage user={user} />;
+  else if ((key === "users" || key === "roles") && admin)
+    content = <UsersAndRolesPage />;
+  else if (key === "audit") content = <AuditPage />;
+  else if (key === "tasks") content = <TasksPage user={user} />;
+  else if (key === "templates" && admin)
+    content = <TemplatesPage user={user} />;
+  else if (key === "storage" && admin) content = <StoragePage />;
+  else if (key === "monitoring" && admin)
+    content = <MonitoringPage user={user} />;
+  else if (key === "profile")
+    content = (
+      <ChangePasswordGate
+        user={user}
+        onDone={() => navigate(prefix + "/dashboard")}
+        onLogout={() => void logout()}
+      />
+    );
+  else
+    content = (
+      <div className="card">
+        <h2>404 · 页面未开放</h2>
+        <p>当前后端尚未提供此能力。</p>
+        <button
+          className="action"
+          onClick={() => navigate(prefix + "/dashboard")}
+        >
+          返回工作台
+        </button>
+      </div>
+    );
   return (
-    <div className="layout">
-      <aside className="sidebar">
-        <h1>CloudVirt</h1>
-        {GROUPS.map((group) => {
-          const items = visibleNav.filter((item) => item.group === group);
-          if (items.length === 0) return null;
-          return (
-            <div className="nav-group" key={group}>
-              <div className="nav-title">{group}</div>
-              {items.map((item) => (
-                <button
-                  key={item.key}
-                  className={page === item.key ? "active" : ""}
-                  onClick={() => setPage(item.key)}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          );
-        })}
-        <div className="spacer" />
-        <div className="who">
-          {user.display_name || user.username}
-          <br />
-          {user.roles.map(roleLabel).join(" / ") || "无角色"}
-        </div>
-        <button onClick={() => void logout()}>退出登录</button>
-      </aside>
-      <main className="main">
-        {page === "instances" ? <InstancesPage user={user} /> : null}
-        {page === "nodes" ? <NodesPage user={user} /> : null}
-        {page === "images" ? <ImagesPage user={user} /> : null}
-        {page === "templates" ? <TemplatesPage user={user} /> : null}
-        {page === "networks" ? <NetworksPage user={user} /> : null}
-        {page === "disks" ? <DisksPage /> : null}
-        {page === "tasks" ? <TasksPage user={user} /> : null}
-        {page === "monitoring" ? <MonitoringPage user={user} /> : null}
-        {page === "users" ? <UsersPage /> : null}
-      </main>
-    </div>
+    <AppLayout
+      user={user}
+      admin={admin}
+      path={path}
+      onLogout={() => void logout()}
+    >
+      {error ? <p role="alert">{error}</p> : null}
+      {content}
+    </AppLayout>
   );
 }

@@ -45,12 +45,17 @@ class NetworkSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs: dict) -> dict:
         """校验默认/管理网互斥，以及网桥类型必须填写桥接设备。"""
-        if attrs.get('is_management') and attrs.get('is_default'):
+        if attrs.get('is_management', getattr(self.instance, 'is_management', False)) and attrs.get(
+            'is_default', getattr(self.instance, 'is_default', False)
+        ):
             raise serializers.ValidationError('管理网不能作为默认网络')
         network_type = attrs.get('type', getattr(self.instance, 'type', ''))
         bridge = attrs.get('bridge', getattr(self.instance, 'bridge', ''))
         if network_type in {'BRIDGE', 'OVS'} and not bridge:
             raise serializers.ValidationError('网桥类型必须填写桥接设备名称')
+        vlan = attrs.get('vlan_id', getattr(self.instance, 'vlan_id', None))
+        if vlan is not None and not 1 <= vlan <= 4094:
+            raise serializers.ValidationError('VLAN ID 必须在 1–4094 之间')
 
         subnet_raw = (attrs.get('subnet', getattr(self.instance, 'subnet', '')) or '').strip()
         gateway = attrs.get('gateway', getattr(self.instance, 'gateway', None))
@@ -70,6 +75,18 @@ class NetworkSerializer(serializers.ModelSerializer):
                 network = ipaddress.ip_network(subnet_raw, strict=False)
             except ValueError as exc:
                 raise serializers.ValidationError(f'子网 CIDR 格式非法：{exc}') from exc
+            others = Network.objects.filter(is_deleted=False).exclude(subnet='')
+            if self.instance:
+                others = others.exclude(pk=self.instance.pk)
+            for existing in others.values_list('subnet', flat=True):
+                try:
+                    other = ipaddress.ip_network(existing, strict=False)
+                except ValueError:
+                    continue
+                if other.version == network.version and network.overlaps(other):
+                    raise serializers.ValidationError('子网与已登记的网络重叠')
+            if 'subnet' in attrs:
+                attrs['subnet'] = str(network)
 
         if network is not None and gateway:
             try:
@@ -78,6 +95,11 @@ class NetworkSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError('网关地址格式非法') from exc
             if gateway_address.version != network.version or gateway_address not in network:
                 raise serializers.ValidationError('网关必须属于子网')
+            if network.version == 4 and gateway_address in {
+                network.network_address,
+                network.broadcast_address,
+            }:
+                raise serializers.ValidationError('网关不能是网络地址或广播地址')
 
         if dhcp_enabled:
             if network is None:
@@ -95,6 +117,10 @@ class NetworkSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError('DHCP 地址池必须位于子网内')
             if int(start_address) > int(end_address):
                 raise serializers.ValidationError('DHCP 起始地址不能大于结束地址')
+            if gateway and int(start_address) <= int(ipaddress.ip_address(gateway)) <= int(
+                end_address
+            ):
+                raise serializers.ValidationError('DHCP 地址池不能包含网关地址')
             if network.version == 4 and (
                 start_address == network.network_address or end_address == network.broadcast_address
             ):

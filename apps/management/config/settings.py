@@ -84,6 +84,10 @@ ALLOWED_HOSTS = read_list('DJANGO_ALLOWED_HOSTS', ['localhost', '127.0.0.1'])
 # 反向代理（nginx）场景：显式声明可信来源与转发的 Host/Proto
 CSRF_TRUSTED_ORIGINS = read_list('DJANGO_CSRF_TRUSTED_ORIGINS', [])
 USE_X_FORWARDED_HOST = read_bool('DJANGO_USE_X_FORWARDED_HOST', False)
+if read_bool('DJANGO_TRUST_PROXY', False):
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SESSION_COOKIE_SECURE = read_bool('DJANGO_SESSION_COOKIE_SECURE', False)
+CSRF_COOKIE_SECURE = read_bool('DJANGO_CSRF_COOKIE_SECURE', False)
 
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', '')
 if not SECRET_KEY:
@@ -191,6 +195,12 @@ AGENT_REQUEST_TIMEOUT_SECONDS = int(os.environ.get('AGENT_REQUEST_TIMEOUT_SECOND
 INSTANCE_MAX_VCPU = int(os.environ.get('INSTANCE_MAX_VCPU', '64'))
 INSTANCE_MAX_MEMORY_MIB = int(os.environ.get('INSTANCE_MAX_MEMORY_MIB', '131072'))
 INSTANCE_MAX_DISK_GIB = int(os.environ.get('INSTANCE_MAX_DISK_GIB', '2048'))
+USER_RESOURCE_QUOTA = {
+    'instances': int(os.environ.get('USER_QUOTA_INSTANCES', '10')),
+    'vcpu': int(os.environ.get('USER_QUOTA_VCPU', '32')),
+    'memory_mib': int(os.environ.get('USER_QUOTA_MEMORY_MIB', '65536')),
+    'disk_gib': int(os.environ.get('USER_QUOTA_DISK_GIB', '1024')),
+}
 # 关机等待与状态轮询
 INSTANCE_SHUTDOWN_TIMEOUT_SECONDS = int(os.environ.get('INSTANCE_SHUTDOWN_TIMEOUT_SECONDS', '60'))
 INSTANCE_STATE_POLL_INTERVAL_SECONDS = float(

@@ -71,6 +71,17 @@ class RequiresPermission(BasePermission):
             target_type=self.target_type,
             action=self.audit_action,
         )
+        # Global operational data is restricted independently of menu visibility.
+        from apps.accounts.roles import is_admin
+
+        global_permissions = {
+            'monitoring.view_alert',
+            'monitoring.run_reconciliation',
+            'networks.manage_network',
+            'nodes.add_node',
+        }
+        if self.codename in global_permissions and not is_admin(request.user):
+            raise AppError(ErrorCode.PERMISSION_DENIED, '该操作需要管理员授权边界')
         return True
 
 

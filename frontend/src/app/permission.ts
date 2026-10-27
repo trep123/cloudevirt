@@ -1,0 +1,24 @@
+import type { CurrentUser } from "../types";
+
+export function canEnterRoute(user: CurrentUser, path: string): boolean {
+  if (path.startsWith("/admin") && user.console_scope !== "admin") return false;
+  const key = path.split("/")[2];
+  const required: Record<string, string> = {
+    vms: "instances.view_instance",
+    nodes: "nodes.view_node",
+    images: "images.view_image",
+    networks: "networks.view_network",
+    tasks: "tasks.view_task",
+    users: "accounts.manage_user",
+    roles: "accounts.manage_user",
+    templates: "templates.view_template",
+    monitoring: "monitoring.view_alert",
+    storage: "instances.view_instance",
+  };
+  if (
+    path.endsWith("/vms/create") &&
+    !user.permissions.includes("instances.add_instance")
+  )
+    return false;
+  return !required[key] || user.permissions.includes(required[key]);
+}

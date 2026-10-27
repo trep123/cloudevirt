@@ -62,7 +62,7 @@ nginx-reload: ## 重载 nginx 站点配置
 	nginx -t && nginx -s reload
 
 lint: ## 全量静态检查
-	cd $(WEB_DIR) && npm run typecheck 2>/dev/null || true
+	cd $(WEB_DIR) && npm run typecheck
 	cd $(BACKEND_DIR) && $(CURDIR)/$(VENV)/bin/python -m ruff check .
 	cd $(BACKEND_DIR) && $(CURDIR)/$(VENV)/bin/python -m ruff format --check .
 	$(MAKE) agent-fmt agent-vet

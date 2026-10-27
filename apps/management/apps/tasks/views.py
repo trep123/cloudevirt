@@ -10,9 +10,10 @@ from apps.tasks.serializers import TaskDetailSerializer, TaskSerializer
 from apps.tasks.services import record_event
 from common.errors import AppError, ErrorCode
 from common.permissions import CanCancelTask, CanRetryTask, CanViewTask, RequiresPasswordChange
+from common.scope import TaskScopeMixin, tasks_for
 
 
-class TaskListView(generics.ListAPIView):
+class TaskListView(TaskScopeMixin, generics.ListAPIView):
     """任务列表。"""
 
     permission_classes = [CanViewTask, RequiresPasswordChange]
@@ -20,7 +21,7 @@ class TaskListView(generics.ListAPIView):
     serializer_class = TaskSerializer
 
 
-class TaskDetailView(generics.RetrieveAPIView):
+class TaskDetailView(TaskScopeMixin, generics.RetrieveAPIView):
     """任务详情（含事件流水）。"""
 
     permission_classes = [CanViewTask, RequiresPasswordChange]
@@ -35,7 +36,7 @@ class TaskCancelView(APIView):
 
     def post(self, request, pk) -> Response:
         """把等待中的任务置为已取消。"""
-        task = Task.objects.filter(pk=pk).first()
+        task = tasks_for(request.user).filter(pk=pk).first()
         if task is None:
             raise AppError(ErrorCode.NOT_FOUND)
         if task.status != TaskStatus.PENDING:
@@ -61,7 +62,7 @@ class TaskRetryView(APIView):
 
     def post(self, request, pk) -> Response:
         """把失败任务重新排队。"""
-        task = Task.objects.filter(pk=pk).first()
+        task = tasks_for(request.user).filter(pk=pk).first()
         if task is None:
             raise AppError(ErrorCode.NOT_FOUND)
         if task.status != TaskStatus.FAILED:

@@ -31,15 +31,15 @@ class MonitoringApiTests(TestCase):
         """未认证应返回 401。"""
         self.assertEqual(self.client.get('/api/v1/monitoring/overview').status_code, 401)
 
-    def test_viewer_can_read_overview(self) -> None:
-        """Viewer 可读取概览与告警。"""
+    def test_admin_can_read_global_overview(self) -> None:
+        """管理员可读取全局概览与告警。"""
         Alert.objects.create(
             type='NODE_OFFLINE',
             level=AlertLevel.CRITICAL,
             message='节点离线',
             status=AlertStatus.ACTIVE,
         )
-        self.client.login(username='mon-viewer', password='Str0ngPassw0rd')
+        self.client.login(username='mon-admin', password='Str0ngPassw0rd')
 
         overview = self.client.get('/api/v1/monitoring/overview')
         alerts = self.client.get('/api/v1/monitoring/alerts?status=active')

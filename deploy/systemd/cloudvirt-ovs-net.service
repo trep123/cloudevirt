@@ -5,6 +5,7 @@ Wants=openvswitch-switch.service
 
 [Service]
 Type=oneshot
+EnvironmentFile=-/etc/cloudvirt/ovs.env
 ExecStart=/usr/local/sbin/cloudvirt-ovs-net.sh
 RemainAfterExit=yes
 

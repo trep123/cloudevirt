@@ -26,7 +26,7 @@ def user_can_access(user, node, permission: str) -> bool:
     if user.groups.filter(name='Admin').exists():
         return True
 
-    has_any_global = NodeAccess.objects.filter(permission=permission).exists()
+    has_any_global = NodeAccess.objects.exists()
     if not has_any_global:
         return True
 
@@ -47,6 +47,6 @@ def accessible_node_ids(user, permission: str = NodePermission.OPERATE) -> set[i
     explicit = NodeAccess.objects.filter(
         permission=permission,
     ).filter(Q(user=user) | Q(group__in=user.groups.all()))
-    if not explicit.exists():
+    if not NodeAccess.objects.exists():
         return set(Node.objects.filter(is_deleted=False).values_list('id', flat=True))
     return set(explicit.values_list('node_id', flat=True))
