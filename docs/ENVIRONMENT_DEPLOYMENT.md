@@ -208,9 +208,26 @@ sudo nginx -t && sudo nginx -s reload
 
 | 变量 | 示例 | 说明 |
 | --- | --- | --- |
-| `DJANGO_ALLOWED_HOSTS` | `cloudvirt.example.com` | 站点域名；用 IP 访问时写 IP |
-| `DJANGO_CSRF_TRUSTED_ORIGINS` | `https://cloudvirt.example.com` | 与访问协议/域名完全一致，否则写操作会被 CSRF 拒绝 |
-| `DJANGO_USE_X_FORWARDED_HOST` | `true` | 需要透传 Host 时开启 |
+| `DJANGO_ALLOWED_HOSTS` | `127.0.0.1,localhost,172.20.30.117` | 站点域名或 IP；**用哪个地址访问就必须包含哪个**，否则 400 |
+| `DJANGO_CSRF_TRUSTED_ORIGINS` | `http://172.20.30.117` | 与访问协议+域名/端口完全一致；缺失时登录等写操作被 403 拒绝 |
+| `DJANGO_USE_X_FORWARDED_HOST` | `false` | nginx 已透传 Host，一般无需开启 |
+
+外部 IP 访问的最小改动（以本机 `172.20.30.117` 为例）：
+
+```bash
+# /etc/cloudvirt/management.env
+DJANGO_ALLOWED_HOSTS=127.0.0.1,localhost,172.20.30.117
+DJANGO_CSRF_TRUSTED_ORIGINS=http://127.0.0.1,http://localhost,http://172.20.30.117
+```
+
+改完需重启后端（环境变量在进程启动时读取）：
+
+```bash
+sudo systemctl restart cloudvirt-management   # 或按 scripts/serve_local.sh 的方式重启 gunicorn
+```
+
+`scripts/serve_local.sh` 会自动把本机所有非回环网卡 IP 追加进这两个变量，
+因此本地演示直接 `CLOUDVIRT_AGENT_TOKEN=... ./scripts/serve_local.sh` 即可用外部 IP 访问。
 
 验证（实测已通过的命令）：
 

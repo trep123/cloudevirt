@@ -16,8 +16,16 @@ BACKEND_DIR=$ROOT_DIR/apps/management
 AGENT_DIR=$ROOT_DIR/services/virt-node-agent
 DATABASE_URL=${DATABASE_URL:-postgresql://cloudvirt:cloudvirt-dev@127.0.0.1:5432/cloudvirt}
 DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-$(python3 -c 'import secrets;print(secrets.token_urlsafe(50))')}
-DJANGO_ALLOWED_HOSTS=${DJANGO_ALLOWED_HOSTS:-127.0.0.1,localhost}
-DJANGO_CSRF_TRUSTED_ORIGINS=${DJANGO_CSRF_TRUSTED_ORIGINS:-http://127.0.0.1,http://localhost}
+# 默认放行本机回环与本机网卡 IP，便于用外部 IP 直接访问
+ALLOWED_DEFAULT="127.0.0.1,localhost"
+ORIGINS_DEFAULT="http://127.0.0.1,http://localhost"
+for ip in $(hostname -I 2>/dev/null || true); do
+  case "$ip" in 127.*) continue ;; esac
+  ALLOWED_DEFAULT="$ALLOWED_DEFAULT,$ip"
+  ORIGINS_DEFAULT="$ORIGINS_DEFAULT,http://$ip"
+done
+DJANGO_ALLOWED_HOSTS=${DJANGO_ALLOWED_HOSTS:-$ALLOWED_DEFAULT}
+DJANGO_CSRF_TRUSTED_ORIGINS=${DJANGO_CSRF_TRUSTED_ORIGINS:-$ORIGINS_DEFAULT}
 
 echo "==> 构建前端"
 cd "$ROOT_DIR/frontend"
