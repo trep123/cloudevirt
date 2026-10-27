@@ -43,6 +43,7 @@ func main() {
 		AllowDestructive: cfg.AllowDestructive,
 		Domains:          client,
 		Virtualizer:      client,
+		Networks:         client,
 		Logger:           logger,
 	})
 

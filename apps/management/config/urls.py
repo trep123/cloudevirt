@@ -11,6 +11,7 @@ urlpatterns = [
     path('api/v1/', include('apps.tasks.urls')),
     path('api/v1/', include('apps.images.urls')),
     path('api/v1/', include('apps.instances.urls')),
+    path('api/v1/', include('apps.networks.urls')),
 ]
 
 # API 前缀下不返回 HTML 错误页，统一使用 JSON 错误结构

@@ -80,6 +80,27 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 			return
 		}
 
+		// 指定网络时必须确认其存在，避免创建出无法联网的域
+		if payload.Network != "" {
+			if deps.Networks == nil {
+				writeAPIError(writer, deps.Logger, apierr.New(
+					apierr.CodeInternalError, "网络查询依赖未初始化", nil,
+				), requestID)
+				return
+			}
+			existsNetwork, netErr := deps.Networks.NetworkExists(ctx, payload.Network)
+			if netErr != nil {
+				writeAPIError(writer, deps.Logger, netErr, requestID)
+				return
+			}
+			if !existsNetwork {
+				writeAPIError(writer, deps.Logger, apierr.New(
+					apierr.CodeInvalidArgument, "网络不存在", nil,
+				), requestID)
+				return
+			}
+		}
+
 		if deps.Virtualizer == nil {
 			writeAPIError(writer, deps.Logger, errNoVirtualizer, requestID)
 			return

@@ -42,6 +42,9 @@ class AuditAction(models.TextChoices):
     INSTANCE_FORCE_STOP = 'INSTANCE_FORCE_STOP', '强制停止实例'
     INSTANCE_REBOOT = 'INSTANCE_REBOOT', '重启实例'
     INSTANCE_DELETE = 'INSTANCE_DELETE', '删除实例'
+    NETWORK_CREATE = 'NETWORK_CREATE', '登记网络'
+    NETWORK_UPDATE = 'NETWORK_UPDATE', '更新网络'
+    NETWORK_DELETE = 'NETWORK_DELETE', '删除网络'
 
 
 class AuditEvent(models.Model):

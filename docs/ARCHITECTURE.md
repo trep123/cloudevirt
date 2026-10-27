@@ -133,7 +133,9 @@ UNKNOWN → ONLINE ⇄ DEGRADED → OFFLINE；MAINTENANCE 为人工置位，不�
 | GET | /api/v1/tasks/{id}/ | 任务详情与进度 | 200 |
 | POST | /api/v1/images/inspect | 检查镜像文件：路径边界、`qemu-img info`、SHA-256 | 200 |
 | DELETE | /api/v1/images | 删除镜像文件（需 `CLOUDVIRT_ALLOW_DESTRUCTIVE=true`） | 200 |
-| GET | /api/v1/networks/ | 网络列表（白名单） | 200 |
+| GET | /api/v1/networks/ | 网络白名单列表（`networks.view_network`） | 200 |
+| POST | /api/v1/networks/ | 登记白名单网络（`networks.manage_network`） | 201 |
+| PATCH/DELETE | /api/v1/networks/{id}/ | 更新 / 软删除白名单（管理网不可设为默认） | 200 / 204 |
 | GET | /api/v1/audit/ | 审计事件 | 200 |
 | GET | /api/v1/monitoring/overview/ | 资源与告警概览 | 200 |
 | GET | /api/v1/monitoring/reconciliation/ | 对账差异 | 200 |
@@ -155,7 +157,7 @@ UNKNOWN → ONLINE ⇄ DEGRADED → OFFLINE；MAINTENANCE 为人工置位，不�
 | POST | /api/v1/disks | 创建磁盘（路径受根目录约束） |
 | GET | /api/v1/disks/{name}/info | qemu-img info 复核 |
 | DELETE | /api/v1/disks/{name} | 删除磁盘（二次校验引用与路径） |
-| GET | /api/v1/networks | 白名单网络列表与状态 |
+| GET | /api/v1/networks | 本机 libvirt 网络列表与活动状态 |
 
 - 所有 Agent 请求需 `Authorization: Bearer <token>`；失败返回统一错误结构。
 - 用户侧权限与对象级授权规则见 [RBAC_AND_SETTINGS.md](./RBAC_AND_SETTINGS.md)。

@@ -177,3 +177,17 @@ class CanCreateInstance(RequiresPermission):
 
     codename = 'instances.add_instance'
     target_type = 'instance'
+
+
+class CanViewNetwork(RequiresPermission):
+    """查看网络的权限。"""
+
+    codename = 'networks.view_network'
+    target_type = 'network'
+
+
+class CanManageNetwork(RequiresPermission):
+    """维护网络白名单的权限。"""
+
+    codename = 'networks.manage_network'
+    target_type = 'network'

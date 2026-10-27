@@ -62,6 +62,19 @@ func (f *fakeOperator) UndefineDomain(ctx context.Context, name string) error {
 	return nil
 }
 
+// fakeNetworks 提供网络存在性判断。
+type fakeNetworks struct {
+	exists bool
+}
+
+func (f fakeNetworks) ListNetworks(ctx context.Context) ([]libvirt.Network, error) {
+	return nil, nil
+}
+
+func (f fakeNetworks) NetworkExists(ctx context.Context, name string) (bool, error) {
+	return f.exists, nil
+}
+
 func createPayload(t *testing.T) string {
 	t.Helper()
 	body := map[string]any{
@@ -197,5 +210,24 @@ func TestCreateDomainRequiresVirtualizer(t *testing.T) {
 
 	if recorder.Code != http.StatusInternalServerError {
 		t.Fatalf("缺少依赖应返回 500: got=%d", recorder.Code)
+	}
+}
+
+// TestCreateDomainRejectsUnknownNetwork 校验未定义网络被拒绝。
+func TestCreateDomainRejectsUnknownNetwork(t *testing.T) {
+	deps := testDependencies()
+	deps.DiskDir = t.TempDir()
+	deps.Virtualizer = &fakeOperator{}
+	deps.Networks = fakeNetworks{exists: false}
+	router := NewRouter(deps)
+
+	body := strings.Replace(createPayload(t), `"disk_gib":1`, `"disk_gib":1,"network":"ghost-net"`, 1)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/domains", strings.NewReader(body))
+	request.Header.Set("Authorization", "Bearer "+deps.Token)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("未知网络应返回 400: got=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }

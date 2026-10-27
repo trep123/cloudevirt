@@ -213,3 +213,46 @@ func (c *Client) DomainExists(ctx context.Context, name string) (bool, error) {
 	}
 	return false, err
 }
+
+// Network 是 libvirt 网络摘要。
+type Network struct {
+	Name   string `json:"name"`
+	Active bool   `json:"active"`
+}
+
+// ListNetworks 列出全部 libvirt 网络及其活动状态。
+func (c *Client) ListNetworks(ctx context.Context) ([]Network, error) {
+	output, err := c.run(ctx, "net-list", "--all", "--name")
+	if err != nil {
+		return nil, err
+	}
+	var networks []Network
+	for _, name := range strings.Split(output, "\n") {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		info, err := c.run(ctx, "net-info", name)
+		if err != nil {
+			return nil, err
+		}
+		networks = append(networks, Network{Name: name, Active: strings.Contains(info, "Active:         yes")})
+	}
+	return networks, nil
+}
+
+// NetworkExists 判断网络是否已定义。
+func (c *Client) NetworkExists(ctx context.Context, name string) (bool, error) {
+	if strings.TrimSpace(name) == "" {
+		return false, apierr.New(apierr.CodeInvalidArgument, "网络名称不能为空", nil)
+	}
+	_, err := c.run(ctx, "net-info", name)
+	if err == nil {
+		return true, nil
+	}
+	var apiError *apierr.Error
+	if errors.As(err, &apiError) && strings.Contains(strings.ToLower(apiError.Error()), "failed to get network") {
+		return false, nil
+	}
+	return false, err
+}

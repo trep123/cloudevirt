@@ -43,6 +43,7 @@ type Dependencies struct {
 	AllowDestructive bool
 	Domains          DomainLister
 	Virtualizer      DomainOperator
+	Networks         NetworkLister
 	Logger           *slog.Logger
 }
 
@@ -61,6 +62,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	api := http.NewServeMux()
 	api.HandleFunc("GET /api/v1/node/resources", resourcesHandler(deps))
 	api.HandleFunc("GET /api/v1/domains", domainsHandler(deps))
+	api.HandleFunc("GET /api/v1/networks", networkListHandler(deps))
 	api.HandleFunc("POST /api/v1/domains", createDomainHandler(deps))
 	api.HandleFunc("POST /api/v1/domains/{name}/start", domainActionHandler(deps, "start"))
 	api.HandleFunc("POST /api/v1/domains/{name}/shutdown", domainActionHandler(deps, "shutdown"))

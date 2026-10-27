@@ -24,6 +24,7 @@ from apps.instances.models import (
     ReservationStatus,
     ResourceReservation,
 )
+from apps.networks.services import validate_network_for_instance
 from apps.tasks.models import TaskType
 from apps.tasks.services import enqueue
 from common.errors import AppError, ErrorCode
@@ -156,6 +157,10 @@ def create_instance(
             '镜像不可用',
             details={'image': [f'当前状态为 {image.status}']},
         )
+    network = validate_network_for_instance(network_name)
+    if network is not None:
+        network_name = network.name
+
     if not node.is_schedulable:
         raise AppError(
             ErrorCode.NODE_OFFLINE,
