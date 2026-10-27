@@ -2,9 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 
 import { api } from "../api";
 import { Card, Empty, ErrorBanner, StatusBadge, describeError, formatTime } from "../components/ui";
+import { ROLE_OPTIONS } from "../roles";
 import type { AuditEvent, User } from "../types";
-
-const ROLES = ["Admin", "Operator", "Viewer"];
 
 export function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -109,7 +108,7 @@ export function UsersPage() {
           <label>初始密码<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="留空则强制改密" /></label>
           <label>角色
             <select value={role} onChange={(e) => setRole(e.target.value)}>
-              {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+              {ROLE_OPTIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
             </select>
           </label>
           <button className="action primary" type="submit" disabled={busy}>{busy ? "提交中…" : "创建"}</button>
@@ -126,7 +125,7 @@ export function UsersPage() {
                   <td>{u.display_name || "-"}</td>
                   <td>
                     <select value={u.roles[0] || ""} onChange={(e) => void changeRole(u, e.target.value)}>
-                      {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                      {ROLE_OPTIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
                     </select>
                   </td>
                   <td><StatusBadge status={u.is_active ? "ACTIVE" : "DISABLED"} /></td>

@@ -9,6 +9,7 @@ import { NetworksPage } from "./pages/NetworksPage";
 import { NodesPage } from "./pages/NodesPage";
 import { TasksPage } from "./pages/TasksPage";
 import { UsersPage } from "./pages/UsersPage";
+import { roleLabel } from "./roles";
 import type { CurrentUser } from "./types";
 
 type PageKey = "instances" | "nodes" | "images" | "networks" | "tasks" | "monitoring" | "users";
@@ -79,7 +80,7 @@ export default function App() {
         <div className="who">
           {user.display_name || user.username}
           <br />
-          {user.roles.join(" / ") || "无角色"}
+          {user.roles.map(roleLabel).join(" / ") || "无角色"}
         </div>
         <button onClick={() => void logout()}>退出登录</button>
       </aside>

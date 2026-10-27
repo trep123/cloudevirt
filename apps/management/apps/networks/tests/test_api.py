@@ -46,15 +46,18 @@ class NetworkApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.json()['results']), 1)
 
-    def test_operator_cannot_register_network(self) -> None:
-        """Operator 无网络维护权限。"""
+    def test_operator_can_register_network(self) -> None:
+        """学员可以登记网络白名单。"""
         self.client.login(username='net-operator', password='Str0ngPassw0rd')
 
         response = self.client.post(
-            '/api/v1/networks', {'name': 'new-net'}, content_type='application/json'
+            '/api/v1/networks',
+            {'name': 'new-net', 'type': 'LIBVIRT_NETWORK'},
+            content_type='application/json',
         )
 
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(Network.objects.filter(name='new-net').exists())
 
     def test_admin_registers_network_with_audit(self) -> None:
         """Admin 登记网络并留痕。"""

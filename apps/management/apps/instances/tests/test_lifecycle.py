@@ -215,13 +215,14 @@ class LifecycleApiTests(TestCase):
 
         self.assertEqual(response.status_code, 409)
 
-    def test_viewer_cannot_start(self) -> None:
-        """Viewer 无启动权限。"""
+    def test_general_user_can_start(self) -> None:
+        """一般用户可以启动实例。"""
         self.client.login(username='life-viewer', password='Str0ngPassw0rd')
 
         response = self.client.post(f'/api/v1/instances/{self.instance.pk}/start')
 
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 202)
+        self.assertTrue(Task.objects.filter(type=TaskType.INSTANCE_START).exists())
 
     def test_stale_operation_status_without_active_task_does_not_block(self) -> None:
         """没有真实活跃任务时，残留的 operation_status 不应阻塞操作。"""
@@ -254,13 +255,15 @@ class LifecycleApiTests(TestCase):
 
         self.assertEqual(response.status_code, 202)
 
-    def test_operator_cannot_purge_disk(self) -> None:
-        """Operator 无删除磁盘权限。"""
+    def test_operator_can_purge_disk(self) -> None:
+        """学员可以在删除实例时清理磁盘。"""
         self.client.login(username='api-life', password='Str0ngPassw0rd')
 
         response = self.client.delete(f'/api/v1/instances/{self.instance.pk}?purge_disk=true')
 
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 202)
+        task = Task.objects.get(type=TaskType.INSTANCE_DELETE)
+        self.assertTrue(task.payload['purge_disk'])
 
     def test_admin_can_purge_disk(self) -> None:
         """Admin 可删除实例并清理磁盘。"""

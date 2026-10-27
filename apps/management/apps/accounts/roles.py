@@ -10,6 +10,7 @@ from django.contrib.auth.models import Group, Permission
 
 logger = logging.getLogger(__name__)
 
+# 角色中文称呼：Admin=管理员（超级用户同为管理员）、Operator=学员、Viewer=一般用户
 ROLE_ADMIN = 'Admin'
 ROLE_OPERATOR = 'Operator'
 ROLE_VIEWER = 'Viewer'
@@ -19,6 +20,7 @@ ALL_PERMISSIONS = '__ALL__'
 
 ROLE_PERMISSIONS: dict[str, tuple[str, ...]] = {
     ROLE_ADMIN: (ALL_PERMISSIONS,),
+    # 学员：虚拟机、网络、镜像、磁盘操作
     ROLE_OPERATOR: (
         'nodes.view_node',
         'nodes.refresh_node',
@@ -26,14 +28,16 @@ ROLE_PERMISSIONS: dict[str, tuple[str, ...]] = {
         'images.add_image',
         'images.delete_image',
         'networks.view_network',
+        'networks.manage_network',
         'instances.view_instance',
         'instances.add_instance',
-        'templates.view_template',
         'instances.start_instance',
         'instances.shutdown_instance',
         'instances.reboot_instance',
         'instances.force_stop_instance',
         'instances.delete_instance',
+        'instances.delete_disk_instance',
+        'templates.view_template',
         'tasks.view_task',
         'tasks.cancel_task',
         'tasks.retry_task',
@@ -41,11 +45,18 @@ ROLE_PERMISSIONS: dict[str, tuple[str, ...]] = {
         'monitoring.view_reconciliationdiff',
         'monitoring.view_reconciliationrun',
     ),
+    # 一般用户：仅虚拟机操作，其余模块只读
     ROLE_VIEWER: (
         'nodes.view_node',
         'images.view_image',
         'networks.view_network',
         'instances.view_instance',
+        'instances.add_instance',
+        'instances.start_instance',
+        'instances.shutdown_instance',
+        'instances.reboot_instance',
+        'instances.force_stop_instance',
+        'instances.delete_instance',
         'templates.view_template',
         'tasks.view_task',
         'monitoring.view_alert',

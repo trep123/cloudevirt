@@ -39,16 +39,16 @@
 
 | 角色 | 定位 | 典型使用者 | Django 映射 |
 | --- | --- | --- | --- |
-| Admin | 系统配置、节点、镜像、实例全局管理；用户与权限管理；审计查看 | 平台管理员 | Group `Admin` |
-| Operator | 在**授权范围内**创建、启动、关机、重启虚拟机；可导入镜像 | 业务运维 | Group `Operator` |
-| Viewer | 只读查看节点、镜像、实例、任务 | 审计/观察人员 | Group `Viewer` |
+| 管理员 / 超级管理员 | 系统配置、节点、镜像、实例全局管理；用户与权限管理；审计查看；拥有全部权限 | 平台管理员 | Group `Admin`；`is_superuser` 另天然拥有全部权限 |
+| 学员 | 虚拟机、网络、镜像、磁盘操作；节点、模板、任务、监控只读 | 培训学员 | Group `Operator` |
+| 一般用户 | 仅虚拟机操作；其余模块只读 | 普通用户 | Group `Viewer` |
 
 - 角色即 Django Group，权限即 `Permission`（ADR-006）。初始化由数据迁移创建三个 Group 并绑定权限，禁止在代码里硬编码角色名判断（统一走 Permission）。
 - 用户可同时属于多个 Group；权限取并集；对象级范围另按第 4 章判定。
 
 ## 2. 权限码表
 
-| 权限 codename | 说明 | Admin | Operator | Viewer |
+| 权限 codename | 说明 | Admin | Operator（学员） | Viewer（一般用户） |
 | --- | --- | --- | --- | --- |
 | `node.view` | 查看节点与资源 | ✅ | ✅ | ✅ |
 | `node.create` | 注册节点 | ✅ | ❌ | ❌ |
@@ -59,15 +59,15 @@
 | `image.upload` | 导入/登记镜像 | ✅ | ✅ | ❌ |
 | `image.delete` | 删除镜像 | ✅ | ✅（仅自己创建的） | ❌ |
 | `network.view` | 查看网络 | ✅ | ✅ | ✅ |
-| `network.manage` | 新增/变更网络白名单 | ✅ | ❌ | ❌ |
+| `network.manage` | 新增/变更网络白名单 | ✅ | ✅ | ❌ |
 | `instance.view` | 查看实例 | ✅ | ✅ | ✅ |
-| `instance.create` | 创建实例 | ✅ | ✅（授权节点内） | ❌ |
-| `instance.start` | 启动 | ✅ | ✅（授权范围内） | ❌ |
-| `instance.shutdown` | 正常关机 | ✅ | ✅（授权范围内） | ❌ |
-| `instance.reboot` | 重启 | ✅ | ✅（授权范围内） | ❌ |
-| `instance.force_stop` | 强制停止（断电风险，需二次确认 + 审计） | ✅ | ✅（授权范围内） | ❌ |
-| `instance.delete` | 删除实例（注销记录） | ✅ | ✅（授权范围内） | ❌ |
-| `instance.delete_disk` | 删除时一并删除虚拟磁盘（不可逆，需输入确认 + 审计） | ✅ | ❌ | ❌ |
+| `instance.create` | 创建实例 | ✅ | ✅（授权节点内） | ✅ |
+| `instance.start` | 启动 | ✅ | ✅（授权范围内） | ✅ |
+| `instance.shutdown` | 正常关机 | ✅ | ✅（授权范围内） | ✅ |
+| `instance.reboot` | 重启 | ✅ | ✅（授权范围内） | ✅ |
+| `instance.force_stop` | 强制停止（断电风险，需二次确认 + 审计） | ✅ | ✅（授权范围内） | ✅ |
+| `instance.delete` | 删除实例（注销记录） | ✅ | ✅（授权范围内） | ✅ |
+| `instance.delete_disk` | 删除时一并删除虚拟磁盘（不可逆，需输入确认 + 审计） | ✅ | ✅ | ❌ |
 | `task.view` | 查看任务 | ✅ | ✅ | ✅ |
 | `task.cancel` | 取消未开始任务 | ✅ | ✅（自己的任务） | ❌ |
 | `task.retry` | 重试失败任务 | ✅ | ✅（自己的任务） | ❌ |
@@ -77,7 +77,7 @@
 | `user.manage` | 用户/角色/节点授权管理 | ✅ | ❌ | ❌ |
 | `settings.manage` | 修改系统设置 | ✅ | ❌ | ❌ |
 
-- 上表是**默认基线**；Admin 可在「角色权限」页调整 Operator/Viewer 的权限集合（内置角色不可删除，可改权限）。
+- 上表是**默认基线**；Admin 可在「角色权限」页调整学员/一般用户的权限集合（内置角色不可删除，可改权限）。
 - 危险权限（`instance.force_stop`、`instance.delete_disk`、`user.manage`、`settings.manage`）的操作必须写审计，且建议限流。
 
 ## 3. 认证与会话

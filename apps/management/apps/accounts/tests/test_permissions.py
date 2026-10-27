@@ -1,7 +1,7 @@
 """权限边界测试：认证、角色、越权与提权字段防护。"""
 
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Group
+from django.contrib.auth.models import Group, Permission
 from django.test import TestCase
 
 from apps.accounts.models import UserProfile
@@ -42,10 +42,65 @@ class PermissionBoundaryTests(TestCase):
         self.assertEqual(report['Admin'], [])
         self.assertEqual(report['Operator'], [])
         self.assertEqual(report['Viewer'], [])
+        self.assertEqual(admin_group.permissions.count(), Permission.objects.count())
         self.assertGreater(
             admin_group.permissions.count(),
             Group.objects.get(name='Viewer').permissions.count(),
         )
+
+    def test_student_has_vm_network_image_and_disk_operations(self) -> None:
+        """学员拥有虚拟机、网络、镜像与磁盘操作权限。"""
+        sync_role_permissions()
+        student = get_user_model().objects.create_user(
+            username='student01', password='Str0ngPassw0rd'
+        )
+        student.groups.add(Group.objects.get(name='Operator'))
+
+        for codename in (
+            'instances.add_instance',
+            'instances.start_instance',
+            'instances.shutdown_instance',
+            'instances.reboot_instance',
+            'instances.force_stop_instance',
+            'instances.delete_instance',
+            'instances.delete_disk_instance',
+            'networks.manage_network',
+            'images.add_image',
+            'images.delete_image',
+        ):
+            self.assertTrue(student.has_perm(codename), codename)
+        self.assertFalse(student.has_perm('nodes.add_node'))
+
+    def test_general_user_only_has_vm_operations(self) -> None:
+        """一般用户只保留虚拟机操作，其他模块无写权限。"""
+        sync_role_permissions()
+        general = get_user_model().objects.create_user(
+            username='general01', password='Str0ngPassw0rd'
+        )
+        general.groups.add(Group.objects.get(name='Viewer'))
+
+        for codename in (
+            'instances.add_instance',
+            'instances.start_instance',
+            'instances.shutdown_instance',
+            'instances.reboot_instance',
+            'instances.force_stop_instance',
+            'instances.delete_instance',
+        ):
+            self.assertTrue(general.has_perm(codename), codename)
+        for codename in (
+            'instances.delete_disk_instance',
+            'networks.manage_network',
+            'images.add_image',
+            'images.delete_image',
+            'nodes.add_node',
+            'nodes.refresh_node',
+            'templates.add_template',
+            'tasks.cancel_task',
+            'tasks.retry_task',
+            'accounts.manage_user',
+        ):
+            self.assertFalse(general.has_perm(codename), codename)
 
     def test_unauthenticated_access_returns_401(self) -> None:
         """未认证访问用户列表应返回 401。"""

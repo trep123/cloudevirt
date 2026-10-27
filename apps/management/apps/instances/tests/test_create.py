@@ -181,15 +181,15 @@ class CreateInstanceApiTests(TestCase):
         """未认证应返回 401。"""
         self.assertEqual(self.client.get('/api/v1/instances').status_code, 401)
 
-    def test_viewer_cannot_create_instance(self) -> None:
-        """Viewer 创建实例应返回 403。"""
+    def test_general_user_can_create_instance(self) -> None:
+        """一般用户可以创建实例。"""
         self.client.login(username='api-viewer', password='Str0ngPassw0rd')
 
         response = self.client.post(
             '/api/v1/instances', self.payload(), content_type='application/json'
         )
 
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 202)
 
     def test_operator_gets_202_with_task(self) -> None:
         """创建成功应返回 202 与任务引用。"""
