@@ -4,6 +4,7 @@ from rest_framework import generics
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.instances.actions import release_cancelled_task
 from apps.tasks.models import Task, TaskStatus
 from apps.tasks.serializers import TaskDetailSerializer, TaskSerializer
 from apps.tasks.services import record_event
@@ -49,6 +50,7 @@ class TaskCancelView(APIView):
         task.locked_by = ''
         task.save(update_fields=['status', 'locked_at', 'locked_by', 'updated_at'])
         record_event(task, to_status=TaskStatus.CANCELLED, message='任务被用户取消')
+        release_cancelled_task(task)
         return Response(TaskDetailSerializer(task).data)
 
 

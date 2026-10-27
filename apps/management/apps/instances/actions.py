@@ -5,8 +5,11 @@
 
 import logging
 
-from apps.instances.models import DesiredState, Instance, ObservedState
-from apps.tasks.models import TaskType
+from django.utils import timezone
+
+from apps.instances.models import DesiredState, DiskStatus, Instance, ObservedState
+from apps.instances.services import release_reservation
+from apps.tasks.models import ACTIVE_STATUSES, Task, TaskType
 from apps.tasks.services import enqueue
 from common.errors import AppError, ErrorCode
 
@@ -19,6 +22,32 @@ ACTION_TASK_TYPES = {
     'force-stop': TaskType.INSTANCE_FORCE_STOP,
     'reboot': TaskType.INSTANCE_REBOOT,
 }
+
+
+def ensure_no_active_task(instance: Instance) -> None:
+    """确认实例没有未结束的任务。
+
+    以任务表中的真实活跃记录为准，不信任可能残留的 operation_status，
+    避免 worker 停机后旧状态永久阻塞后续操作。
+
+    Raises:
+        AppError: 存在未终态任务时抛出 OPERATION_IN_PROGRESS。
+    """
+    active = (
+        Task.objects.filter(
+            resource_type='instance',
+            resource_id=str(instance.pk),
+            status__in=list(ACTIVE_STATUSES),
+        )
+        .order_by('created_at')
+        .first()
+    )
+    if active is not None:
+        raise AppError(
+            ErrorCode.OPERATION_IN_PROGRESS,
+            '实例存在未结束的任务',
+            details={'task_id': str(active.pk), 'status': active.status},
+        )
 
 
 def start_action(instance: Instance, user, action: str):
@@ -57,12 +86,7 @@ def start_action(instance: Instance, user, action: str):
             details={'observed_state': instance.observed_state},
         )
 
-    if instance.operation_status in {'PENDING', 'VALIDATING', 'PREPARING', 'CREATING', 'VERIFYING'}:
-        raise AppError(
-            ErrorCode.OPERATION_IN_PROGRESS,
-            '实例存在未结束的任务',
-            details={'operation_status': instance.operation_status},
-        )
+    ensure_no_active_task(instance)
 
     task = enqueue(
         task_type=task_type,
@@ -94,12 +118,7 @@ def request_delete(instance: Instance, user, *, purge_disk: bool):
     Returns:
         任务对象。
     """
-    if instance.operation_status in {'PENDING', 'VALIDATING', 'PREPARING', 'CREATING', 'VERIFYING'}:
-        raise AppError(
-            ErrorCode.OPERATION_IN_PROGRESS,
-            '实例存在未结束的任务',
-            details={'operation_status': instance.operation_status},
-        )
+    ensure_no_active_task(instance)
 
     disk = instance.disks.filter(role='SYSTEM').first()
     task = enqueue(
@@ -118,3 +137,30 @@ def request_delete(instance: Instance, user, *, purge_disk: bool):
     instance.operation_status = 'PENDING'
     instance.save(update_fields=['current_task', 'operation_status', 'updated_at'])
     return task
+
+
+def release_cancelled_task(task) -> None:
+    """任务取消后清理实例上的操作状态，创建任务同时释放资源预留。
+
+    Args:
+        task: 已被取消的任务。
+    """
+    if task.resource_type != 'instance':
+        return
+    try:
+        instance_id = int(task.resource_id)
+    except TypeError, ValueError:
+        return
+    instance = Instance.objects.filter(pk=instance_id).first()
+    if instance is None:
+        return
+    if str(instance.current_task_id) != str(task.pk):
+        return
+    instance.current_task = None
+    instance.operation_status = 'CANCELLED'
+    instance.save(update_fields=['current_task', 'operation_status', 'updated_at'])
+    if task.type == TaskType.INSTANCE_CREATE:
+        instance.disks.filter(status=DiskStatus.CREATING).update(
+            status=DiskStatus.FAILED, updated_at=timezone.now()
+        )
+        release_reservation(instance)

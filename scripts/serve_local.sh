@@ -26,6 +26,8 @@ for ip in $(hostname -I 2>/dev/null || true); do
 done
 DJANGO_ALLOWED_HOSTS=${DJANGO_ALLOWED_HOSTS:-$ALLOWED_DEFAULT}
 DJANGO_CSRF_TRUSTED_ORIGINS=${DJANGO_CSRF_TRUSTED_ORIGINS:-$ORIGINS_DEFAULT}
+# 管理后端与 Agent 必须使用同一共享令牌
+AGENT_SHARED_TOKEN=${CLOUDVIRT_AGENT_TOKEN:-${AGENT_SHARED_TOKEN:-}}
 
 echo "==> 构建前端"
 cd "$ROOT_DIR/frontend"
@@ -48,11 +50,21 @@ cd "$BACKEND_DIR"
 if ! curl -fsS -o /dev/null http://127.0.0.1:8000/api/v1/health 2>/dev/null; then
   DJANGO_DEBUG=false DJANGO_SECRET_KEY="$DJANGO_SECRET_KEY" DATABASE_URL="$DATABASE_URL" \
   DJANGO_ALLOWED_HOSTS="$DJANGO_ALLOWED_HOSTS" DJANGO_CSRF_TRUSTED_ORIGINS="$DJANGO_CSRF_TRUSTED_ORIGINS" \
+  AGENT_SHARED_TOKEN="$AGENT_SHARED_TOKEN" \
     nohup "$VENV/bin/gunicorn" config.wsgi:application \
       --bind 127.0.0.1:8000 --workers 2 --threads 2 --timeout 60 \
       --pid /tmp/cloudvirt-gunicorn.pid \
       --access-logfile /tmp/cloudvirt-access.log \
       --error-logfile /tmp/cloudvirt-error.log --daemon
+fi
+
+echo "==> 启动任务 worker"
+cd "$BACKEND_DIR"
+if ! pgrep -f '[m]anage.py run_worker' >/dev/null; then
+  DJANGO_DEBUG=false DJANGO_SECRET_KEY="$DJANGO_SECRET_KEY" DATABASE_URL="$DATABASE_URL" \
+  DJANGO_ALLOWED_HOSTS="$DJANGO_ALLOWED_HOSTS" DJANGO_CSRF_TRUSTED_ORIGINS="$DJANGO_CSRF_TRUSTED_ORIGINS" \
+  AGENT_SHARED_TOKEN="$AGENT_SHARED_TOKEN" \
+    nohup "$VENV/bin/python" manage.py run_worker --sleep 2 >/tmp/cloudvirt-worker.log 2>&1 &
 fi
 
 if [ -n "${CLOUDVIRT_AGENT_TOKEN:-}" ]; then

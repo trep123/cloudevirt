@@ -223,6 +223,29 @@ class LifecycleApiTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
 
+    def test_stale_operation_status_without_active_task_does_not_block(self) -> None:
+        """没有真实活跃任务时，残留的 operation_status 不应阻塞操作。"""
+        self.instance.operation_status = 'PENDING'
+        self.instance.save(update_fields=['operation_status'])
+        self.client.login(username='api-life', password='Str0ngPassw0rd')
+
+        response = self.client.post(f'/api/v1/instances/{self.instance.pk}/start')
+
+        self.assertEqual(response.status_code, 202)
+
+    def test_cancel_pending_action_clears_operation_status(self) -> None:
+        """取消等待中的任务应同步清除实例的进行中状态。"""
+        self.client.login(username='api-life', password='Str0ngPassw0rd')
+        self.client.post(f'/api/v1/instances/{self.instance.pk}/start')
+        task = Task.objects.get(type=TaskType.INSTANCE_START)
+
+        response = self.client.post(f'/api/v1/tasks/{task.pk}/cancel')
+
+        self.assertEqual(response.status_code, 200)
+        self.instance.refresh_from_db()
+        self.assertEqual(self.instance.operation_status, 'CANCELLED')
+        self.assertIsNone(self.instance.current_task)
+
     def test_operator_can_delete_without_purge(self) -> None:
         """Operator 可删除实例但保留磁盘。"""
         self.client.login(username='api-life', password='Str0ngPassw0rd')
