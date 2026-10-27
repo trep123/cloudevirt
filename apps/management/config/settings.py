@@ -109,6 +109,7 @@ INSTALLED_APPS = [
     'apps.instances',
     'apps.tasks',
     'apps.networks',
+    'apps.templates',
     'apps.monitoring',
     'apps.audit',
 ]

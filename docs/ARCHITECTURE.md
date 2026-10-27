@@ -127,6 +127,11 @@ UNKNOWN → ONLINE ⇄ DEGRADED → OFFLINE；MAINTENANCE 为人工置位，不�
 | POST | /api/v1/instances/{id}/reboot/ | 重启 | 202 |
 | DELETE | /api/v1/instances/{id}/ | 删除（`purge_disk` 显式声明是否删盘，删盘需 `delete_disk_instance`） | 202 |
 | GET | /api/v1/disks/ | 磁盘记录列表（`instances.view_instance`，支持 `instance` / `status` 过滤） | 200 |
+| GET/POST | /api/v1/templates/ | 模板列表 / 创建（`templates.view_template` / `add_template`） | 200 / 201 |
+| GET/PATCH/DELETE | /api/v1/templates/{id}/ | 模板详情 / 更新 / 软删除 | 200 / 204 |
+| GET/POST | /api/v1/node-access/ | 节点授权列表 / 创建（`nodes.add_node`） | 200 / 201 |
+| DELETE | /api/v1/node-access/{id}/ | 删除授权 | 204 |
+| GET | /api/v1/users/{id}/audit/ | 用户最近审计事件（`accounts.manage_user`） | 200 |
 | GET | /api/v1/tasks/ | 任务列表（`tasks.view_task`） | 200 |
 | GET | /api/v1/tasks/{id}/ | 任务详情与事件流水 | 200 |
 | POST | /api/v1/tasks/{id}/cancel/ | 取消等待中任务（`tasks.cancel_task`） | 200 |

@@ -12,6 +12,7 @@ urlpatterns = [
     path('api/v1/', include('apps.images.urls')),
     path('api/v1/', include('apps.instances.urls')),
     path('api/v1/', include('apps.networks.urls')),
+    path('api/v1/', include('apps.templates.urls')),
     path('api/v1/', include('apps.monitoring.urls')),
 ]
 

@@ -4,6 +4,7 @@
 必须配合采样时间与过期标记使用，不得当作实时值。
 """
 
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
@@ -103,3 +104,56 @@ class Node(models.Model):
             self.status = NodeStatus.OFFLINE
             return True
         return False
+
+
+class NodePermission(models.TextChoices):
+    """节点对象级权限。"""
+
+    VIEW = 'VIEW', '查看'
+    OPERATE = 'OPERATE', '操作（创建/刷新/生命周期）'
+
+
+class NodeAccess(models.Model):
+    """节点对象级授权记录。"""
+
+    node = models.ForeignKey(
+        Node, on_delete=models.CASCADE, related_name='access_rules', verbose_name='节点'
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='node_access',
+        verbose_name='用户',
+    )
+    group = models.ForeignKey(
+        'auth.Group',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='node_access',
+        verbose_name='用户组',
+    )
+    permission = models.CharField(
+        '权限', max_length=16, choices=NodePermission.choices, default=NodePermission.OPERATE
+    )
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '节点授权'
+        verbose_name_plural = '节点授权'
+        ordering = ['node', 'user', 'group']
+        constraints = [
+            models.CheckConstraint(
+                name='node_access_target_required',
+                condition=models.Q(user__isnull=False) | models.Q(group__isnull=False),
+            )
+        ]
+        indexes = [models.Index(fields=['node', 'permission'])]
+
+    def __str__(self) -> str:
+        """返回可读标识。"""
+        target = self.user or self.group
+        return f'{self.node} -> {target} ({self.permission})'

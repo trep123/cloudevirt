@@ -43,6 +43,7 @@ class UserSerializer(serializers.ModelSerializer):
         source='profile.must_change_password', read_only=True
     )
     roles = serializers.SerializerMethodField()
+    permissions = serializers.SerializerMethodField()
 
     class Meta:
         model = get_user_model()
@@ -53,6 +54,7 @@ class UserSerializer(serializers.ModelSerializer):
             'email',
             'is_active',
             'roles',
+            'permissions',
             'must_change_password',
             'last_login',
             'date_joined',
@@ -62,6 +64,12 @@ class UserSerializer(serializers.ModelSerializer):
     def get_roles(self, obj) -> list[str]:
         """返回用户角色名列表。"""
         return sorted(obj.groups.values_list('name', flat=True))
+
+    def get_permissions(self, obj) -> list[str]:
+        """返回用户经角色继承的全部权限码（按字母序）。"""
+        return sorted(
+            obj.groups.values_list('permissions__content_type__app_label', 'permissions__codename')
+        )
 
 
 class UserCreateSerializer(serializers.ModelSerializer):

@@ -109,6 +109,13 @@ class CanOperateNode(RequiresPermission):
     target_type = 'node'
 
 
+class CanManageNode(RequiresPermission):
+    """维护节点与节点授权的权限。"""
+
+    codename = 'nodes.add_node'
+    target_type = 'node'
+
+
 class CanRegisterNode(RequiresPermission):
     """注册/变更/注销节点的权限。"""
 
@@ -205,3 +212,17 @@ class CanRunReconciliation(RequiresPermission):
 
     codename = 'monitoring.run_reconciliation'
     target_type = 'monitoring'
+
+
+class CanViewTemplate(RequiresPermission):
+    """查看模板的权限。"""
+
+    codename = 'templates.view_template'
+    target_type = 'template'
+
+
+class CanManageTemplate(RequiresPermission):
+    """维护模板的权限。"""
+
+    codename = 'templates.add_template'
+    target_type = 'template'

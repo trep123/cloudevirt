@@ -5,10 +5,16 @@ from rest_framework.response import Response
 
 from apps.audit.models import AuditAction
 from apps.audit.services import record_audit
-from apps.nodes.models import Node
-from apps.nodes.serializers import NodeCreateSerializer, NodeSerializer, NodeUpdateSerializer
+from apps.nodes.models import Node, NodeAccess
+from apps.nodes.serializers import (
+    NodeAccessSerializer,
+    NodeCreateSerializer,
+    NodeSerializer,
+    NodeUpdateSerializer,
+)
 from apps.nodes.services import refresh_node
 from common.permissions import (
+    CanManageNode,
     CanOperateNode,
     CanRefreshNode,
     CanRegisterNode,
@@ -107,3 +113,31 @@ class NodeRefreshView(generics.GenericAPIView):
             details={'status': node.status},
         )
         return Response(NodeSerializer(node).data)
+
+
+class NodeAccessListCreateView(generics.ListCreateAPIView):
+    """节点授权列表与创建（Admin）。"""
+
+    permission_classes = [RequiresPasswordChange]
+    serializer_class = NodeAccessSerializer
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [CanManageNode(), RequiresPasswordChange()]
+        return [CanOperateNode(), RequiresPasswordChange()]
+
+    def get_queryset(self):
+        """按节点过滤。"""
+        queryset = NodeAccess.objects.select_related('node', 'user', 'group').all()
+        node_id = self.request.query_params.get('node')
+        if node_id:
+            queryset = queryset.filter(node_id=node_id)
+        return queryset
+
+
+class NodeAccessDetailView(generics.RetrieveDestroyAPIView):
+    """节点授权详情与删除。"""
+
+    permission_classes = [CanManageNode, RequiresPasswordChange]
+    queryset = NodeAccess.objects.all()
+    serializer_class = NodeAccessSerializer

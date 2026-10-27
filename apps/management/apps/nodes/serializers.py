@@ -89,3 +89,36 @@ class NodeUpdateSerializer(NodeSerializer):
             'offline_after_seconds',
         )
         read_only_fields = ('id',)
+
+
+class NodeAccessSerializer(serializers.ModelSerializer):
+    """节点授权输出。"""
+
+    node_name = serializers.CharField(source='node.name', read_only=True)
+    username = serializers.CharField(source='user.username', read_only=True, default='')
+    group_name = serializers.CharField(source='group.name', read_only=True, default='')
+
+    class Meta:
+        from apps.nodes.models import NodeAccess
+
+        model = NodeAccess
+        fields = (
+            'id',
+            'node',
+            'node_name',
+            'user',
+            'username',
+            'group',
+            'group_name',
+            'permission',
+            'created_at',
+        )
+        read_only_fields = ('created_at',)
+
+    def validate(self, attrs):
+        """user 与 group 至少指定一个。"""
+        user = attrs.get('user')
+        group = attrs.get('group')
+        if not user and not group:
+            raise serializers.ValidationError('user 与 group 至少指定一个')
+        return attrs
