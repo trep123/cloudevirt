@@ -144,6 +144,26 @@ virsh -c qemu:///system list --all
 - 若 `/dev/kvm` 不存在，初始化脚本必须给出可读错误并以非 0 退出，**不得继续声称 KVM 已可用**。
 - 部署前检查脚本：`scripts/precheck.sh`（OS 版本、CPU 虚拟化标志、`/dev/kvm`、libvirt 状态、磁盘空间、端口占用）。
 
+### 6.1 Open vSwitch 网桥（可选）
+
+当前开发环境已安装 `openvswitch-switch` 并创建 `ovsbr0`，通过 veth 接入 libvirt `default` 网络以复用 DHCP/NAT，**不修改管理网卡 ens18**：
+
+```bash
+sudo apt install -y openvswitch-switch
+sudo ovs-vsctl add-br ovsbr0
+sudo ip link set ovsbr0 up
+# veth 接入 libvirt 默认网络（持久化由 cloudvirt-ovs-link.service 完成）
+sudo ip link add ovs-virbr type veth peer name virbr-ovs
+sudo ovs-vsctl add-port ovsbr0 ovs-virbr
+sudo ip link set ovs-virbr up && sudo ip link set virbr-ovs up
+sudo ip link set virbr-ovs master virbr0
+```
+
+- 持久化单元：`/etc/systemd/system/cloudvirt-ovs-link.service`，脚本 `/usr/local/sbin/cloudvirt-ovs-link.sh`
+- 平台网络白名单中登记：名称 `ovs-nat`、类型 `OVS`、网桥 `ovsbr0`
+- 创建虚拟机时会注入 `<virtualport type='openvswitch'/>`；VLAN 通过接口的 `<vlan><tag/></vlan>` 注入
+- 若需要把 OVS 直接桥接物理上联，必须单独规划并从带外控制台操作，禁止直接改动管理网卡
+
 ## 7. 服务部署
 
 | 组件 | 单元 | 要点 |

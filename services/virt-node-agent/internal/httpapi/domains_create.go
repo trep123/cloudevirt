@@ -92,8 +92,8 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 			return
 		}
 
-		// 指定网络时必须确认其存在，避免创建出无法联网的域
-		if payload.Network != "" {
+		// libvirt 网络需要确认存在；网桥/OVS 由 libvirt 在定义或启动时校验
+		if payload.Network != "" && (payload.NetworkType == "" || payload.NetworkType == "LIBVIRT_NETWORK") {
 			if deps.Networks == nil {
 				writeAPIError(writer, deps.Logger, apierr.New(
 					apierr.CodeInternalError, "网络查询依赖未初始化", nil,

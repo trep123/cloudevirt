@@ -1,0 +1,12 @@
+[Unit]
+Description=CloudVirt OVS bridge link to libvirt default NAT network
+After=openvswitch-switch.service libvirtd.service networking.service
+Wants=openvswitch-switch.service libvirtd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/cloudvirt-ovs-link.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
