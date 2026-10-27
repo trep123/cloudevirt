@@ -63,6 +63,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	api.HandleFunc("GET /api/v1/node/resources", resourcesHandler(deps))
 	api.HandleFunc("GET /api/v1/domains", domainsHandler(deps))
 	api.HandleFunc("GET /api/v1/networks", networkListHandler(deps))
+	api.HandleFunc("GET /api/v1/disks", diskListHandler(deps))
 	api.HandleFunc("POST /api/v1/domains", createDomainHandler(deps))
 	api.HandleFunc("POST /api/v1/domains/{name}/start", domainActionHandler(deps, "start"))
 	api.HandleFunc("POST /api/v1/domains/{name}/shutdown", domainActionHandler(deps, "shutdown"))
@@ -149,7 +150,7 @@ func domainsHandler(deps Dependencies) http.HandlerFunc {
 			writeAPIError(writer, deps.Logger, err, requestID)
 			return
 		}
-		payload := domainsResponse{SampledAt: time.Now().UTC()}
+		payload := domainsResponse{Domains: []domainPayload{}, SampledAt: time.Now().UTC()}
 		for _, item := range domains {
 			payload.Domains = append(payload.Domains, domainPayload{Name: item.Name, State: item.State})
 		}

@@ -238,3 +238,50 @@ func SafePathAllowMissing(root, relative string) (string, error) {
 	}
 	return filepath.Join(parent, filepath.Base(cleaned)), nil
 }
+
+// DiskFile 是磁盘目录中单个文件的摘要。
+type DiskFile struct {
+	Name             string `json:"name"`
+	Format           string `json:"format"`
+	SizeBytes        int64  `json:"size_bytes"`
+	VirtualSizeBytes int64  `json:"virtual_size_bytes"`
+	ActualSizeBytes  int64  `json:"actual_size_bytes"`
+}
+
+// ListDiskFiles 列出磁盘目录下的常规文件及其容量信息。
+//
+// 只读取目录内的一层文件，跳过子目录与符号链接，避免意外遍历或越界。
+func ListDiskFiles(ctx context.Context, root string) ([]DiskFile, error) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, apierr.New(apierr.CodeNotFound, "磁盘目录不存在", err)
+		}
+		return nil, apierr.New(apierr.CodeOperationFailed, "读取磁盘目录失败", err)
+	}
+
+	files := make([]DiskFile, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
+			continue
+		}
+		path := filepath.Join(root, entry.Name())
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		format, virtualSize, err := DiskInfo(ctx, path)
+		if err != nil {
+			// 非镜像文件（如临时文件）不应导致整次扫描失败
+			continue
+		}
+		files = append(files, DiskFile{
+			Name:             entry.Name(),
+			Format:           format,
+			SizeBytes:        info.Size(),
+			VirtualSizeBytes: virtualSize,
+			ActualSizeBytes:  info.Size(),
+		})
+	}
+	return files, nil
+}

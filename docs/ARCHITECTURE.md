@@ -126,6 +126,7 @@ UNKNOWN → ONLINE ⇄ DEGRADED → OFFLINE；MAINTENANCE 为人工置位，不�
 | POST | /api/v1/instances/{id}/force-stop/ | 强制停止（高权限 + 二次确认） | 202 |
 | POST | /api/v1/instances/{id}/reboot/ | 重启 | 202 |
 | DELETE | /api/v1/instances/{id}/ | 删除（`purge_disk` 显式声明是否删盘，删盘需 `delete_disk_instance`） | 202 |
+| GET | /api/v1/disks/ | 磁盘记录列表（`instances.view_instance`，支持 `instance` / `status` 过滤） | 200 |
 | GET | /api/v1/tasks/ | 任务列表（`tasks.view_task`） | 200 |
 | GET | /api/v1/tasks/{id}/ | 任务详情与事件流水 | 200 |
 | POST | /api/v1/tasks/{id}/cancel/ | 取消等待中任务（`tasks.cancel_task`） | 200 |
@@ -158,6 +159,7 @@ UNKNOWN → ONLINE ⇄ DEGRADED → OFFLINE；MAINTENANCE 为人工置位，不�
 | GET | /api/v1/disks/{name}/info | qemu-img info 复核 |
 | DELETE | /api/v1/disks/{name} | 删除磁盘（二次校验引用与路径） |
 | GET | /api/v1/networks | 本机 libvirt 网络列表与活动状态 |
+| GET | /api/v1/disks | 磁盘目录文件清单（名称、实际/虚拟容量），供孤儿与容量核对 |
 
 - 所有 Agent 请求需 `Authorization: Bearer <token>`；失败返回统一错误结构。
 - 用户侧权限与对象级授权规则见 [RBAC_AND_SETTINGS.md](./RBAC_AND_SETTINGS.md)。

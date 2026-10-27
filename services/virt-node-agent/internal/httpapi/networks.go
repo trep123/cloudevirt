@@ -42,7 +42,7 @@ func networkListHandler(deps Dependencies) http.HandlerFunc {
 			writeAPIError(writer, deps.Logger, err, requestID)
 			return
 		}
-		payload := networkListResponse{SampledAt: time.Now().UTC()}
+		payload := networkListResponse{Networks: []networkPayload{}, SampledAt: time.Now().UTC()}
 		for _, item := range networks {
 			payload.Networks = append(payload.Networks, networkPayload{
 				Name: item.Name, Active: item.Active,

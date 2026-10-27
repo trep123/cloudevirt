@@ -101,7 +101,15 @@ def reconcile_node(
     domains = agent.domains()
     domain_states = {str(item.get('name')): str(item.get('state')) for item in domains}
 
-    summary = {'drift': 0, 'missing_domain': 0, 'orphan_domain': 0, 'expired_reservation': 0}
+    summary = {
+        'drift': 0,
+        'missing_domain': 0,
+        'orphan_domain': 0,
+        'expired_reservation': 0,
+        'disk_missing': 0,
+        'disk_orphan': 0,
+        'disk_size_mismatch': 0,
+    }
     active_missing: set[tuple[str, str]] = set()
     active_drift: set[tuple[str, str]] = set()
     active_orphan: set[tuple[str, str]] = set()
@@ -212,6 +220,99 @@ def reconcile_node(
             resource_id=str(reservation.pk),
         )
 
+    # 磁盘对账：数据库记录 ↔ 节点磁盘目录文件（只报告，不删除）
+    active_disk_missing: set[tuple[str, str]] = set()
+    active_disk_orphan: set[tuple[str, str]] = set()
+    active_disk_size: set[tuple[str, str]] = set()
+    lister = getattr(agent, 'list_disks', None)
+    try:
+        files = {str(item.get('name')): item for item in lister()} if lister else None
+    except AppError as exc:
+        # Agent 版本较旧或磁盘目录不可读时，跳过磁盘部分但不影响域对账
+        logger.warning(
+            '磁盘清单不可用，跳过磁盘对账',
+            extra={'node_id': node.pk, 'error_code': exc.code},
+        )
+        files = None
+
+    if files is not None:
+        from apps.instances.models import Disk
+
+        records = Disk.objects.filter(instance__node=node, instance__is_deleted=False).exclude(
+            status='DELETED'
+        )
+        for disk in records:
+            detail_key = ('disk', str(disk.pk))
+            item = files.pop(disk.name, None)
+            if item is None:
+                summary['disk_missing'] = summary.get('disk_missing', 0) + 1
+                active_disk_missing.add(detail_key)
+                ReconciliationDiff.objects.create(
+                    run=run,
+                    kind=DiffKind.DISK_FILE_MISSING,
+                    node=node,
+                    resource_type='disk',
+                    resource_id=str(disk.pk),
+                    detail={'name': disk.name, 'instance_id': disk.instance_id},
+                    resolution=DiffResolution.MANUAL,
+                )
+                _upsert_alert(
+                    AlertType.DISK_FILE_MISSING,
+                    f'实例磁盘文件缺失：{disk.name}',
+                    node=node,
+                    instance=disk.instance,
+                    resource_type='disk',
+                    resource_id=str(disk.pk),
+                )
+                continue
+
+            expected = int(disk.size_gib or 0) * 1024 * 1024 * 1024
+            actual = int(item.get('virtual_size_bytes') or 0)
+            if expected and actual and abs(actual - expected) > 1024 * 1024:
+                summary['disk_size_mismatch'] = summary.get('disk_size_mismatch', 0) + 1
+                active_disk_size.add(detail_key)
+                ReconciliationDiff.objects.create(
+                    run=run,
+                    kind=DiffKind.DISK_SIZE_MISMATCH,
+                    node=node,
+                    resource_type='disk',
+                    resource_id=str(disk.pk),
+                    detail={'name': disk.name, 'expected_bytes': expected, 'actual_bytes': actual},
+                    resolution=DiffResolution.MANUAL,
+                )
+                _upsert_alert(
+                    AlertType.DISK_SIZE_MISMATCH,
+                    f'磁盘容量与记录不一致：{disk.name}',
+                    node=node,
+                    instance=disk.instance,
+                    resource_type='disk',
+                    resource_id=str(disk.pk),
+                )
+
+        for name, item in files.items():
+            summary['disk_orphan'] = summary.get('disk_orphan', 0) + 1
+            active_disk_orphan.add(('file', name))
+            ReconciliationDiff.objects.create(
+                run=run,
+                kind=DiffKind.DISK_NOT_IN_DB,
+                node=node,
+                resource_type='file',
+                resource_id=name,
+                detail={'virtual_size_bytes': item.get('virtual_size_bytes')},
+                resolution=DiffResolution.MANUAL,
+            )
+            _upsert_alert(
+                AlertType.DISK_NOT_IN_DB,
+                f'存在未登记的磁盘文件 {name}',
+                node=node,
+                resource_type='file',
+                resource_id=name,
+            )
+
+        _resolve_alerts(AlertType.DISK_FILE_MISSING, active_disk_missing, node=node)
+        _resolve_alerts(AlertType.DISK_NOT_IN_DB, active_disk_orphan, node=node)
+        _resolve_alerts(AlertType.DISK_SIZE_MISMATCH, active_disk_size, node=node)
+
     _resolve_alerts(AlertType.DB_INSTANCE_MISSING_DOMAIN, active_missing, node=node)
     _resolve_alerts(AlertType.INSTANCE_STATE_DRIFT, active_drift, node=node)
     _resolve_alerts(AlertType.DOMAIN_NOT_IN_DB, active_orphan, node=node)
@@ -238,6 +339,9 @@ def run_reconciliation(*, requested_by=None, nodes=None) -> ReconciliationRun:
         'missing_domain': 0,
         'orphan_domain': 0,
         'expired_reservation': 0,
+        'disk_missing': 0,
+        'disk_orphan': 0,
+        'disk_size_mismatch': 0,
     }
 
     for node in targets:
@@ -251,8 +355,10 @@ def run_reconciliation(*, requested_by=None, nodes=None) -> ReconciliationRun:
                 extra={'node_id': node.pk, 'error_code': exc.code},
             )
             continue
-        for key in ('drift', 'missing_domain', 'orphan_domain', 'expired_reservation'):
-            totals[key] += summary[key]
+        for key in totals:
+            if key in {'nodes', 'failed'}:
+                continue
+            totals[key] += summary.get(key, 0)
 
     run.status = 'SUCCEEDED' if totals['failed'] == 0 else 'PARTIAL'
     run.finished_at = timezone.now()

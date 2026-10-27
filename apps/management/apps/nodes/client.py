@@ -126,8 +126,16 @@ class AgentClient:
         suffix = f'?disk_relative_path={disk_relative_path}' if disk_relative_path else ''
         return self.request_json(f'/api/v1/domains/{name}{suffix}', 'DELETE')
 
+    def list_disks(self) -> list[dict]:
+        """列出节点磁盘目录中的文件。"""
+        payload = self.get_json('/api/v1/disks')
+        # 同上：空目录时 Agent 可能返回 null
+        disks = (payload.get('disks') or []) if isinstance(payload, dict) else []
+        return [item for item in disks if isinstance(item, dict)]
+
     def domains(self) -> list[dict]:
         """读取域列表。"""
         payload = self.get_json('/api/v1/domains')
-        domains = payload.get('domains', []) if isinstance(payload, dict) else []
+        # Agent 在无域时会返回 null（Go nil slice），统一按空列表处理
+        domains = (payload.get('domains') or []) if isinstance(payload, dict) else []
         return [item for item in domains if isinstance(item, dict)]

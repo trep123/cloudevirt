@@ -18,6 +18,9 @@ class AlertType(models.TextChoices):
     DOMAIN_NOT_IN_DB = 'DOMAIN_NOT_IN_DB', '存在未登记的域'
     INSTANCE_STATE_DRIFT = 'INSTANCE_STATE_DRIFT', '实例状态漂移'
     RESERVATION_MISMATCH = 'RESERVATION_MISMATCH', '资源预留过期'
+    DISK_FILE_MISSING = 'DISK_FILE_MISSING', '磁盘文件缺失'
+    DISK_NOT_IN_DB = 'DISK_NOT_IN_DB', '存在未登记的磁盘文件'
+    DISK_SIZE_MISMATCH = 'DISK_SIZE_MISMATCH', '磁盘容量与记录不一致'
 
 
 class AlertLevel(models.TextChoices):
@@ -109,6 +112,9 @@ class DiffKind(models.TextChoices):
     DOMAIN_NOT_IN_DB = 'DOMAIN_NOT_IN_DB', '存在未登记的域'
     INSTANCE_STATE_DRIFT = 'INSTANCE_STATE_DRIFT', '实例状态漂移'
     RESERVATION_MISMATCH = 'RESERVATION_MISMATCH', '资源预留过期'
+    DISK_FILE_MISSING = 'DISK_FILE_MISSING', '磁盘文件缺失'
+    DISK_NOT_IN_DB = 'DISK_NOT_IN_DB', '存在未登记的磁盘文件'
+    DISK_SIZE_MISMATCH = 'DISK_SIZE_MISMATCH', '磁盘容量与记录不一致'
 
 
 class DiffResolution(models.TextChoices):

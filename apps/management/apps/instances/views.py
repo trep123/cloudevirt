@@ -8,8 +8,9 @@ from rest_framework.views import APIView
 from apps.audit.models import AuditAction
 from apps.audit.services import record_audit
 from apps.instances.actions import request_delete, start_action
-from apps.instances.models import Instance
+from apps.instances.models import Disk, Instance
 from apps.instances.serializers import (
+    DiskSerializer,
     InstanceCreateSerializer,
     InstanceSerializer,
     TaskReferenceSerializer,
@@ -251,3 +252,21 @@ class InstanceDeleteView(APIView):
             },
             status=status.HTTP_202_ACCEPTED,
         )
+
+
+class DiskListView(generics.ListAPIView):
+    """磁盘列表（只读，用于孤儿与容量核对）。"""
+
+    permission_classes = [CanViewInstance, RequiresPasswordChange]
+    serializer_class = DiskSerializer
+
+    def get_queryset(self):
+        """按实例或状态过滤。"""
+        queryset = Disk.objects.select_related('instance').filter(instance__is_deleted=False)
+        instance_id = self.request.query_params.get('instance')
+        if instance_id:
+            queryset = queryset.filter(instance_id=instance_id)
+        disk_status = self.request.query_params.get('status')
+        if disk_status:
+            queryset = queryset.filter(status=disk_status.upper())
+        return queryset.order_by('id')

@@ -20,6 +20,7 @@
 | 镜像引用保护 | 已实现 | 删除被实例引用的镜像返回 409 `IMAGE_IN_USE` |
 | 网络白名单 | 已实现 | `apps/networks/`，权限 `networks.view_network` / `manage_network`（仅 Admin）；管理网禁止接入 |
 | 监控与对账 | 已实现 | 查看用 `monitoring.view_alert`；触发对账需 `monitoring.run_reconciliation`（仅 Admin） |
+| 磁盘清单 | 已实现 | `GET /api/v1/disks`，复用 `instances.view_instance` 权限（只读） |
 | 首个管理员引导 | 已实现 | `bootstrap_admin` 命令（需 `CLOUDVIRT_BOOTSTRAP_ADMIN=true`） |
 | 审计事件 | 已实现 | `apps/audit`（事件模型 + `record_audit`） |
 | 节点注册/刷新权限 | 已实现 | `nodes.add_node`、`nodes.refresh_node`（随节点模型同步到角色） |

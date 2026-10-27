@@ -24,6 +24,7 @@ class FakeAgentClient:
         }
         self.error = error
         self.calls: list[str] = []
+        self._disk_files: list[dict] = []
 
     def health(self) -> dict:
         """返回健康检查；配置错误码时抛出异常。"""
@@ -36,6 +37,12 @@ class FakeAgentClient:
         self.calls.append('resources')
         self._raise_if_needed()
         return self._resources
+
+    def list_disks(self) -> list[dict]:
+        """返回磁盘文件列表，默认空。"""
+        self.calls.append('list_disks')
+        self._raise_if_needed()
+        return self._disk_files
 
     def domains(self) -> list[dict]:
         """返回域列表；配置错误码时抛出异常。"""
