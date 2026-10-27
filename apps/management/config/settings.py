@@ -81,6 +81,10 @@ def parse_database_url(url: str) -> dict[str, object]:
 DEBUG = read_bool('DJANGO_DEBUG', False)
 ALLOWED_HOSTS = read_list('DJANGO_ALLOWED_HOSTS', ['localhost', '127.0.0.1'])
 
+# 反向代理（nginx）场景：显式声明可信来源与转发的 Host/Proto
+CSRF_TRUSTED_ORIGINS = read_list('DJANGO_CSRF_TRUSTED_ORIGINS', [])
+USE_X_FORWARDED_HOST = read_bool('DJANGO_USE_X_FORWARDED_HOST', False)
+
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', '')
 if not SECRET_KEY:
     if not DEBUG:

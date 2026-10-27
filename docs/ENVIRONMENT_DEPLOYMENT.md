@@ -177,7 +177,52 @@ virsh -c qemu:///system list --all
 登录采用同源 Session + CSRF（ADR-009）：前端需先请求 `/api/v1/auth/me`（或读取登录响应）获取 `csrftoken` Cookie，
 写操作时携带 `X-CSRFToken` 请求头；跨域部署改用 DRF Token 方案。
 
-## 10. 当前 BLOCKED 项（需负责人落实）
+
+## 10. 反向代理（nginx）与前端托管
+
+前端构建产物由 nginx 直接托管，`/api/` 反向代理到 Django，保持**同源**，因此 Session + CSRF 方案无需改配置（ADR-009）。
+
+| 项 | 值 |
+| --- | --- |
+| 站点配置 | `deploy/nginx/cloudvirt.conf`（软链到 `/etc/nginx/sites-enabled/cloudvirt`） |
+| 静态目录 | `/var/www/cloudvirt`（`npm run build` 的 `dist` 内容） |
+| 后端上游 | `127.0.0.1:8000`（gunicorn，见 `deploy/systemd/cloudvirt-management.service`） |
+| 代理头 | `Host`、`X-Real-IP`、`X-Forwarded-For`、`X-Forwarded-Proto` |
+| 缓存 | `/assets/` 30 天强缓存，`index.html` 不缓存 |
+
+部署命令：
+
+```bash
+# 前端
+cd frontend && npm ci && npm run build
+sudo mkdir -p /var/www/cloudvirt && sudo cp -r dist/* /var/www/cloudvirt/
+
+# nginx 站点
+sudo ln -sf $PWD/deploy/nginx/cloudvirt.conf /etc/nginx/sites-available/cloudvirt
+sudo ln -sf /etc/nginx/sites-available/cloudvirt /etc/nginx/sites-enabled/cloudvirt
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo nginx -s reload
+```
+
+后端需要的环境变量（代理场景）：
+
+| 变量 | 示例 | 说明 |
+| --- | --- | --- |
+| `DJANGO_ALLOWED_HOSTS` | `cloudvirt.example.com` | 站点域名；用 IP 访问时写 IP |
+| `DJANGO_CSRF_TRUSTED_ORIGINS` | `https://cloudvirt.example.com` | 与访问协议/域名完全一致，否则写操作会被 CSRF 拒绝 |
+| `DJANGO_USE_X_FORWARDED_HOST` | `true` | 需要透传 Host 时开启 |
+
+验证（实测已通过的命令）：
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1/            # 200 前端
+curl -s http://127.0.0.1/api/v1/health                                  # {"status":"ok",...}
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1/api/v1/auth/me  # 401（未登录）
+```
+
+本地一键启动（开发/演示）：`CLOUDVIRT_AGENT_TOKEN=<token> ./scripts/serve_local.sh`。
+
+## 11. 当前 BLOCKED 项（需负责人落实）
 
 | 项 | 影响 | 建议动作 |
 | --- | --- | --- |

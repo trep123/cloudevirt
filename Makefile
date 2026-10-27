@@ -7,7 +7,7 @@ BACKEND_DIR := apps/management
 AGENT_DIR   := services/virt-node-agent
 WEB_DIR     := frontend
 
-.PHONY: help venv backend-install backend-check backend-test backend-migrate backend-run         agent-fmt agent-vet agent-test agent-build agent-run         web-install web-build lint precheck
+.PHONY: help venv backend-install backend-check backend-test backend-migrate backend-run         agent-fmt agent-vet agent-test agent-build agent-run         web-install web-build web-dev serve nginx-reload lint precheck
 
 help: ## 显示可用命令
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-18s %s\n", $$1, $$2}'
@@ -54,6 +54,12 @@ web-build: ## 构建前端产物（含类型检查）
 
 web-dev: ## 启动前端开发服务器（代理到 127.0.0.1:8000）
 	cd $(WEB_DIR) && npm run dev
+
+serve: ## 一键构建前端并启动后端/Agent/nginx（需 CLOUDVIRT_AGENT_TOKEN）
+	CLOUDVIRT_AGENT_TOKEN=${CLOUDVIRT_AGENT_TOKEN:-} bash scripts/serve_local.sh
+
+nginx-reload: ## 重载 nginx 站点配置
+	nginx -t && nginx -s reload
 
 lint: ## 全量静态检查
 	cd $(WEB_DIR) && npm run typecheck 2>/dev/null || true
