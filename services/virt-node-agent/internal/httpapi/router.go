@@ -62,6 +62,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	api := http.NewServeMux()
 	api.HandleFunc("GET /api/v1/node/resources", resourcesHandler(deps))
 	api.HandleFunc("GET /api/v1/domains", domainsHandler(deps))
+	api.HandleFunc("GET /api/v1/domains/{name}/addresses", domainAddressesHandler(deps))
 	api.HandleFunc("GET /api/v1/networks", networkListHandler(deps))
 	api.HandleFunc("GET /api/v1/disks", diskListHandler(deps))
 	api.HandleFunc("POST /api/v1/domains", createDomainHandler(deps))
@@ -76,6 +77,8 @@ func NewRouter(deps Dependencies) http.Handler {
 	protected := auth.TokenMiddleware(deps.Token, api)
 	mux.Handle("/api/", protected)
 	mux.Handle("/api/v1/", protected)
+	// 控制台 WebSocket 使用短签名凭证，不使用静态令牌头
+	mux.HandleFunc("GET /vnc", vncProxyHandler(deps))
 	return RequestIDMiddleware(mux)
 }
 

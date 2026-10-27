@@ -7,10 +7,12 @@ package libvirt
 import (
 	"bytes"
 	"context"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -76,6 +78,113 @@ func (c *Client) ListDomains(ctx context.Context) ([]Domain, error) {
 		domains = append(domains, Domain{Name: name, State: state})
 	}
 	return domains, nil
+}
+
+// DomainAddress 是域网卡地址。
+type DomainAddress struct {
+	Interface string `json:"interface"`
+	MAC       string `json:"mac"`
+	Protocol  string `json:"protocol"`
+	Address   string `json:"address"`
+	Prefix    string `json:"prefix"`
+}
+
+// DomainAddresses 查询域内网卡的 IPv4/IPv6 地址。
+//
+// 依次尝试 DHCP 租约、ARP 与 guest agent，合并去重；域未运行时返回空列表。
+func (c *Client) DomainAddresses(ctx context.Context, name string) ([]DomainAddress, error) {
+	if strings.TrimSpace(name) == "" {
+		return nil, apierr.New(apierr.CodeInvalidArgument, "域名不能为空", nil)
+	}
+	state, err := c.DomainState(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	if state != StateRunning {
+		return []DomainAddress{}, nil
+	}
+
+	seen := make(map[string]bool)
+	addresses := make([]DomainAddress, 0)
+	for _, source := range []string{"lease", "arp", "agent"} {
+		output, err := c.run(ctx, "domifaddr", name, "--source", source)
+		if err != nil {
+			// 某些来源不可用（如未安装 guest agent）时继续尝试其他来源
+			continue
+		}
+		for _, item := range parseDomainAddresses(output) {
+			key := item.Protocol + "|" + item.Address
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			addresses = append(addresses, item)
+		}
+	}
+	return addresses, nil
+}
+
+// parseDomainAddresses 解析 virsh domifaddr 表格输出。
+func parseDomainAddresses(output string) []DomainAddress {
+	var result []DomainAddress
+	for _, line := range strings.Split(output, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 4 {
+			continue
+		}
+		protocol := strings.ToLower(fields[2])
+		if protocol != "ipv4" && protocol != "ipv6" {
+			continue
+		}
+		raw := fields[3]
+		address := raw
+		prefix := ""
+		if index := strings.LastIndex(raw, "/"); index > 0 {
+			address = raw[:index]
+			prefix = raw[index+1:]
+		}
+		result = append(result, DomainAddress{
+			Interface: fields[0],
+			MAC:       fields[1],
+			Protocol:  protocol,
+			Address:   address,
+			Prefix:    prefix,
+		})
+	}
+	return result
+}
+
+// DomainVNCPort 返回域 VNC 图形设备的本地端口。
+func (c *Client) DomainVNCPort(ctx context.Context, name string) (int, error) {
+	if strings.TrimSpace(name) == "" {
+		return 0, apierr.New(apierr.CodeInvalidArgument, "域名不能为空", nil)
+	}
+	content, err := c.DumpXML(ctx, name)
+	if err != nil {
+		return 0, err
+	}
+	var parsed struct {
+		Devices struct {
+			Graphics []struct {
+				Type string `xml:"type,attr"`
+				Port string `xml:"port,attr"`
+			} `xml:"graphics"`
+		} `xml:"devices"`
+	}
+	if err := xml.Unmarshal([]byte(content), &parsed); err != nil {
+		return 0, apierr.New(apierr.CodeOperationFailed, "域 XML 解析失败", err)
+	}
+	for _, graphics := range parsed.Devices.Graphics {
+		if graphics.Type != "vnc" {
+			continue
+		}
+		port, err := strconv.Atoi(graphics.Port)
+		if err != nil || port <= 0 || port > 65535 {
+			return 0, apierr.New(apierr.CodeConflict, "VNC 端口尚未分配", nil)
+		}
+		return port, nil
+	}
+	return 0, apierr.New(apierr.CodeConflict, "虚拟机未启用 VNC 控制台", nil)
 }
 
 // DomainState 查询单个域的状态并归一化为平台取值。

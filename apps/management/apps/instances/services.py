@@ -7,6 +7,7 @@
 
 import logging
 import re
+import secrets
 import uuid as uuid_module
 from datetime import timedelta
 
@@ -211,6 +212,7 @@ def create_instance(
             memory_mib=memory_mib,
             disk_gib=disk_gib,
             autostart=autostart,
+            vnc_password=secrets.token_hex(4),
             created_by=user,
         )
         Disk.objects.create(

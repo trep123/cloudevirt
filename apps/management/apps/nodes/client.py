@@ -9,6 +9,7 @@ import logging
 import urllib.error
 import urllib.request
 from typing import Any
+from urllib.parse import quote
 
 from django.conf import settings
 
@@ -116,6 +117,10 @@ class AgentClient:
     def create_domain(self, payload: dict) -> dict:
         """请求 Agent 创建并启动域。"""
         return self.request_json('/api/v1/domains', 'POST', payload)
+
+    def domain_addresses(self, name: str) -> dict:
+        """读取域内网卡的 IPv4/IPv6 地址。"""
+        return self.get_json(f'/api/v1/domains/{quote(name, safe="")}/addresses')
 
     def domain_action(self, name: str, action: str) -> dict:
         """执行域操作：start / shutdown / force-stop / reboot。"""

@@ -1,5 +1,11 @@
 """实例 API：列表、创建（异步）、详情。"""
 
+import hashlib
+import hmac
+import time
+from urllib.parse import quote
+
+from django.conf import settings
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -16,6 +22,7 @@ from apps.instances.serializers import (
     TaskReferenceSerializer,
 )
 from apps.instances.services import create_instance
+from apps.nodes.client import AgentClient
 from common.errors import AppError, ErrorCode
 from common.permissions import (
     CanCreateInstance,
@@ -156,6 +163,59 @@ ACTION_AUDIT = {
     'force-stop': AuditAction.INSTANCE_FORCE_STOP,
     'reboot': AuditAction.INSTANCE_REBOOT,
 }
+
+
+class InstanceAddressesView(APIView):
+    """实例网卡地址：从节点 Agent 读取 IPv4/IPv6。"""
+
+    permission_classes = [CanViewInstance, RequiresPasswordChange]
+
+    def get(self, request, pk: int) -> Response:
+        """返回实例当前网卡地址。"""
+        instance = Instance.objects.filter(pk=pk, is_deleted=False).select_related('node').first()
+        if instance is None:
+            raise AppError(ErrorCode.NOT_FOUND)
+        payload = AgentClient(instance.node.endpoint).domain_addresses(instance.libvirt_domain_name)
+        return Response(
+            {
+                'addresses': payload.get('addresses', []),
+                'fetched_at': payload.get('fetched_at'),
+            }
+        )
+
+
+class InstanceConsoleView(APIView):
+    """实例 VNC 控制台：签发短期 WebSocket 连接凭证。"""
+
+    permission_classes = [CanViewInstance, RequiresPasswordChange]
+
+    def get(self, request, pk: int) -> Response:
+        """返回 noVNC 连接路径与 VNC 口令。"""
+        instance = Instance.objects.filter(pk=pk, is_deleted=False).select_related('node').first()
+        if instance is None:
+            raise AppError(ErrorCode.NOT_FOUND)
+        if not instance.vnc_password:
+            raise AppError(ErrorCode.CONFLICT, '实例未启用图形控制台')
+        secret = getattr(settings, 'AGENT_SHARED_TOKEN', '')
+        if not secret:
+            raise AppError(ErrorCode.OPERATION_FAILED, '未配置 Agent 共享令牌')
+
+        expires_at = int(time.time()) + 300
+        message = f'{instance.libvirt_domain_name}|{expires_at}'
+        signature = hmac.new(
+            secret.encode('utf-8'), message.encode('utf-8'), hashlib.sha256
+        ).hexdigest()
+        return Response(
+            {
+                'type': 'vnc',
+                'path': (
+                    f'/vnc?domain={quote(instance.libvirt_domain_name)}'
+                    f'&exp={expires_at}&sig={signature}'
+                ),
+                'password': instance.vnc_password,
+                'expires_at': expires_at,
+            }
+        )
 
 
 class InstanceActionView(APIView):

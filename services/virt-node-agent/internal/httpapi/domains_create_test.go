@@ -22,6 +22,8 @@ type fakeOperator struct {
 	startErr   error
 	defineCall int
 	startCall  int
+	addresses  []libvirt.DomainAddress
+	vncPort    int
 }
 
 func (f *fakeOperator) DomainExists(ctx context.Context, name string) (bool, error) {
@@ -44,6 +46,14 @@ func (f *fakeOperator) DumpXML(ctx context.Context, name string) (string, error)
 
 func (f *fakeOperator) DomainState(ctx context.Context, name string) (string, error) {
 	return f.state, nil
+}
+
+func (f *fakeOperator) DomainAddresses(ctx context.Context, name string) ([]libvirt.DomainAddress, error) {
+	return f.addresses, nil
+}
+
+func (f *fakeOperator) DomainVNCPort(ctx context.Context, name string) (int, error) {
+	return f.vncPort, nil
 }
 
 func (f *fakeOperator) ShutdownDomain(ctx context.Context, name string) error {

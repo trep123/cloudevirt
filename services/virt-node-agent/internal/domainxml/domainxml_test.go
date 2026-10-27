@@ -11,8 +11,9 @@ func validSpec() Spec {
 		UUID:      "0f6f2b1e-1111-4a22-9f33-000000000001",
 		VCPU:      2,
 		MemoryMiB: 2048,
-		DiskPath:  "/var/lib/cloudvirt/disks/cv-abc12345.qcow2",
-		Network:   "default",
+		DiskPath:    "/var/lib/cloudvirt/disks/cv-abc12345.qcow2",
+		Network:     "default",
+		VNCPassword: "abcd1234",
 	}
 }
 
@@ -28,6 +29,8 @@ func TestBuildAndValidate(t *testing.T) {
 		"<vcpu>2</vcpu>",
 		`<memory unit="MiB">2048</memory>`,
 		`<target dev="vda" bus="virtio">`,
+		`<graphics type="vnc"`,
+		`passwd="abcd1234"`,
 	} {
 		if !strings.Contains(content, fragment) {
 			t.Errorf("XML 缺少片段 %q:\n%s", fragment, content)

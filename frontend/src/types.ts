@@ -221,6 +221,14 @@ export interface AuditEvent {
   created_at: string;
 }
 
+export interface InstanceAddress {
+  interface: string;
+  mac: string;
+  protocol: string;
+  address: string;
+  prefix: string;
+}
+
 export interface ReconciliationDiff {
   id: number;
   kind: string;

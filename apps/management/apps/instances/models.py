@@ -67,6 +67,7 @@ class Instance(models.Model):
         'images.Image', on_delete=models.PROTECT, related_name='instances', verbose_name='镜像'
     )
     network_name = models.CharField('网络名称', max_length=64, blank=True, default='')
+    vnc_password = models.CharField('VNC 口令', max_length=16, blank=True, default='')
 
     vcpu = models.PositiveIntegerField('vCPU')
     memory_mib = models.PositiveIntegerField('内存(MiB)')

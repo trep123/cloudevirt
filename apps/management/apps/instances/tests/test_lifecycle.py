@@ -247,6 +247,63 @@ class LifecycleApiTests(TestCase):
         self.assertEqual(self.instance.operation_status, 'CANCELLED')
         self.assertIsNone(self.instance.current_task)
 
+    @mock.patch(
+        'apps.instances.views.AgentClient.domain_addresses',
+        return_value={
+            'addresses': [
+                {'interface': 'vnet0', 'protocol': 'ipv4', 'address': '192.168.122.10'},
+                {'interface': 'vnet0', 'protocol': 'ipv6', 'address': 'fd00::10'},
+            ],
+            'fetched_at': '2026-10-27T12:00:00Z',
+        },
+    )
+    def test_instance_addresses_returns_ipv4_and_ipv6(self, addresses) -> None:
+        """实例地址接口返回 Agent 采集的 IPv4/IPv6。"""
+        self.client.login(username='api-life', password='Str0ngPassw0rd')
+
+        response = self.client.get(f'/api/v1/instances/{self.instance.pk}/addresses')
+
+        self.assertEqual(response.status_code, 200)
+        protocols = [item['protocol'] for item in response.json()['addresses']]
+        self.assertIn('ipv4', protocols)
+        self.assertIn('ipv6', protocols)
+        addresses.assert_called_once_with(self.instance.libvirt_domain_name)
+
+    @override_settings(AGENT_SHARED_TOKEN='shared-secret')
+    def test_instance_console_returns_signed_path(self) -> None:
+        """控制台接口返回带签名的 WebSocket 路径与口令。"""
+        import hashlib
+        import hmac
+        from urllib.parse import parse_qs, urlparse
+
+        self.client.login(username='api-life', password='Str0ngPassw0rd')
+
+        response = self.client.get(f'/api/v1/instances/{self.instance.pk}/console')
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body['type'], 'vnc')
+        self.assertEqual(body['password'], self.instance.vnc_password)
+        parsed = urlparse(body['path'])
+        params = parse_qs(parsed.query)
+        self.assertEqual(params['domain'][0], self.instance.libvirt_domain_name)
+        expected = hmac.new(
+            b'shared-secret',
+            f'{self.instance.libvirt_domain_name}|{params["exp"][0]}'.encode(),
+            hashlib.sha256,
+        ).hexdigest()
+        self.assertEqual(params['sig'][0], expected)
+
+    def test_instance_console_requires_vnc_password(self) -> None:
+        """未启用 VNC 的实例不能获取控制台。"""
+        self.instance.vnc_password = ''
+        self.instance.save(update_fields=['vnc_password'])
+        self.client.login(username='api-life', password='Str0ngPassw0rd')
+
+        response = self.client.get(f'/api/v1/instances/{self.instance.pk}/console')
+
+        self.assertEqual(response.status_code, 409)
+
     def test_operator_can_delete_without_purge(self) -> None:
         """Operator 可删除实例但保留磁盘。"""
         self.client.login(username='api-life', password='Str0ngPassw0rd')

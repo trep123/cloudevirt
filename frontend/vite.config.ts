@@ -7,7 +7,8 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/api": { target: "http://127.0.0.1:8000", changeOrigin: false, xfwd: true },
+      "/vnc": { target: "ws://127.0.0.1:9100", ws: true, changeOrigin: true },
     },
   },
-  build: { outDir: "dist", sourcemap: false },
+  build: { outDir: "dist", sourcemap: false, target: "es2022" },
 });

@@ -34,6 +34,24 @@ func TestDomainStateRejectsEmptyName(t *testing.T) {
 	}
 }
 
+// TestParseDomainAddresses 校验 domifaddr 输出解析。
+func TestParseDomainAddresses(t *testing.T) {
+	output := " Name       MAC address          Protocol     Address\n" +
+		"-------------------------------------------------------------------------------\n" +
+		" vnet0      52:54:00:aa:bb:cc    ipv4         192.168.122.10/24\n" +
+		" vnet0      52:54:00:aa:bb:cc    ipv6         fd00::10/64\n"
+	addresses := parseDomainAddresses(output)
+	if len(addresses) != 2 {
+		t.Fatalf("地址数量错误: %d", len(addresses))
+	}
+	if addresses[0].Address != "192.168.122.10" || addresses[0].Prefix != "24" {
+		t.Errorf("IPv4 解析错误: %+v", addresses[0])
+	}
+	if addresses[1].Protocol != "ipv6" || addresses[1].Address != "fd00::10" {
+		t.Errorf("IPv6 解析错误: %+v", addresses[1])
+	}
+}
+
 // TestNewClientDefaults 校验默认客户端参数。
 func TestNewClientDefaults(t *testing.T) {
 	client := NewClient(0)

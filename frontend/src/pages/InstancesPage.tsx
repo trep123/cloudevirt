@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { api } from "../api";
+import { VncConsole } from "../components/VncConsole";
 import { Card, Empty, ErrorBanner, StatusBadge, describeError, formatTime } from "../components/ui";
 import { can } from "../permissions";
-import type { CurrentUser, Image, Instance, Network, Node, Template } from "../types";
+import type { CurrentUser, Image, Instance, InstanceAddress, Network, Node, Template } from "../types";
 
 const ACTIONS: { key: string; label: string; permission: string; danger?: boolean }[] = [
   { key: "start", label: "启动", permission: "instances.start_instance" },
@@ -24,6 +25,7 @@ export function InstancesPage({ user }: { user: CurrentUser }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [detailId, setDetailId] = useState<number | null>(null);
+  const [addresses, setAddresses] = useState<Record<number, InstanceAddress[]>>({});
 
   const [name, setName] = useState("");
   const [nodeId, setNodeId] = useState("");
@@ -64,6 +66,21 @@ export function InstancesPage({ user }: { user: CurrentUser }) {
       setNetworks(networkPage.results.filter((network) => network.is_usable));
       setTemplates(templatePage.results);
       setError(null);
+      const running = instancePage.results.filter((instance) => instance.observed_state === "RUNNING");
+      if (running.length === 0) {
+        setAddresses({});
+      } else {
+        void Promise.all(
+          running.map(async (instance) => {
+            try {
+              const data = await api.instanceAddresses(instance.id);
+              return [instance.id, data.addresses] as const;
+            } catch {
+              return [instance.id, []] as const;
+            }
+          }),
+        ).then((entries) => setAddresses(Object.fromEntries(entries)));
+      }
     } catch (err) {
       setError(describeError(err));
     }
@@ -76,6 +93,7 @@ export function InstancesPage({ user }: { user: CurrentUser }) {
   const hasActiveOperation = instances.some((instance) =>
     ACTIVE_OPERATION_STATUSES.includes(instance.operation_status),
   );
+  const detail = detailId == null ? null : instances.find((instance) => instance.id === detailId) ?? null;
 
   useEffect(() => {
     if (!hasActiveOperation) return;
@@ -139,7 +157,21 @@ export function InstancesPage({ user }: { user: CurrentUser }) {
     }
   }
 
-  const detail = detailId == null ? null : instances.find((instance) => instance.id === detailId) ?? null;
+  function renderAddresses(instance: Instance) {
+    const list = addresses[instance.id] ?? [];
+    if (list.length === 0) {
+      return <span className="muted">{instance.observed_state === "RUNNING" ? "未获取" : "-"}</span>;
+    }
+    return (
+      <div className="ip-list">
+        {list.map((item) => (
+          <span key={`${item.interface}-${item.address}`} className={`ip-tag ip-${item.protocol}`}>
+            {item.protocol === "ipv6" ? "IPv6" : "IPv4"} {item.address}
+          </span>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <>
@@ -197,6 +229,7 @@ export function InstancesPage({ user }: { user: CurrentUser }) {
                 <th>规格</th>
                 <th>节点 / 镜像</th>
                 <th>网络</th>
+                <th>IP 地址</th>
                 <th>观测时间</th>
                 <th>操作</th>
               </tr>
@@ -218,6 +251,7 @@ export function InstancesPage({ user }: { user: CurrentUser }) {
                   <td>{instance.vcpu} vCPU / {instance.memory_mib} MiB / {instance.disk_gib} GiB</td>
                   <td>{instance.node_name}<div className="muted">{instance.image_name}</div></td>
                   <td>{instance.network_name || "未接入"}</td>
+                  <td>{renderAddresses(instance)}</td>
                   <td>
                     {formatTime(instance.observed_state_updated_at)}
                     {instance.observed_state_is_stale ? <div className="muted">数据已过期</div> : null}
@@ -244,6 +278,14 @@ export function InstancesPage({ user }: { user: CurrentUser }) {
       {detail ? (
         <Card title={`虚拟机详情：${detail.name}`}>
           <div className="detail-panel">
+            <h3>VNC 控制台</h3>
+            {detail.observed_state === "RUNNING" ? (
+              <VncConsole instanceId={detail.id} />
+            ) : (
+              <p className="muted">实例未运行，启动后可打开控制台。</p>
+            )}
+          </div>
+          <div className="detail-panel">
             <h3>基本信息</h3>
             <p className="muted">
               UUID：<span className="mono">{detail.uuid}</span><br />
@@ -251,6 +293,8 @@ export function InstancesPage({ user }: { user: CurrentUser }) {
               期望状态：{detail.desired_state} / 观测状态：{detail.observed_state} / 自动启动：{detail.autostart ? "是" : "否"}<br />
               创建时间：{formatTime(detail.created_at)} / 更新时间：{formatTime(detail.updated_at)}
             </p>
+            <h3>IP 地址</h3>
+            {renderAddresses(detail)}
           </div>
           <h3>磁盘</h3>
           {detail.disks.length === 0 ? <Empty text="无磁盘记录" /> : (

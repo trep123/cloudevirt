@@ -8,6 +8,7 @@ import (
 
 	"github.com/tl2004/cloude-virt/services/virt-node-agent/internal/apierr"
 	"github.com/tl2004/cloude-virt/services/virt-node-agent/internal/domainxml"
+	"github.com/tl2004/cloude-virt/services/virt-node-agent/internal/libvirt"
 	"github.com/tl2004/cloude-virt/services/virt-node-agent/internal/storage"
 )
 
@@ -18,6 +19,8 @@ type DomainOperator interface {
 	StartDomain(ctx context.Context, name string) error
 	DumpXML(ctx context.Context, name string) (string, error)
 	DomainState(ctx context.Context, name string) (string, error)
+	DomainAddresses(ctx context.Context, name string) ([]libvirt.DomainAddress, error)
+	DomainVNCPort(ctx context.Context, name string) (int, error)
 	ShutdownDomain(ctx context.Context, name string) error
 	RebootDomain(ctx context.Context, name string) error
 	DestroyDomain(ctx context.Context, name string) error
@@ -33,6 +36,7 @@ type createDomainRequest struct {
 	DiskRelativePath string `json:"disk_relative_path"`
 	DiskGiB          int    `json:"disk_gib"`
 	Network          string `json:"network"`
+	VNCPassword      string `json:"vnc_password"`
 }
 
 // createDomainResponse 是创建域结果。
@@ -68,12 +72,13 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		spec := domainxml.Spec{
-			Name:      payload.Name,
-			UUID:      payload.UUID,
-			VCPU:      payload.VCPU,
-			MemoryMiB: payload.MemoryMiB,
-			DiskPath:  diskPath,
-			Network:   payload.Network,
+			Name:        payload.Name,
+			UUID:        payload.UUID,
+			VCPU:        payload.VCPU,
+			MemoryMiB:   payload.MemoryMiB,
+			DiskPath:    diskPath,
+			Network:     payload.Network,
+			VNCPassword: payload.VNCPassword,
 		}
 		if err := domainxml.ValidateSpec(spec); err != nil {
 			writeAPIError(writer, deps.Logger, err, requestID)

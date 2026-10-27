@@ -29,12 +29,13 @@ var (
 
 // Spec 是创建域所需的全部输入。
 type Spec struct {
-	Name      string
-	UUID      string
-	VCPU      int
-	MemoryMiB int
-	DiskPath  string
-	Network   string
+	Name        string
+	UUID        string
+	VCPU        int
+	MemoryMiB   int
+	DiskPath    string
+	Network     string
+	VNCPassword string
 }
 
 // domain 是 XML 结构，字段顺序即输出顺序。
@@ -65,9 +66,10 @@ type osType struct {
 }
 
 type devices struct {
-	Disks     []disk      `xml:"disk"`
-	Interface *iface      `xml:"interface,omitempty"`
-	Console   consoleSpec `xml:"console"`
+	Disks     []disk        `xml:"disk"`
+	Interface *iface        `xml:"interface,omitempty"`
+	Console   consoleSpec   `xml:"console"`
+	Graphics  *graphicsSpec `xml:"graphics,omitempty"`
 }
 
 type disk struct {
@@ -110,6 +112,14 @@ type consoleSpec struct {
 	Type string `xml:"type,attr"`
 }
 
+type graphicsSpec struct {
+	Type     string `xml:"type,attr"`
+	Port     string `xml:"port,attr"`
+	Autoport string `xml:"autoport,attr"`
+	Listen   string `xml:"listen,attr"`
+	Passwd   string `xml:"passwd,attr,omitempty"`
+}
+
 // ValidName 判断名称是否符合域名规则。
 func ValidName(name string) bool {
 	return namePattern.MatchString(name)
@@ -135,6 +145,9 @@ func ValidateSpec(spec Spec) error {
 	if spec.Network != "" && !namePattern.MatchString(spec.Network) {
 		return apierr.New(apierr.CodeInvalidArgument, "网络名称格式非法", nil)
 	}
+	if len(spec.VNCPassword) > 8 {
+		return apierr.New(apierr.CodeInvalidArgument, "VNC 口令不能超过 8 个字符", nil)
+	}
 	return nil
 }
 
@@ -159,6 +172,13 @@ func Build(spec Spec) (string, error) {
 				Target: diskTgt{Dev: "vda", Bus: DiskBus},
 			}},
 			Console: consoleSpec{Type: "pty"},
+			Graphics: &graphicsSpec{
+				Type:     "vnc",
+				Port:     "-1",
+				Autoport: "yes",
+				Listen:   "127.0.0.1",
+				Passwd:   spec.VNCPassword,
+			},
 		},
 	}
 	if spec.Network != "" {

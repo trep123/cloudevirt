@@ -133,6 +133,14 @@ export const api = {
       "/instances",
       { method: "POST", body: JSON.stringify(body) },
     ),
+  instanceAddresses: (id: number) =>
+    request<{ addresses: import("./types").InstanceAddress[]; fetched_at: string }>(
+      `/instances/${id}/addresses`,
+    ),
+  instanceConsole: (id: number) =>
+    request<{ type: string; path: string; password: string; expires_at: number }>(
+      `/instances/${id}/console`,
+    ),
   instanceAction: (id: number, action: string) =>
     request<{ task: import("./types").TaskReference | null }>(`/instances/${id}/${action}`, {
       method: "POST",

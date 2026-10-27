@@ -76,6 +76,7 @@ def execute_instance_create(task: Task) -> dict:
         'disk_relative_path': disk.relative_path,
         'disk_gib': instance.disk_gib,
         'network': instance.network_name,
+        'vnc_password': instance.vnc_password,
     }
     client = AgentClient(instance.node.endpoint)
     try:
