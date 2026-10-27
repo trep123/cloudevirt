@@ -1,6 +1,5 @@
 """Configurable ordinary-user resource ceilings."""
 
-from django.conf import settings
 from django.db.models import Sum
 
 from apps.accounts.roles import is_admin
@@ -9,13 +8,15 @@ from common.errors import AppError, ErrorCode
 
 
 def quota_for(user):
+    from apps.infrastructure.configuration import configuration
+
     queryset = Instance.objects.filter(created_by=user, is_deleted=False)
     usage = queryset.aggregate(
         vcpu=Sum('vcpu'), memory_mib=Sum('memory_mib'), disk_gib=Sum('disk_gib')
     )
     return {
         'enforced': not is_admin(user),
-        'limits': settings.USER_RESOURCE_QUOTA,
+        'limits': configuration()['quota'],
         'used': {
             'instances': queryset.count(),
             **{key: value or 0 for key, value in usage.items()},

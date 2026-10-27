@@ -533,3 +533,43 @@ dialog::backdrop {
     scroll-behavior: auto !important;
   }
 }
+:root {
+  --infra-form-width: 640px;
+}
+.infra-form {
+  display: grid;
+  gap: 16px;
+  max-width: var(--infra-form-width);
+}
+.infra-form label {
+  display: grid;
+  gap: 8px;
+}
+.infra-form input:not([type="checkbox"]),
+.infra-form select,
+.infra-form textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-primary);
+  box-sizing: border-box;
+}
+.infra-form textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+.infra-form fieldset {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.infra-form .infra-choice {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 0;
+}

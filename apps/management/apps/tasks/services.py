@@ -255,6 +255,17 @@ def recover_stale_tasks(
         updated_at__lte=now - timedelta(seconds=pending_after_seconds),
     )
     for task in stale_pending:
+        if task.type == 'INSTANCE_SNAPSHOT' and task.status == TaskStatus.VALIDATING:
+            # A terminated worker may already have changed disk contents.
+            task.max_attempts = task.attempt_count
+            mark_failed(
+                task,
+                AppError(
+                    ErrorCode.CONFLICT,
+                    '快照任务执行中断，结果未知；请查询实际快照状态，禁止自动重放',
+                ),
+            )
+            continue
         task.status = TaskStatus.PENDING
         task.locked_at = None
         task.locked_by = ''

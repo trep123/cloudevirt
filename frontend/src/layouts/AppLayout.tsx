@@ -13,10 +13,10 @@ const groups: { label: string; key: string; items: Item[] }[] = [
     label: "计算资源",
     key: "vms",
     items: [
-      { label: "集群", key: "clusters", disabled: true },
+      { label: "集群", key: "clusters" },
       { label: "物理节点", key: "nodes", permission: "nodes.view_node" },
       { label: "虚拟机", key: "vms", permission: "instances.view_instance" },
-      { label: "资源池", key: "pools", disabled: true },
+      { label: "资源池", key: "pools" },
       {
         label: "规格模板",
         key: "templates",
@@ -30,7 +30,8 @@ const groups: { label: string; key: string; items: Item[] }[] = [
     items: [
       { label: "数据卷", key: "storage" },
       { label: "镜像", key: "images", permission: "images.view_image" },
-      { label: "存储池 / 快照", key: "snapshots", disabled: true },
+      { label: "存储池", key: "storage-pools" },
+      { label: "快照", key: "snapshots" },
     ],
   },
   { label: "网络管理", key: "networks", items: [] },
@@ -78,7 +79,7 @@ export function AppLayout({
       permission: "instances.add_instance",
     },
     { label: "远程控制台", key: "vms?console=1" },
-    { label: "快照与备份", key: "snapshots", disabled: true },
+    { label: "快照", key: "snapshots", permission: "instances.view_instance" },
     { label: "操作记录", key: "tasks" },
     { label: "个人设置", key: "profile" },
   ];
@@ -142,9 +143,8 @@ export function AppLayout({
                     title={group.label}
                     className={current === group.key ? "active" : ""}
                     disabled={
-                      group.key === "settings" ||
-                      (group.key === "users" &&
-                        !user.permissions.includes("accounts.manage_user"))
+                      group.key === "users" &&
+                      !user.permissions.includes("accounts.manage_user")
                     }
                     onClick={() => go(group.key)}
                   >

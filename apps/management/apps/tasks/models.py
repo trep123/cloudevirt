@@ -37,6 +37,8 @@ class TaskType(models.TextChoices):
     IMAGE_IMPORT = 'IMAGE_IMPORT', '导入镜像'
     IMAGE_DELETE = 'IMAGE_DELETE', '删除镜像'
     RECONCILE = 'RECONCILE', '状态对账'
+    STORAGE_POOL_CREATE = 'STORAGE_POOL_CREATE', '创建存储池'
+    INSTANCE_SNAPSHOT = 'INSTANCE_SNAPSHOT', '虚拟机快照'
 
 
 # 未终态：可被执行、参与互斥判断与幂等唯一约束

@@ -6,6 +6,7 @@
 
 import logging
 
+from apps.infrastructure.executors import execute_infrastructure
 from apps.instances.executors import (
     execute_instance_action,
     execute_instance_create,
@@ -43,6 +44,8 @@ def execute_node_refresh(task: Task) -> dict:
 
 
 EXECUTORS = {
+    'STORAGE_POOL_CREATE': execute_infrastructure,
+    'INSTANCE_SNAPSHOT': execute_infrastructure,
     TaskType.NODE_REFRESH: execute_node_refresh,
     TaskType.INSTANCE_CREATE: execute_instance_create,
     TaskType.INSTANCE_START: execute_instance_action,

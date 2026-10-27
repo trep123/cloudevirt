@@ -71,6 +71,11 @@ class TaskRetryView(APIView):
                 '只有失败的任务可以重试',
                 details={'status': task.status},
             )
+        if task.type == 'INSTANCE_SNAPSHOT':
+            raise AppError(
+                ErrorCode.CONFLICT,
+                '请先查询实际快照状态，再在快照页面确认新的操作；不允许直接重放快照任务',
+            )
         task.status = TaskStatus.PENDING
         task.attempt_count = 0
         task.next_retry_at = None

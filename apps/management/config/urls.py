@@ -6,6 +6,7 @@ from common.console import AuditListView, DashboardView, QuotaView, RoleListView
 from common.views import health
 
 urlpatterns = [
+    path('api/v1/', include('apps.infrastructure.urls')),
     path('api/v1/', include('common.console_urls')),
     path('api/v1/console/dashboard', DashboardView.as_view(), name='console-dashboard'),
     path('api/v1/console/audit', AuditListView.as_view(), name='console-audit'),

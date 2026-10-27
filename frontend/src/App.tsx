@@ -3,6 +3,10 @@ import { api, ApiError } from "./api";
 import { usePath, navigate } from "./app/router";
 import { canEnterRoute } from "./app/permission";
 import { AppLayout } from "./layouts/AppLayout";
+import { OrganizationPage } from "./features/infrastructure/OrganizationPage";
+import { StoragePoolsPage } from "./features/infrastructure/StoragePoolsPage";
+import { SnapshotsPage } from "./features/infrastructure/SnapshotsPage";
+import { SettingsPage } from "./features/infrastructure/SettingsPage";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { VmsPage } from "./features/vms/VmsPage";
 import { StoragePage } from "./features/storage/StoragePage";
@@ -99,6 +103,11 @@ export default function App() {
       </div>
     );
   else if (key === "dashboard") content = <DashboardPage admin={admin} />;
+  else if ((key === "clusters" || key === "pools") && admin)
+    content = <OrganizationPage key={key} kind={key} />;
+  else if (key === "storage-pools" && admin) content = <StoragePoolsPage />;
+  else if (key === "snapshots") content = <SnapshotsPage admin={admin} />;
+  else if (key === "settings" && admin) content = <SettingsPage />;
   else if (key === "vms") content = <VmsPage user={user} path={path} />;
   else if (key === "nodes" && admin)
     content = path.split("/")[3] ? (

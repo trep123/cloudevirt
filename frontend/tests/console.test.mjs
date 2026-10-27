@@ -44,6 +44,21 @@ test("administrator still needs route capability", () => {
     false,
   );
 });
+test("infrastructure administration and snapshot routes preserve role boundaries", () => {
+  const user = {
+    console_scope: "user",
+    permissions: ["instances.view_instance"],
+  };
+  for (const key of ["clusters", "pools", "storage-pools", "settings"]) {
+    assert.equal(canEnterRoute(user, `/admin/${key}`), false);
+    assert.equal(canEnterRoute(user, `/app/${key}`), false);
+  }
+  assert.equal(canEnterRoute(user, "/app/snapshots"), true);
+  assert.equal(
+    canEnterRoute({ console_scope: "user", permissions: [] }, "/app/snapshots"),
+    false,
+  );
+});
 test("network wizard rejects overlapping subnets and a DHCP pool containing gateway", () => {
   const config = {
     subnet: "192.168.10.0/24",

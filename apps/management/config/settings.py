@@ -109,6 +109,7 @@ INSTALLED_APPS = [
     'common',
     'apps.accounts',
     'apps.nodes',
+    'apps.infrastructure',
     'apps.images',
     'apps.instances',
     'apps.tasks',

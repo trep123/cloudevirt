@@ -19,6 +19,7 @@ const VncConsole = lazy(() =>
   })),
 );
 import { VmWizard } from "./VmWizard";
+import { SnapshotsPage } from "../infrastructure/SnapshotsPage";
 import type { CurrentUser, Instance, Paginated } from "../../types";
 const ACTIVE = [
   "PENDING",
@@ -331,6 +332,11 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
                     已登记网络：{detail.network_name || "未接入"}
                     。实际网卡连接可在网络拓扑中查看。
                   </p>
+                ) : tab === "快照" ? (
+                  <SnapshotsPage
+                    admin={user.console_scope === "admin"}
+                    instance={detail}
+                  />
                 ) : tab === "任务日志" ? (
                   <button
                     className="action"

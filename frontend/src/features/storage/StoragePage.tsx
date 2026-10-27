@@ -24,15 +24,15 @@ export function StoragePage() {
     free = fresh?.reduce((s, n) => s + (n.storage_free_bytes || 0), 0);
   return (
     <>
-      <PageHeader
-        title="存储管理"
-        description="节点目录容量与已登记数据卷；存储池编排尚未开放"
-      >
+      <PageHeader title="存储管理" description="节点目录容量与已登记数据卷">
         <button className="action" onClick={() => navigate("/admin/images")}>
           镜像管理
         </button>
-        <button className="action" disabled title="后端尚未提供存储池创建能力">
-          创建存储池
+        <button
+          className="action"
+          onClick={() => navigate("/admin/storage-pools")}
+        >
+          管理存储池
         </button>
       </PageHeader>
       <ErrorBanner message={error} />

@@ -3,6 +3,11 @@ import type { CurrentUser } from "../types";
 export function canEnterRoute(user: CurrentUser, path: string): boolean {
   if (path.startsWith("/admin") && user.console_scope !== "admin") return false;
   const key = path.split("/")[2];
+  if (
+    ["clusters", "pools", "storage-pools", "settings"].includes(key) &&
+    user.console_scope !== "admin"
+  )
+    return false;
   const required: Record<string, string> = {
     vms: "instances.view_instance",
     nodes: "nodes.view_node",
@@ -14,6 +19,7 @@ export function canEnterRoute(user: CurrentUser, path: string): boolean {
     templates: "templates.view_template",
     monitoring: "monitoring.view_alert",
     storage: "instances.view_instance",
+    snapshots: "instances.view_instance",
   };
   if (
     path.endsWith("/vms/create") &&
