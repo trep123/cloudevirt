@@ -38,6 +38,7 @@ ROLE_PERMISSIONS: dict[str, tuple[str, ...]] = {
         'tasks.retry_task',
         'monitoring.view_alert',
         'monitoring.view_reconciliationdiff',
+        'monitoring.view_reconciliationrun',
     ),
     ROLE_VIEWER: (
         'nodes.view_node',

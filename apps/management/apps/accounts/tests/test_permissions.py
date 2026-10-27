@@ -38,10 +38,14 @@ class PermissionBoundaryTests(TestCase):
 
         admin_group = Group.objects.get(name='Admin')
         self.assertGreater(admin_group.permissions.count(), 0)
+        # 所有业务模型均已落地，报告中不应再有待生效权限
         self.assertEqual(report['Admin'], [])
-        # 业务模型尚未创建，Operator / Viewer 的权限应被报告为待生效
-        self.assertTrue(report['Operator'])
-        self.assertTrue(report['Viewer'])
+        self.assertEqual(report['Operator'], [])
+        self.assertEqual(report['Viewer'], [])
+        self.assertGreater(
+            admin_group.permissions.count(),
+            Group.objects.get(name='Viewer').permissions.count(),
+        )
 
     def test_unauthenticated_access_returns_401(self) -> None:
         """未认证访问用户列表应返回 401。"""

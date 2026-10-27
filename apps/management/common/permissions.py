@@ -191,3 +191,17 @@ class CanManageNetwork(RequiresPermission):
 
     codename = 'networks.manage_network'
     target_type = 'network'
+
+
+class CanViewMonitoring(RequiresPermission):
+    """查看监控、告警与对账结果的权限。"""
+
+    codename = 'monitoring.view_alert'
+    target_type = 'monitoring'
+
+
+class CanRunReconciliation(RequiresPermission):
+    """手动触发对账的权限。"""
+
+    codename = 'monitoring.run_reconciliation'
+    target_type = 'monitoring'

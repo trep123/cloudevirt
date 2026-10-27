@@ -172,6 +172,7 @@ virsh -c qemu:///system list --all
 | 迁移与角色同步 | `make backend-migrate` | 迁移后由 post_migrate 自动同步角色；新增业务模型后再执行 `python manage.py sync_roles` 补齐权限绑定 |
 | 创建首个管理员 | `CLOUDVIRT_BOOTSTRAP_ADMIN=true python manage.py bootstrap_admin --username admin` | 受部署开关保护，已存在管理员时拒绝执行；输出一次性口令并强制首次改密 |
 | 环境自检 | `make precheck` | 生产口径下缺 /dev/kvm 判失败；开发测试可用 `CLOUDVIRT_ALLOW_TCG=true` 降级 |
+| 周期对账 | `python manage.py reconcile` | 由 systemd timer / cron 周期执行，检测状态漂移、孤儿域、过期预留并生成告警 |
 
 登录采用同源 Session + CSRF（ADR-009）：前端需先请求 `/api/v1/auth/me`（或读取登录响应）获取 `csrftoken` Cookie，
 写操作时携带 `X-CSRFToken` 请求头；跨域部署改用 DRF Token 方案。

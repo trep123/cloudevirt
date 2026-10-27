@@ -45,6 +45,7 @@ class AuditAction(models.TextChoices):
     NETWORK_CREATE = 'NETWORK_CREATE', '登记网络'
     NETWORK_UPDATE = 'NETWORK_UPDATE', '更新网络'
     NETWORK_DELETE = 'NETWORK_DELETE', '删除网络'
+    RECONCILE_RUN = 'RECONCILE_RUN', '执行对账'
 
 
 class AuditEvent(models.Model):
