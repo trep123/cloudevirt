@@ -156,7 +156,7 @@ auth_user ─1:1─ UserProfile            auth_group ─n:n─ auth_permission
 
 | 表 | 字段 | 说明 |
 | --- | --- | --- |
-| Network | name(unique)、type、bridge、vlan_id(可空)、is_default、is_management、description、创建/更新时间 | `is_management=True` 的网络**禁止**被实例网卡接入 |
+| Network | name(unique)、type、bridge、vlan_id(可空)、is_default、is_management、subnet(CIDR)、gateway、dhcp_enabled、dhcp_start、dhcp_end、dns_servers、description、创建/更新时间 | `is_management=True` 的网络**禁止**被实例网卡接入；DHCP 地址池必须位于 subnet 内 |
 | NetworkAvailability | network_id、node_id、status、checked_at | unique(network, node)，表示某节点上该网络是否可用 |
 
 ### 4.7 instances_instance（虚拟机实例）

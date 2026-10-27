@@ -1,5 +1,7 @@
 """网络序列化器。"""
 
+import ipaddress
+
 from rest_framework import serializers
 
 from apps.networks.models import Network
@@ -20,6 +22,12 @@ class NetworkSerializer(serializers.ModelSerializer):
             'vlan_id',
             'is_default',
             'is_management',
+            'subnet',
+            'gateway',
+            'dhcp_enabled',
+            'dhcp_start',
+            'dhcp_end',
+            'dns_servers',
             'description',
             'is_usable',
             'created_at',
@@ -43,4 +51,62 @@ class NetworkSerializer(serializers.ModelSerializer):
         bridge = attrs.get('bridge', getattr(self.instance, 'bridge', ''))
         if network_type in {'BRIDGE', 'OVS'} and not bridge:
             raise serializers.ValidationError('网桥类型必须填写桥接设备名称')
+
+        subnet_raw = (attrs.get('subnet', getattr(self.instance, 'subnet', '')) or '').strip()
+        gateway = attrs.get('gateway', getattr(self.instance, 'gateway', None))
+        dhcp_enabled = attrs.get('dhcp_enabled', getattr(self.instance, 'dhcp_enabled', False))
+        dhcp_start = attrs.get('dhcp_start', getattr(self.instance, 'dhcp_start', None))
+        dhcp_end = attrs.get('dhcp_end', getattr(self.instance, 'dhcp_end', None))
+        dns_servers = (
+            attrs.get('dns_servers', getattr(self.instance, 'dns_servers', '')) or ''
+        ).strip()
+
+        if not subnet_raw and (gateway or dhcp_enabled or dhcp_start or dhcp_end):
+            raise serializers.ValidationError('配置网关或 DHCP 前必须填写子网 CIDR')
+
+        network = None
+        if subnet_raw:
+            try:
+                network = ipaddress.ip_network(subnet_raw, strict=False)
+            except ValueError as exc:
+                raise serializers.ValidationError(f'子网 CIDR 格式非法：{exc}') from exc
+
+        if network is not None and gateway:
+            try:
+                gateway_address = ipaddress.ip_address(gateway)
+            except ValueError as exc:
+                raise serializers.ValidationError('网关地址格式非法') from exc
+            if gateway_address.version != network.version or gateway_address not in network:
+                raise serializers.ValidationError('网关必须属于子网')
+
+        if dhcp_enabled:
+            if network is None:
+                raise serializers.ValidationError('启用 DHCP 前必须填写子网 CIDR')
+            if not dhcp_start or not dhcp_end:
+                raise serializers.ValidationError('启用 DHCP 时必须填写地址池起止地址')
+            try:
+                start_address = ipaddress.ip_address(dhcp_start)
+                end_address = ipaddress.ip_address(dhcp_end)
+            except ValueError as exc:
+                raise serializers.ValidationError('DHCP 地址池格式非法') from exc
+            if start_address.version != network.version or end_address.version != network.version:
+                raise serializers.ValidationError('DHCP 地址池必须与子网 IP 版本一致')
+            if start_address not in network or end_address not in network:
+                raise serializers.ValidationError('DHCP 地址池必须位于子网内')
+            if int(start_address) > int(end_address):
+                raise serializers.ValidationError('DHCP 起始地址不能大于结束地址')
+            if network.version == 4 and (
+                start_address == network.network_address or end_address == network.broadcast_address
+            ):
+                raise serializers.ValidationError('DHCP 地址池不能包含网络地址或广播地址')
+
+        if dns_servers:
+            for item in dns_servers.split(','):
+                value = item.strip()
+                if not value:
+                    continue
+                try:
+                    ipaddress.ip_address(value)
+                except ValueError as exc:
+                    raise serializers.ValidationError(f'DNS 服务器地址非法：{value}') from exc
         return attrs

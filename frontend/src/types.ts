@@ -69,6 +69,12 @@ export interface Network {
   is_default: boolean;
   is_management: boolean;
   description: string;
+  subnet: string;
+  gateway: string | null;
+  dhcp_enabled: boolean;
+  dhcp_start: string | null;
+  dhcp_end: string | null;
+  dns_servers: string;
   is_usable: boolean;
   created_at: string;
   updated_at: string;

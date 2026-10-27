@@ -112,6 +112,59 @@ class NetworkApiTests(TestCase):
         self.assertEqual(network.bridge, 'ovsbr0')
         self.assertEqual(network.vlan_id, 100)
 
+    def test_admin_registers_network_with_subnet_and_dhcp(self) -> None:
+        """管理员可以配置网络子网与 DHCP 地址池。"""
+        self.client.login(username='net-admin', password='Str0ngPassw0rd')
+
+        response = self.client.post(
+            '/api/v1/networks',
+            {
+                'name': 'dhcp-net',
+                'subnet': '192.168.200.0/24',
+                'gateway': '192.168.200.1',
+                'dhcp_enabled': True,
+                'dhcp_start': '192.168.200.100',
+                'dhcp_end': '192.168.200.200',
+                'dns_servers': '1.1.1.1, 8.8.8.8',
+            },
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 201)
+        network = Network.objects.get(name='dhcp-net')
+        self.assertEqual(network.subnet, '192.168.200.0/24')
+        self.assertTrue(network.dhcp_enabled)
+
+    def test_dhcp_range_must_be_inside_subnet(self) -> None:
+        """DHCP 地址池必须位于子网内。"""
+        self.client.login(username='net-admin', password='Str0ngPassw0rd')
+
+        response = self.client.post(
+            '/api/v1/networks',
+            {
+                'name': 'bad-dhcp',
+                'subnet': '192.168.200.0/24',
+                'dhcp_enabled': True,
+                'dhcp_start': '192.168.201.100',
+                'dhcp_end': '192.168.201.200',
+            },
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_dhcp_requires_address_pool(self) -> None:
+        """启用 DHCP 时必须填写地址池。"""
+        self.client.login(username='net-admin', password='Str0ngPassw0rd')
+
+        response = self.client.post(
+            '/api/v1/networks',
+            {'name': 'no-pool', 'subnet': '192.168.200.0/24', 'dhcp_enabled': True},
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+
     def test_management_network_cannot_be_default(self) -> None:
         """管理网不能同时作为默认网络。"""
         self.client.login(username='net-admin', password='Str0ngPassw0rd')

@@ -21,6 +21,12 @@ type NetworkForm = {
   vlan: string;
   is_default: boolean;
   is_management: boolean;
+  subnet: string;
+  gateway: string;
+  dhcp_enabled: boolean;
+  dhcp_start: string;
+  dhcp_end: string;
+  dns_servers: string;
   description: string;
 };
 
@@ -31,6 +37,12 @@ const EMPTY_FORM: NetworkForm = {
   vlan: "",
   is_default: false,
   is_management: false,
+  subnet: "",
+  gateway: "",
+  dhcp_enabled: false,
+  dhcp_start: "",
+  dhcp_end: "",
+  dns_servers: "",
   description: "",
 };
 
@@ -91,6 +103,12 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
       vlan: network.vlan_id == null ? "" : String(network.vlan_id),
       is_default: network.is_default,
       is_management: network.is_management,
+      subnet: network.subnet || "",
+      gateway: network.gateway || "",
+      dhcp_enabled: network.dhcp_enabled,
+      dhcp_start: network.dhcp_start || "",
+      dhcp_end: network.dhcp_end || "",
+      dns_servers: network.dns_servers || "",
       description: network.description,
     });
   }
@@ -107,6 +125,12 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
       vlan_id: form.vlan ? Number(form.vlan) : null,
       is_default: form.is_default,
       is_management: form.is_management,
+      subnet: form.subnet,
+      gateway: form.gateway || null,
+      dhcp_enabled: form.dhcp_enabled,
+      dhcp_start: form.dhcp_start || null,
+      dhcp_end: form.dhcp_end || null,
+      dns_servers: form.dns_servers,
       description: form.description,
     };
     try {
@@ -180,6 +204,16 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
               />
             </label>
             <label>VLAN<input type="number" min={1} max={4094} value={form.vlan} onChange={(e) => setForm({ ...form, vlan: e.target.value })} placeholder="可选" /></label>
+            <label>子网 CIDR<input value={form.subnet} onChange={(e) => setForm({ ...form, subnet: e.target.value })} placeholder="192.168.150.0/24" /></label>
+            <label>网关<input value={form.gateway} onChange={(e) => setForm({ ...form, gateway: e.target.value })} placeholder="192.168.150.1" /></label>
+            <label>DNS<input value={form.dns_servers} onChange={(e) => setForm({ ...form, dns_servers: e.target.value })} placeholder="1.1.1.1, 8.8.8.8" /></label>
+            <label className="check"><input type="checkbox" checked={form.dhcp_enabled} onChange={(e) => setForm({ ...form, dhcp_enabled: e.target.checked })} /> 启用 DHCP</label>
+            {form.dhcp_enabled ? (
+              <>
+                <label>DHCP 起始<input value={form.dhcp_start} onChange={(e) => setForm({ ...form, dhcp_start: e.target.value })} placeholder="192.168.150.100" /></label>
+                <label>DHCP 结束<input value={form.dhcp_end} onChange={(e) => setForm({ ...form, dhcp_end: e.target.value })} placeholder="192.168.150.200" /></label>
+              </>
+            ) : null}
             <label>说明<input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="可选" /></label>
             <label className="check"><input type="checkbox" checked={form.is_default} onChange={(e) => setForm({ ...form, is_default: e.target.checked })} /> 默认网络</label>
             <label className="check"><input type="checkbox" checked={form.is_management} onChange={(e) => setForm({ ...form, is_management: e.target.checked })} /> 管理网</label>
@@ -188,7 +222,8 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
           </form>
           <p className="muted">
             管理网禁止接入虚拟机；默认网络与管理网不能同时勾选。OVS 网络需先在宿主机创建对应 OVS 网桥，
-            创建虚拟机时会注入 openvswitch 虚拟端口并按 VLAN 打标签。
+            创建虚拟机时会注入 openvswitch 虚拟端口并按 VLAN 打标签。子网与 DHCP 配置会持久化并在拓扑中展示；
+            当前 OVS 网络复用宿主机 libvirt default 的 DHCP/NAT，修改后需在宿主机同步 DHCP 服务配置。
           </p>
         </Card>
       ) : null}
@@ -209,6 +244,8 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
                 <th>类型</th>
                 <th>桥接</th>
                 <th>VLAN</th>
+                <th>子网 / 网关</th>
+                <th>DHCP</th>
                 <th>属性</th>
                 <th>说明</th>
                 <th>操作</th>
@@ -221,6 +258,18 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
                   <td>{TYPE_LABEL.get(network.type) ?? network.type}</td>
                   <td className="mono">{network.bridge || "-"}</td>
                   <td>{network.vlan_id ?? "-"}</td>
+                  <td>
+                    <span className="mono">{network.subnet || "-"}</span>
+                    {network.gateway ? <div className="muted">网关 {network.gateway}</div> : null}
+                    {network.dns_servers ? <div className="muted">DNS {network.dns_servers}</div> : null}
+                  </td>
+                  <td>
+                    {network.dhcp_enabled ? (
+                      <span className="mono">
+                        {network.dhcp_start ?? "-"} ~ {network.dhcp_end ?? "-"}
+                      </span>
+                    ) : "未启用"}
+                  </td>
                   <td>
                     {network.is_default ? <StatusBadge status="默认" /> : null}
                     {network.is_management ? <StatusBadge status="管理网" /> : null}

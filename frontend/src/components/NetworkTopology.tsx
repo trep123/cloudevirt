@@ -14,6 +14,12 @@ const TYPE_COLOR: Record<string, { fill: string; stroke: string; line: string }>
 
 const EMPTY_COLOR = { fill: "#f8fafc", stroke: "#cbd5e1", line: "#cbd5e1" };
 
+function shortAddress(value: string | null): string {
+  if (!value) return "-";
+  const parts = value.split(".");
+  return parts.length === 4 ? parts[3] : value;
+}
+
 export function NetworkTopology({
   networks,
   instances,
@@ -32,12 +38,12 @@ export function NetworkTopology({
     return nodeCompare !== 0 ? nodeCompare : left.name.localeCompare(right.name);
   });
 
-  const rowHeight = 78;
+  const rowHeight = 88;
   const top = 70;
   const networkX = 30;
-  const networkWidth = 250;
-  const vmX = 620;
-  const vmWidth = 330;
+  const networkWidth = 280;
+  const vmX = 650;
+  const vmWidth = 320;
   const width = 1000;
   const height = Math.max(networks.length, sortedInstances.length, 1) * rowHeight + top + 50;
   const networkIndex = new Map(networks.map((network, index) => [network.name, index]));
@@ -70,7 +76,7 @@ export function NetworkTopology({
               x={networkX}
               y={y}
               width={networkWidth}
-              height={52}
+              height={64}
               rx={8}
               fill={color.fill}
               stroke={color.stroke}
@@ -82,6 +88,12 @@ export function NetworkTopology({
               {TYPE_LABEL[network.type] ?? network.type}
               {network.bridge ? ` · ${network.bridge}` : ""}
               {network.vlan_id ? ` · VLAN ${network.vlan_id}` : ""}
+            </text>
+            <text x={networkX + 12} y={y + 54} className="topology-sub">
+              {network.subnet ? `子网 ${network.subnet}` : "子网未配置"}
+              {network.dhcp_enabled
+                ? ` · DHCP ${shortAddress(network.dhcp_start)}-${shortAddress(network.dhcp_end)}`
+                : " · DHCP 关闭"}
             </text>
             {network.is_management ? <text x={networkX + networkWidth - 10} y={y + 20} textAnchor="end" className="topology-warn">管理网</text> : null}
             {network.is_default ? <text x={networkX + networkWidth - 10} y={y + 20} textAnchor="end" className="topology-ok">默认</text> : null}
@@ -97,7 +109,7 @@ export function NetworkTopology({
         const vnic = interfaces[instance.id]?.[0];
         const midX = (networkX + networkWidth + vmX) / 2;
         const networkY = networkIndexValue === undefined ? y : top + networkIndexValue * rowHeight;
-        const startY = networkY + 26;
+        const startY = networkY + 32;
         const endY = y + 26;
         return (
           <g key={`vm-${instance.id}`}>
