@@ -42,8 +42,9 @@ a { color: #2563eb; text-decoration: none; }
 
 .main { flex: 1; padding: 24px 28px; }
 
-.page-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.page-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
 .page-head h2 { margin: 0; font-size: 20px; }
+.page-head label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #475569; }
 
 .card {
   background: #fff;
@@ -51,6 +52,7 @@ a { color: #2563eb; text-decoration: none; }
   padding: 16px 18px;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
   margin-bottom: 18px;
+  overflow-x: auto;
 }
 
 .card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
@@ -74,6 +76,8 @@ th { color: #64748b; font-weight: 600; background: #f8fafc; }
 
 form.inline { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
 form.inline label { display: flex; flex-direction: column; font-size: 12px; color: #475569; gap: 4px; }
+form.inline label.check, .card-head label.check { flex-direction: row; align-items: center; gap: 6px; padding-bottom: 7px; font-size: 12px; color: #475569; cursor: pointer; }
+form.inline label.check input, .card-head label.check input { width: auto; margin: 0; }
 input, select { padding: 7px 9px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; }
 
 button.action {
@@ -138,6 +142,17 @@ button.action:disabled { opacity: 0.5; cursor: not-allowed; }
   gap: 4px;
   max-height: 200px;
   overflow-y: auto;
+}
+
+.json {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  overflow: auto;
+  max-height: 240px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
 }
 
 .perm-tag {

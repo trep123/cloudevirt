@@ -2,16 +2,19 @@ import { useCallback, useEffect, useState } from "react";
 
 import { api } from "../api";
 import { Card, Empty, ErrorBanner, StatusBadge, describeError, formatTime } from "../components/ui";
-import type { Image, Instance, Network, Node, Template } from "../types";
+import { can } from "../permissions";
+import type { CurrentUser, Image, Instance, Network, Node, Template } from "../types";
 
-const ACTIONS: { key: string; label: string; danger?: boolean }[] = [
-  { key: "start", label: "启动" },
-  { key: "shutdown", label: "关机" },
-  { key: "reboot", label: "重启" },
-  { key: "force-stop", label: "强制停止", danger: true },
+const ACTIONS: { key: string; label: string; permission: string; danger?: boolean }[] = [
+  { key: "start", label: "启动", permission: "instances.start_instance" },
+  { key: "shutdown", label: "关机", permission: "instances.shutdown_instance" },
+  { key: "reboot", label: "重启", permission: "instances.reboot_instance" },
+  { key: "force-stop", label: "强制停止", permission: "instances.force_stop_instance", danger: true },
 ];
 
-export function InstancesPage() {
+const ACTIVE_OPERATION_STATUSES = ["PENDING", "VALIDATING", "PREPARING", "CREATING", "VERIFYING"];
+
+export function InstancesPage({ user }: { user: CurrentUser }) {
   const [instances, setInstances] = useState<Instance[]>([]);
   const [nodes, setNodes] = useState<Node[]>([]);
   const [images, setImages] = useState<Image[]>([]);
@@ -20,6 +23,7 @@ export function InstancesPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [detailId, setDetailId] = useState<number | null>(null);
 
   const [name, setName] = useState("");
   const [nodeId, setNodeId] = useState("");
@@ -28,11 +32,16 @@ export function InstancesPage() {
   const [vcpu, setVcpu] = useState(2);
   const [memory, setMemory] = useState(2048);
   const [disk, setDisk] = useState(20);
+  const [autostart, setAutostart] = useState(true);
   const [templateId, setTemplateId] = useState("");
+
+  const canCreate = can(user, "instances.add_instance");
+  const canDelete = can(user, "instances.delete_instance");
+  const canDeleteDisk = can(user, "instances.delete_disk_instance");
 
   function applyTemplate(id: number | null) {
     if (!id) { setTemplateId(""); return; }
-    const tpl = templates.find((t) => t.id === id);
+    const tpl = templates.find((item) => item.id === id);
     if (!tpl) return;
     setTemplateId(String(id));
     setVcpu(tpl.vcpu);
@@ -64,6 +73,16 @@ export function InstancesPage() {
     void reload();
   }, [reload]);
 
+  const hasActiveOperation = instances.some((instance) =>
+    ACTIVE_OPERATION_STATUSES.includes(instance.operation_status),
+  );
+
+  useEffect(() => {
+    if (!hasActiveOperation) return;
+    const timer = window.setInterval(() => void reload(), 4000);
+    return () => window.clearInterval(timer);
+  }, [hasActiveOperation, reload]);
+
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -78,6 +97,7 @@ export function InstancesPage() {
         memory_mib: memory,
         disk_gib: disk,
         network_name: networkName,
+        autostart,
       });
       setNotice(`已创建 ${result.instance.name}，任务 ${result.task.id.slice(0, 8)} 正在执行`);
       setName("");
@@ -93,6 +113,8 @@ export function InstancesPage() {
     if (action === "force-stop" && !window.confirm(`确认强制停止 ${instance.name}？该操作等同断电。`)) {
       return;
     }
+    setError(null);
+    setNotice(null);
     try {
       const result = await api.instanceAction(instance.id, action);
       setNotice(result.task ? `操作已提交，任务 ${result.task.id.slice(0, 8)}` : "实例已处于该状态");
@@ -103,16 +125,21 @@ export function InstancesPage() {
   }
 
   async function remove(instance: Instance) {
-    const purge = window.confirm(`删除 ${instance.name}？\n\n点击“确定”同时删除磁盘，点击“取消”保留磁盘。`);
-    if (purge && !window.confirm("再次确认：磁盘将被永久删除。")) return;
+    if (!window.confirm(`确认删除 ${instance.name}？`)) return;
+    const purge = canDeleteDisk && window.confirm("是否同时删除磁盘文件？选择取消则只注销实例并保留磁盘。");
+    setError(null);
+    setNotice(null);
     try {
       await api.deleteInstance(instance.id, purge);
       setNotice(`删除任务已提交（${purge ? "含磁盘" : "保留磁盘"}）`);
+      if (detailId === instance.id) setDetailId(null);
       await reload();
     } catch (err) {
       setError(describeError(err));
     }
   }
+
+  const detail = detailId == null ? null : instances.find((instance) => instance.id === detailId) ?? null;
 
   return (
     <>
@@ -122,73 +149,46 @@ export function InstancesPage() {
       </div>
       <ErrorBanner message={error} />
       {notice ? <div className="banner banner-info">{notice}</div> : null}
-      <Card title="创建虚拟机">
-        <form className="inline" onSubmit={submit}>
-          <label>
-            模板
-            <select value={templateId} onChange={(e) => applyTemplate(Number(e.target.value) || null)}>
-              <option value="">自定义</option>
-              {templates.map((tpl) => <option key={tpl.id} value={tpl.id}>{tpl.name} ({tpl.vcpu}C{tpl.memory_mib}M{tpl.disk_gib}G)</option>)}
-            </select>
-          </label>
-          <label>
-            名称
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="vm-demo-01" required />
-          </label>
-          <label>
-            节点
-            <select value={nodeId} onChange={(e) => setNodeId(e.target.value)} required>
-              <option value="">选择节点</option>
-              {nodes.map((node) => (
-                <option key={node.id} value={node.id} disabled={!node.is_schedulable}>
-                  {node.name}（{node.status}）
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            镜像
-            <select value={imageId} onChange={(e) => setImageId(e.target.value)} required>
-              <option value="">选择镜像</option>
-              {images.map((image) => (
-                <option key={image.id} value={image.id}>
-                  {image.name}（{image.format}）
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            网络
-            <select value={networkName} onChange={(e) => setNetworkName(e.target.value)}>
-              <option value="">不接入</option>
-              {networks.map((network) => (
-                <option key={network.id} value={network.name}>
-                  {network.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            vCPU
-            <input type="number" min={1} value={vcpu} onChange={(e) => setVcpu(Number(e.target.value))} />
-          </label>
-          <label>
-            内存(MiB)
-            <input type="number" min={128} value={memory} onChange={(e) => setMemory(Number(e.target.value))} />
-          </label>
-          <label>
-            系统盘(GiB)
-            <input type="number" min={1} value={disk} onChange={(e) => setDisk(Number(e.target.value))} />
-          </label>
-          <button className="action primary" type="submit" disabled={busy}>
-            {busy ? "提交中…" : "创建"}
-          </button>
-        </form>
-      </Card>
+      {canCreate ? (
+        <Card title="创建虚拟机">
+          <form className="inline" onSubmit={submit}>
+            <label>模板
+              <select value={templateId} onChange={(e) => applyTemplate(Number(e.target.value) || null)}>
+                <option value="">自定义</option>
+                {templates.map((tpl) => <option key={tpl.id} value={tpl.id}>{tpl.name} ({tpl.vcpu}C{tpl.memory_mib}M{tpl.disk_gib}G)</option>)}
+              </select>
+            </label>
+            <label>名称<input value={name} onChange={(e) => setName(e.target.value)} placeholder="vm-demo-01" required /></label>
+            <label>节点
+              <select value={nodeId} onChange={(e) => setNodeId(e.target.value)} required>
+                <option value="">选择节点</option>
+                {nodes.map((node) => (
+                  <option key={node.id} value={node.id} disabled={!node.is_schedulable}>{node.name}（{node.status}）</option>
+                ))}
+              </select>
+            </label>
+            <label>镜像
+              <select value={imageId} onChange={(e) => setImageId(e.target.value)} required>
+                <option value="">选择镜像</option>
+                {images.map((image) => <option key={image.id} value={image.id}>{image.name}（{image.format}）</option>)}
+              </select>
+            </label>
+            <label>网络
+              <select value={networkName} onChange={(e) => setNetworkName(e.target.value)}>
+                <option value="">不接入</option>
+                {networks.map((network) => <option key={network.id} value={network.name}>{network.name}</option>)}
+              </select>
+            </label>
+            <label>vCPU<input type="number" min={1} value={vcpu} onChange={(e) => setVcpu(Number(e.target.value))} /></label>
+            <label>内存(MiB)<input type="number" min={128} value={memory} onChange={(e) => setMemory(Number(e.target.value))} /></label>
+            <label>系统盘(GiB)<input type="number" min={1} value={disk} onChange={(e) => setDisk(Number(e.target.value))} /></label>
+            <label className="check"><input type="checkbox" checked={autostart} onChange={(e) => setAutostart(e.target.checked)} /> 创建后启动</label>
+            <button className="action primary" type="submit" disabled={busy}>{busy ? "提交中…" : "创建"}</button>
+          </form>
+        </Card>
+      ) : null}
       <Card title={`共 ${instances.length} 台虚拟机`}>
-        {instances.length === 0 ? (
-          <Empty text="暂无虚拟机" />
-        ) : (
+        {instances.length === 0 ? <Empty text="暂无虚拟机" /> : (
           <table>
             <thead>
               <tr>
@@ -196,6 +196,7 @@ export function InstancesPage() {
                 <th>状态</th>
                 <th>规格</th>
                 <th>节点 / 镜像</th>
+                <th>网络</th>
                 <th>观测时间</th>
                 <th>操作</th>
               </tr>
@@ -211,24 +212,18 @@ export function InstancesPage() {
                     <StatusBadge status={instance.observed_state} />
                     <div className="muted">任务：{instance.operation_status}</div>
                     {instance.last_error_message ? (
-                      <div className="muted">
-                        {instance.last_error_code}: {instance.last_error_message}
-                      </div>
+                      <div className="muted">{instance.last_error_code}: {instance.last_error_message}</div>
                     ) : null}
                   </td>
-                  <td>
-                    {instance.vcpu} vCPU / {instance.memory_mib} MiB / {instance.disk_gib} GiB
-                  </td>
-                  <td>
-                    {instance.node_name}
-                    <div className="muted">{instance.image_name}</div>
-                  </td>
+                  <td>{instance.vcpu} vCPU / {instance.memory_mib} MiB / {instance.disk_gib} GiB</td>
+                  <td>{instance.node_name}<div className="muted">{instance.image_name}</div></td>
+                  <td>{instance.network_name || "未接入"}</td>
                   <td>
                     {formatTime(instance.observed_state_updated_at)}
                     {instance.observed_state_is_stale ? <div className="muted">数据已过期</div> : null}
                   </td>
-                  <td>
-                    {ACTIONS.map((action) => (
+                  <td className="actions">
+                    {ACTIONS.filter((action) => can(user, action.permission)).map((action) => (
                       <button
                         key={action.key}
                         className={`action${action.danger ? " danger" : ""}`}
@@ -237,9 +232,8 @@ export function InstancesPage() {
                         {action.label}
                       </button>
                     ))}
-                    <button className="action danger" onClick={() => void remove(instance)}>
-                      删除
-                    </button>
+                    <button className="action" onClick={() => setDetailId(instance.id)}>详情</button>
+                    {canDelete ? <button className="action danger" onClick={() => void remove(instance)}>删除</button> : null}
                   </td>
                 </tr>
               ))}
@@ -247,6 +241,39 @@ export function InstancesPage() {
           </table>
         )}
       </Card>
+      {detail ? (
+        <Card title={`虚拟机详情：${detail.name}`}>
+          <div className="detail-panel">
+            <h3>基本信息</h3>
+            <p className="muted">
+              UUID：<span className="mono">{detail.uuid}</span><br />
+              节点：{detail.node_name} / 镜像：{detail.image_name} / 网络：{detail.network_name || "未接入"}<br />
+              期望状态：{detail.desired_state} / 观测状态：{detail.observed_state} / 自动启动：{detail.autostart ? "是" : "否"}<br />
+              创建时间：{formatTime(detail.created_at)} / 更新时间：{formatTime(detail.updated_at)}
+            </p>
+          </div>
+          <h3>磁盘</h3>
+          {detail.disks.length === 0 ? <Empty text="无磁盘记录" /> : (
+            <table>
+              <thead><tr><th>文件名</th><th>角色</th><th>状态</th><th>容量</th><th>设备</th><th>路径</th></tr></thead>
+              <tbody>
+                {detail.disks.map((disk) => (
+                  <tr key={disk.id}>
+                    <td className="mono">{disk.name}</td>
+                    <td>{disk.role}</td>
+                    <td><StatusBadge status={disk.status} /></td>
+                    <td>{disk.size_gib} GiB</td>
+                    <td className="mono">{disk.target_dev}</td>
+                    <td className="mono muted">{disk.relative_path}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {detail.last_error_message ? <div className="banner banner-error">{detail.last_error_code}: {detail.last_error_message}</div> : null}
+          <button className="action" onClick={() => setDetailId(null)}>关闭</button>
+        </Card>
+      ) : null}
     </>
   );
 }

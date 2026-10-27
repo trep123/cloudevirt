@@ -13,6 +13,16 @@ const BASE = "/api/v1";
 
 type PaginatedNodeAccess = { count: number; next: string | null; previous: string | null; results: import("./types").NodeAccess[] };
 
+type NetworkInput = {
+  name: string;
+  type?: string;
+  bridge?: string;
+  vlan_id?: number | null;
+  is_default?: boolean;
+  is_management?: boolean;
+  description?: string;
+};
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
@@ -83,6 +93,11 @@ export const api = {
       body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
     }),
   nodes: () => request<Paginated<import("./types").Node>>("/nodes?page_size=100"),
+  createNode: (body: { name: string; endpoint: string }) =>
+    request<import("./types").Node>("/nodes", { method: "POST", body: JSON.stringify(body) }),
+  updateNode: (id: number, body: Partial<{ name: string; endpoint: string; status: string; maintenance_note: string; heartbeat_interval_seconds: number; offline_after_seconds: number }>) =>
+    request<import("./types").Node>(`/nodes/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteNode: (id: number) => request<void>(`/nodes/${id}`, { method: "DELETE" }),
   refreshNode: (id: number) =>
     request<import("./types").Node>(`/nodes/${id}/refresh`, { method: "POST" }),
   images: () => request<Paginated<import("./types").Image>>("/images?page_size=100"),
@@ -93,10 +108,16 @@ export const api = {
     os_family?: string;
     os_version?: string;
   }) => request<import("./types").Image>("/images", { method: "POST", body: JSON.stringify(body) }),
-  deleteImage: (id: number) =>
-    request<void>(`/images/${id}`, { method: "DELETE" }),
-  disks: (statusFilter?: string) =>
-    request<Paginated<import("./types").Disk>>(`/disks${statusFilter ? `?status=${statusFilter}` : "?page_size=100"}`),
+  updateImage: (id: number, body: Partial<{ os_family: string; os_version: string }>) =>
+    request<import("./types").Image>(`/images/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteImage: (id: number, purgeFile = true) =>
+    request<void>(`/images/${id}?purge_file=${purgeFile ? "true" : "false"}`, { method: "DELETE" }),
+  disks: (filters: { status?: string; instance?: string } = {}) => {
+    const params = new URLSearchParams({ page_size: "100" });
+    if (filters.status) params.set("status", filters.status);
+    if (filters.instance) params.set("instance", filters.instance);
+    return request<Paginated<import("./types").Disk>>(`/disks?${params.toString()}`);
+  },
   instances: () => request<Paginated<import("./types").Instance>>("/instances?page_size=100"),
   createInstance: (body: {
     name: string;
@@ -106,6 +127,7 @@ export const api = {
     memory_mib: number;
     disk_gib: number;
     network_name?: string;
+    autostart?: boolean;
   }) =>
     request<{ instance: import("./types").Instance; task: import("./types").TaskReference }>(
       "/instances",
@@ -122,6 +144,8 @@ export const api = {
     ),
   tasks: () => request<Paginated<import("./types").Task>>("/tasks?page_size=50"),
   task: (id: string) => request<import("./types").Task>(`/tasks/${id}`),
+  cancelTask: (id: string) => request<import("./types").Task>(`/tasks/${id}/cancel`, { method: "POST" }),
+  retryTask: (id: string) => request<import("./types").Task>(`/tasks/${id}/retry`, { method: "POST" }),
   templates: () => request<Paginated<import("./types").Template>>("/templates?page_size=100"),
   createTemplate: (body: { name: string; vcpu: number; memory_mib: number; disk_gib: number; description?: string; is_public?: boolean }) =>
     request<import("./types").Template>("/templates", { method: "POST", body: JSON.stringify(body) }),
@@ -143,11 +167,19 @@ export const api = {
     request<import("./types").NodeAccess>("/node-access", { method: "POST", body: JSON.stringify(body) }),
   deleteNodeAccess: (id: number) => request<void>(`/node-access/${id}`, { method: "DELETE" }),
   networks: () => request<Paginated<import("./types").Network>>("/networks?page_size=100"),
+  createNetwork: (body: NetworkInput) =>
+    request<import("./types").Network>("/networks", { method: "POST", body: JSON.stringify(body) }),
+  updateNetwork: (id: number, body: Partial<NetworkInput>) =>
+    request<import("./types").Network>(`/networks/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteNetwork: (id: number) => request<void>(`/networks/${id}`, { method: "DELETE" }),
   overview: () => request<import("./types").Overview>("/monitoring/overview"),
   alerts: () => request<Paginated<import("./types").Alert>>("/monitoring/alerts?status=ACTIVE"),
   runReconciliation: () =>
-    request<{ id: number; status: string; summary: Record<string, number> }>(
-      "/monitoring/reconciliation/run",
-      { method: "POST" },
-    ),
+    request<import("./types").ReconciliationRun>("/monitoring/reconciliation/run", {
+      method: "POST",
+    }),
+  reconcileRuns: () =>
+    request<Paginated<import("./types").ReconciliationRun>>("/monitoring/reconciliation?page_size=20"),
+  reconcileRun: (id: number) =>
+    request<import("./types").ReconciliationRun>(`/monitoring/reconciliation/${id}`),
 };

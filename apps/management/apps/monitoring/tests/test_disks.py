@@ -147,4 +147,7 @@ class DiskReconcileTests(TestCase):
         response = self.client.get(f'/api/v1/disks?instance={self.instance.pk}')
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.json()['results']), 1)
+        body = response.json()['results']
+        self.assertEqual(len(body), 1)
+        self.assertEqual(body[0]['instance'], self.instance.pk)
+        self.assertEqual(body[0]['instance_name'], self.instance.name)

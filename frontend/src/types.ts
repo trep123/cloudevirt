@@ -22,6 +22,7 @@ export interface Node {
   name: string;
   endpoint: string;
   status: NodeStatus;
+  maintenance_note: string;
   agent_version: string;
   cpu_total: number | null;
   memory_total_mib: number | null;
@@ -34,7 +35,11 @@ export interface Node {
   consecutive_failures: number;
   last_error_code: string;
   last_error_message: string;
+  heartbeat_interval_seconds: number;
+  offline_after_seconds: number;
   is_schedulable: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Image {
@@ -49,7 +54,10 @@ export interface Image {
   os_version: string;
   error_code: string;
   error_message: string;
+  checksum_sha256: string;
   is_ready: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Network {
@@ -62,16 +70,23 @@ export interface Network {
   is_management: boolean;
   description: string;
   is_usable: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Disk {
   id: number;
   instance: number;
+  instance_name: string;
   role: string;
   name: string;
+  relative_path: string;
+  format: string;
   size_gib: number;
+  virtual_size_bytes: number | null;
   status: string;
   target_dev: string;
+  is_orphan: boolean;
 }
 
 export interface Instance {
@@ -87,6 +102,7 @@ export interface Instance {
   vcpu: number;
   memory_mib: number;
   disk_gib: number;
+  autostart: boolean;
   desired_state: string;
   observed_state: string;
   observed_state_updated_at: string | null;
@@ -95,6 +111,8 @@ export interface Instance {
   last_error_code: string;
   last_error_message: string;
   disks: Disk[];
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Task {
@@ -110,6 +128,9 @@ export interface Task {
   updated_at: string;
   payload?: Record<string, unknown>;
   result?: Record<string, unknown> | null;
+  next_retry_at?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
   last_error_message?: string;
   events?: TaskEvent[];
 }
@@ -198,6 +219,27 @@ export interface AuditEvent {
   target_id: string;
   details: Record<string, unknown>;
   created_at: string;
+}
+
+export interface ReconciliationDiff {
+  id: number;
+  kind: string;
+  resource_type: string;
+  resource_id: string;
+  detail: Record<string, unknown>;
+  resolution: string;
+  resolved_at: string | null;
+  note: string;
+}
+
+export interface ReconciliationRun {
+  id: number;
+  started_at: string;
+  finished_at: string | null;
+  status: string;
+  scope: string;
+  summary: Record<string, number>;
+  diffs: ReconciliationDiff[];
 }
 
 export interface NodeAccess {

@@ -32,11 +32,11 @@ export function describeError(error: unknown): string {
 
 export function StatusBadge({ status }: { status: string }) {
   const normalized = (status || "UNKNOWN").toUpperCase();
-  const tone = ["ONLINE", "RUNNING", "READY", "SUCCEEDED"].includes(normalized)
+  const tone = ["ONLINE", "RUNNING", "READY", "SUCCEEDED", "可用", "公开", "默认"].includes(normalized)
     ? "ok"
-    : ["OFFLINE", "FAILED", "CRASHED", "CANCELLED"].includes(normalized)
+    : ["OFFLINE", "FAILED", "CRASHED", "CANCELLED", "禁用"].includes(normalized)
       ? "bad"
-      : ["DEGRADED", "PENDING", "CREATING", "VALIDATING", "PREPARING", "RECONCILING"].includes(
+      : ["DEGRADED", "PENDING", "CREATING", "VALIDATING", "PREPARING", "RECONCILING", "管理网"].includes(
             normalized,
           )
         ? "warn"

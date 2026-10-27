@@ -43,6 +43,14 @@ class ImageSerializer(serializers.ModelSerializer):
         )
 
 
+class ImageUpdateSerializer(serializers.ModelSerializer):
+    """只允许维护镜像元数据，禁止直接改文件路径与检测结果。"""
+
+    class Meta:
+        model = Image
+        fields = ('os_family', 'os_version')
+
+
 class ImageImportSerializer(serializers.ModelSerializer):
     """导入镜像请求。"""
 

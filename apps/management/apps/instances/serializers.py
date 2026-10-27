@@ -10,10 +10,14 @@ from apps.nodes.models import Node
 class DiskSerializer(serializers.ModelSerializer):
     """磁盘输出结构。"""
 
+    instance_name = serializers.CharField(source='instance.name', read_only=True)
+
     class Meta:
         model = Disk
         fields = (
             'id',
+            'instance',
+            'instance_name',
             'role',
             'name',
             'relative_path',

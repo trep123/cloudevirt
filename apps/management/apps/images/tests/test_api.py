@@ -111,6 +111,38 @@ class ImageApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         inspect.assert_not_called()
 
+    def test_operator_can_update_image_metadata(self) -> None:
+        """Operator 可更新系统元数据并写审计。"""
+        image = Image.objects.create(
+            name='meta', status=ImageStatus.READY, relative_path='meta.qcow2'
+        )
+        self.client.login(username='image-operator', password='Str0ngPassw0rd')
+
+        response = self.client.patch(
+            f'/api/v1/images/{image.pk}',
+            {'os_family': 'ubuntu', 'os_version': '24.04'},
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        image.refresh_from_db()
+        self.assertEqual(image.os_family, 'ubuntu')
+        self.assertEqual(image.os_version, '24.04')
+        self.assertTrue(AuditEvent.objects.filter(action=AuditAction.IMAGE_UPDATE).exists())
+
+    def test_viewer_cannot_update_image_metadata(self) -> None:
+        """Viewer 无镜像更新权限。"""
+        image = Image.objects.create(name='readonly', status=ImageStatus.READY)
+        self.client.login(username='image-viewer', password='Str0ngPassw0rd')
+
+        response = self.client.patch(
+            f'/api/v1/images/{image.pk}',
+            {'os_family': 'debian'},
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 403)
+
     def test_viewer_cannot_delete_image(self) -> None:
         """Viewer 无删除权限应返回 403。"""
         image = Image.objects.create(name='keep', status=ImageStatus.READY)

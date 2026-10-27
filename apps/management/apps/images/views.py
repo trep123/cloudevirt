@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from apps.audit.models import AuditAction
 from apps.audit.services import record_audit
 from apps.images.models import Image
-from apps.images.serializers import ImageImportSerializer, ImageSerializer
+from apps.images.serializers import ImageImportSerializer, ImageSerializer, ImageUpdateSerializer
 from apps.images.services import delete_image, import_image
 from common.permissions import CanDeleteImage, CanImportImage, CanViewImage, RequiresPasswordChange
 
@@ -58,18 +58,41 @@ class ImageListCreateView(generics.ListCreateAPIView):
         )
 
 
-class ImageDetailView(generics.RetrieveDestroyAPIView):
-    """镜像详情与删除。"""
+class ImageDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """镜像详情、元数据更新与删除。"""
 
     permission_classes = [RequiresPasswordChange]
     queryset = Image.objects.filter(is_deleted=False)
     serializer_class = ImageSerializer
 
+    def get_serializer_class(self):
+        """更新只接受元数据字段。"""
+        if self.request.method in {'PATCH', 'PUT'}:
+            return ImageUpdateSerializer
+        return ImageSerializer
+
     def get_permissions(self):
-        """读操作与删除操作权限不同。"""
+        """读、更新与删除使用不同权限。"""
         if self.request.method == 'GET':
             return [CanViewImage(), RequiresPasswordChange()]
+        if self.request.method in {'PATCH', 'PUT'}:
+            return [CanImportImage(), RequiresPasswordChange()]
         return [CanDeleteImage(), RequiresPasswordChange()]
+
+    def perform_update(self, serializer) -> None:
+        """更新镜像元数据并写审计。"""
+        image = serializer.save()
+        record_audit(
+            action=AuditAction.IMAGE_UPDATE,
+            actor=self.request.user,
+            target_type='image',
+            target_id=str(image.pk),
+            details={
+                'name': image.name,
+                'os_family': image.os_family,
+                'os_version': image.os_version,
+            },
+        )
 
     def perform_destroy(self, instance) -> None:
         """删除镜像：purge_file 参数显式声明是否删除节点文件。"""

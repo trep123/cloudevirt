@@ -125,6 +125,7 @@ export function UsersPage() {
                   <td>{u.display_name || "-"}</td>
                   <td>
                     <select value={u.roles[0] || ""} onChange={(e) => void changeRole(u, e.target.value)}>
+                      <option value="" disabled>未分配</option>
                       {ROLE_OPTIONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
                     </select>
                   </td>
