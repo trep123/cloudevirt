@@ -36,7 +36,11 @@ class NetworkSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs: dict) -> dict:
-        """禁止把网络同时标记为默认与管理网。"""
+        """校验默认/管理网互斥，以及网桥类型必须填写桥接设备。"""
         if attrs.get('is_management') and attrs.get('is_default'):
             raise serializers.ValidationError('管理网不能作为默认网络')
+        network_type = attrs.get('type', getattr(self.instance, 'type', ''))
+        bridge = attrs.get('bridge', getattr(self.instance, 'bridge', ''))
+        if network_type in {'BRIDGE', 'OVS'} and not bridge:
+            raise serializers.ValidationError('网桥类型必须填写桥接设备名称')
         return attrs

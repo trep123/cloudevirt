@@ -269,6 +269,32 @@ class LifecycleApiTests(TestCase):
         self.assertIn('ipv6', protocols)
         addresses.assert_called_once_with(self.instance.libvirt_domain_name)
 
+    @mock.patch(
+        'apps.instances.views.AgentClient.domain_interfaces',
+        return_value={
+            'interfaces': [
+                {
+                    'name': 'vnet0',
+                    'type': 'bridge',
+                    'source': 'ovsbr0',
+                    'model': 'virtio',
+                    'mac': '52:54:00:aa:bb:cc',
+                }
+            ]
+        },
+    )
+    def test_instance_interfaces_returns_vnic(self, interfaces) -> None:
+        """实例接口接口返回 vNIC 信息。"""
+        self.client.login(username='api-life', password='Str0ngPassw0rd')
+
+        response = self.client.get(f'/api/v1/instances/{self.instance.pk}/interfaces')
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()['interfaces']
+        self.assertEqual(body[0]['source'], 'ovsbr0')
+        self.assertEqual(body[0]['mac'], '52:54:00:aa:bb:cc')
+        interfaces.assert_called_once_with(self.instance.libvirt_domain_name)
+
     @override_settings(AGENT_SHARED_TOKEN='shared-secret')
     def test_instance_console_returns_signed_path(self) -> None:
         """控制台接口返回带签名的 WebSocket 路径与口令。"""

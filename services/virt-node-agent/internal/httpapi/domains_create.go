@@ -20,6 +20,7 @@ type DomainOperator interface {
 	DumpXML(ctx context.Context, name string) (string, error)
 	DomainState(ctx context.Context, name string) (string, error)
 	DomainAddresses(ctx context.Context, name string) ([]libvirt.DomainAddress, error)
+	DomainInterfaces(ctx context.Context, name string) ([]libvirt.DomainInterface, error)
 	DomainVNCPort(ctx context.Context, name string) (int, error)
 	ShutdownDomain(ctx context.Context, name string) error
 	RebootDomain(ctx context.Context, name string) error
@@ -36,6 +37,9 @@ type createDomainRequest struct {
 	DiskRelativePath string `json:"disk_relative_path"`
 	DiskGiB          int    `json:"disk_gib"`
 	Network          string `json:"network"`
+	NetworkType      string `json:"network_type"`
+	NetworkBridge    string `json:"network_bridge"`
+	VLANID           int    `json:"vlan_id"`
 	VNCPassword      string `json:"vnc_password"`
 }
 
@@ -72,13 +76,16 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		spec := domainxml.Spec{
-			Name:        payload.Name,
-			UUID:        payload.UUID,
-			VCPU:        payload.VCPU,
-			MemoryMiB:   payload.MemoryMiB,
-			DiskPath:    diskPath,
-			Network:     payload.Network,
-			VNCPassword: payload.VNCPassword,
+			Name:          payload.Name,
+			UUID:          payload.UUID,
+			VCPU:          payload.VCPU,
+			MemoryMiB:     payload.MemoryMiB,
+			DiskPath:      diskPath,
+			Network:       payload.Network,
+			NetworkType:   payload.NetworkType,
+			NetworkBridge: payload.NetworkBridge,
+			VLANID:        payload.VLANID,
+			VNCPassword:   payload.VNCPassword,
 		}
 		if err := domainxml.ValidateSpec(spec); err != nil {
 			writeAPIError(writer, deps.Logger, err, requestID)

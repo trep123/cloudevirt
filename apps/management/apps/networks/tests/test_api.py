@@ -78,6 +78,40 @@ class NetworkApiTests(TestCase):
             ).exists()
         )
 
+    def test_ovs_network_requires_bridge(self) -> None:
+        """OVS 网络必须填写网桥名称。"""
+        self.client.login(username='net-admin', password='Str0ngPassw0rd')
+
+        response = self.client.post(
+            '/api/v1/networks',
+            {'name': 'ovs-net', 'type': 'OVS'},
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_admin_registers_ovs_network(self) -> None:
+        """管理员可以登记 OVS 网桥。"""
+        self.client.login(username='net-admin', password='Str0ngPassw0rd')
+
+        response = self.client.post(
+            '/api/v1/networks',
+            {
+                'name': 'ovs-net',
+                'type': 'OVS',
+                'bridge': 'ovsbr0',
+                'vlan_id': 100,
+                'description': 'OVS 业务网',
+            },
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 201)
+        network = Network.objects.get(name='ovs-net')
+        self.assertEqual(network.type, 'OVS')
+        self.assertEqual(network.bridge, 'ovsbr0')
+        self.assertEqual(network.vlan_id, 100)
+
     def test_management_network_cannot_be_default(self) -> None:
         """管理网不能同时作为默认网络。"""
         self.client.login(username='net-admin', password='Str0ngPassw0rd')

@@ -184,6 +184,22 @@ class InstanceAddressesView(APIView):
         )
 
 
+class InstanceInterfacesView(APIView):
+    """实例网卡接口：从节点 Agent 读取 vNIC 信息。"""
+
+    permission_classes = [CanViewInstance, RequiresPasswordChange]
+
+    def get(self, request, pk: int) -> Response:
+        """返回实例当前网卡接口。"""
+        instance = Instance.objects.filter(pk=pk, is_deleted=False).select_related('node').first()
+        if instance is None:
+            raise AppError(ErrorCode.NOT_FOUND)
+        payload = AgentClient(instance.node.endpoint).domain_interfaces(
+            instance.libvirt_domain_name
+        )
+        return Response({'interfaces': payload.get('interfaces', [])})
+
+
 class InstanceConsoleView(APIView):
     """实例 VNC 控制台：签发短期 WebSocket 连接凭证。"""
 

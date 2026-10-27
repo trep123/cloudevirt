@@ -7,10 +7,10 @@ import (
 
 func validSpec() Spec {
 	return Spec{
-		Name:      "cv-abc12345",
-		UUID:      "0f6f2b1e-1111-4a22-9f33-000000000001",
-		VCPU:      2,
-		MemoryMiB: 2048,
+		Name:        "cv-abc12345",
+		UUID:        "0f6f2b1e-1111-4a22-9f33-000000000001",
+		VCPU:        2,
+		MemoryMiB:   2048,
 		DiskPath:    "/var/lib/cloudvirt/disks/cv-abc12345.qcow2",
 		Network:     "default",
 		VNCPassword: "abcd1234",
@@ -34,6 +34,34 @@ func TestBuildAndValidate(t *testing.T) {
 	} {
 		if !strings.Contains(content, fragment) {
 			t.Errorf("XML 缺少片段 %q:\n%s", fragment, content)
+		}
+	}
+	if err := Validate(content); err != nil {
+		t.Errorf("校验不应失败: %v", err)
+	}
+}
+
+// TestBuildOVSInterface 校验 OVS 接口注入 bridge 与 openvswitch 虚拟端口。
+func TestBuildOVSInterface(t *testing.T) {
+	spec := validSpec()
+	spec.Network = "ovs-net"
+	spec.NetworkType = "OVS"
+	spec.NetworkBridge = "ovsbr0"
+	spec.VLANID = 100
+
+	content, err := Build(spec)
+	if err != nil {
+		t.Fatalf("生成失败: %v", err)
+	}
+	for _, fragment := range []string{
+		`<interface type="bridge">`,
+		`bridge="ovsbr0"`,
+		`<virtualport type="openvswitch">`,
+		`<vlan>`,
+		`<tag id="100">`,
+	} {
+		if !strings.Contains(content, fragment) {
+			t.Errorf("OVS XML 缺少片段 %q:\n%s", fragment, content)
 		}
 	}
 	if err := Validate(content); err != nil {

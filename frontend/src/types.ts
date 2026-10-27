@@ -221,6 +221,14 @@ export interface AuditEvent {
   created_at: string;
 }
 
+export interface InstanceInterface {
+  name: string;
+  type: string;
+  source: string;
+  model: string;
+  mac: string;
+}
+
 export interface InstanceAddress {
   interface: string;
   mac: string;

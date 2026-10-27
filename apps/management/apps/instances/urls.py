@@ -8,6 +8,7 @@ from apps.instances.views import (
     InstanceAddressesView,
     InstanceConsoleView,
     InstanceDetailView,
+    InstanceInterfacesView,
     InstanceListCreateView,
 )
 
@@ -15,6 +16,11 @@ urlpatterns = [
     path('instances', InstanceListCreateView.as_view(), name='instance-list'),
     path(
         'instances/<int:pk>/addresses', InstanceAddressesView.as_view(), name='instance-addresses'
+    ),
+    path(
+        'instances/<int:pk>/interfaces',
+        InstanceInterfacesView.as_view(),
+        name='instance-interfaces',
     ),
     path(
         'instances/<int:pk>/console',

@@ -236,6 +236,9 @@ def create_instance(
                 'disk_gib': disk_gib,
                 'disk_relative_path': disk_name,
                 'network_name': network_name,
+                'network_type': network.type if network else '',
+                'network_bridge': network.bridge if network else '',
+                'vlan_id': network.vlan_id if network else None,
             },
             idempotency_key=idempotency_key,
         )

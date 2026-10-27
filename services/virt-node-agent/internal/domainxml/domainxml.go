@@ -29,13 +29,16 @@ var (
 
 // Spec 是创建域所需的全部输入。
 type Spec struct {
-	Name        string
-	UUID        string
-	VCPU        int
-	MemoryMiB   int
-	DiskPath    string
-	Network     string
-	VNCPassword string
+	Name          string
+	UUID          string
+	VCPU          int
+	MemoryMiB     int
+	DiskPath      string
+	Network       string
+	NetworkType   string
+	NetworkBridge string
+	VLANID        int
+	VNCPassword   string
 }
 
 // domain 是 XML 结构，字段顺序即输出顺序。
@@ -95,13 +98,28 @@ type diskTgt struct {
 }
 
 type iface struct {
-	Type   string     `xml:"type,attr"`
-	Source ifaceSrc   `xml:"source"`
-	Model  ifaceModel `xml:"model"`
+	Type        string       `xml:"type,attr"`
+	Source      ifaceSrc     `xml:"source"`
+	VirtualPort *virtualPort `xml:"virtualport,omitempty"`
+	VLAN        *vlanSpec    `xml:"vlan,omitempty"`
+	Model       ifaceModel   `xml:"model"`
 }
 
 type ifaceSrc struct {
-	Network string `xml:"network,attr"`
+	Network string `xml:"network,attr,omitempty"`
+	Bridge  string `xml:"bridge,attr,omitempty"`
+}
+
+type virtualPort struct {
+	Type string `xml:"type,attr"`
+}
+
+type vlanSpec struct {
+	Tag vlanTag `xml:"tag"`
+}
+
+type vlanTag struct {
+	ID int `xml:"id,attr"`
 }
 
 type ifaceModel struct {
@@ -148,6 +166,15 @@ func ValidateSpec(spec Spec) error {
 	if len(spec.VNCPassword) > 8 {
 		return apierr.New(apierr.CodeInvalidArgument, "VNC 口令不能超过 8 个字符", nil)
 	}
+	if spec.NetworkType != "" && spec.NetworkType != "LIBVIRT_NETWORK" && spec.NetworkType != "BRIDGE" && spec.NetworkType != "OVS" {
+		return apierr.New(apierr.CodeInvalidArgument, "网络类型不受支持", nil)
+	}
+	if spec.NetworkType == "OVS" && strings.TrimSpace(spec.NetworkBridge) == "" {
+		return apierr.New(apierr.CodeInvalidArgument, "OVS 网络必须指定网桥名称", nil)
+	}
+	if spec.VLANID < 0 || spec.VLANID > 4094 {
+		return apierr.New(apierr.CodeInvalidArgument, "VLAN ID 超出范围", nil)
+	}
 	return nil
 }
 
@@ -181,11 +208,38 @@ func Build(spec Spec) (string, error) {
 			},
 		},
 	}
-	if spec.Network != "" {
+	switch spec.NetworkType {
+	case "OVS":
+		bridge := strings.TrimSpace(spec.NetworkBridge)
 		payload.Devices.Interface = &iface{
-			Type:   "network",
-			Source: ifaceSrc{Network: spec.Network},
+			Type:        "bridge",
+			Source:      ifaceSrc{Bridge: bridge},
+			VirtualPort: &virtualPort{Type: "openvswitch"},
+			Model:       ifaceModel{Type: "virtio"},
+		}
+		if spec.VLANID > 0 {
+			payload.Devices.Interface.VLAN = &vlanSpec{Tag: vlanTag{ID: spec.VLANID}}
+		}
+	case "BRIDGE":
+		bridge := strings.TrimSpace(spec.NetworkBridge)
+		if bridge == "" {
+			bridge = spec.Network
+		}
+		payload.Devices.Interface = &iface{
+			Type:   "bridge",
+			Source: ifaceSrc{Bridge: bridge},
 			Model:  ifaceModel{Type: "virtio"},
+		}
+		if spec.VLANID > 0 {
+			payload.Devices.Interface.VLAN = &vlanSpec{Tag: vlanTag{ID: spec.VLANID}}
+		}
+	default:
+		if spec.Network != "" {
+			payload.Devices.Interface = &iface{
+				Type:   "network",
+				Source: ifaceSrc{Network: spec.Network},
+				Model:  ifaceModel{Type: "virtio"},
+			}
 		}
 	}
 

@@ -137,6 +137,10 @@ export const api = {
     request<{ addresses: import("./types").InstanceAddress[]; fetched_at: string }>(
       `/instances/${id}/addresses`,
     ),
+  instanceInterfaces: (id: number) =>
+    request<{ interfaces: import("./types").InstanceInterface[] }>(
+      `/instances/${id}/interfaces`,
+    ),
   instanceConsole: (id: number) =>
     request<{ type: string; path: string; password: string; expires_at: number }>(
       `/instances/${id}/console`,

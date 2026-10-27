@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { api } from "../api";
+import { NetworkTopology } from "../components/NetworkTopology";
 import { Card, Empty, ErrorBanner, StatusBadge, describeError } from "../components/ui";
 import { can } from "../permissions";
-import type { CurrentUser, Network } from "../types";
+import type { CurrentUser, Instance, InstanceInterface, Network } from "../types";
 
 const NETWORK_TYPES = [
   { value: "LIBVIRT_NETWORK", label: "libvirt 网络" },
   { value: "BRIDGE", label: "Linux 网桥" },
+  { value: "OVS", label: "Open vSwitch 网桥" },
 ];
+
+const TYPE_LABEL = new Map(NETWORK_TYPES.map((item) => [item.value, item.label]));
 
 type NetworkForm = {
   name: string;
@@ -32,6 +36,9 @@ const EMPTY_FORM: NetworkForm = {
 
 export function NetworksPage({ user }: { user: CurrentUser }) {
   const [networks, setNetworks] = useState<Network[]>([]);
+  const [instances, setInstances] = useState<Instance[]>([]);
+  const [interfaces, setInterfaces] = useState<Record<number, InstanceInterface[]>>({});
+  const [view, setView] = useState<"list" | "topology">("list");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -42,7 +49,24 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
 
   const reload = useCallback(async () => {
     try {
-      setNetworks((await api.networks()).results);
+      const [networkPage, instancePage] = await Promise.all([api.networks(), api.instances()]);
+      setNetworks(networkPage.results);
+      setInstances(instancePage.results);
+      const running = instancePage.results.filter((instance) => instance.observed_state === "RUNNING");
+      if (running.length === 0) {
+        setInterfaces({});
+      } else {
+        void Promise.all(
+          running.map(async (instance) => {
+            try {
+              const data = await api.instanceInterfaces(instance.id);
+              return [instance.id, data.interfaces] as const;
+            } catch {
+              return [instance.id, []] as const;
+            }
+          }),
+        ).then((entries) => setInterfaces(Object.fromEntries(entries)));
+      }
       setError(null);
     } catch (err) {
       setError(describeError(err));
@@ -120,7 +144,21 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
     <>
       <div className="page-head">
         <h2>网络白名单</h2>
-        <button className="action" onClick={() => void reload()}>刷新</button>
+        <div className="actions">
+          <button
+            className={`action${view === "list" ? " primary" : ""}`}
+            onClick={() => setView("list")}
+          >
+            列表
+          </button>
+          <button
+            className={`action${view === "topology" ? " primary" : ""}`}
+            onClick={() => setView("topology")}
+          >
+            拓扑
+          </button>
+          <button className="action" onClick={() => void reload()}>刷新</button>
+        </div>
       </div>
       <ErrorBanner message={error} />
       {notice ? <div className="banner banner-info">{notice}</div> : null}
@@ -133,7 +171,14 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
                 {NETWORK_TYPES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
               </select>
             </label>
-            <label>桥接设备<input value={form.bridge} onChange={(e) => setForm({ ...form, bridge: e.target.value })} placeholder="br0" /></label>
+            <label>{form.type === "OVS" ? "OVS 网桥" : "桥接设备"}
+              <input
+                value={form.bridge}
+                onChange={(e) => setForm({ ...form, bridge: e.target.value })}
+                placeholder={form.type === "OVS" ? "ovsbr0" : "br0"}
+                required={form.type !== "LIBVIRT_NETWORK"}
+              />
+            </label>
             <label>VLAN<input type="number" min={1} max={4094} value={form.vlan} onChange={(e) => setForm({ ...form, vlan: e.target.value })} placeholder="可选" /></label>
             <label>说明<input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="可选" /></label>
             <label className="check"><input type="checkbox" checked={form.is_default} onChange={(e) => setForm({ ...form, is_default: e.target.checked })} /> 默认网络</label>
@@ -141,9 +186,18 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
             <button className="action primary" type="submit" disabled={busy}>{busy ? "提交中…" : editing ? "保存" : "登记"}</button>
             {editing ? <button className="action" type="button" onClick={resetForm}>取消</button> : null}
           </form>
-          <p className="muted">管理网禁止接入虚拟机；默认网络与管理网不能同时勾选。</p>
+          <p className="muted">
+            管理网禁止接入虚拟机；默认网络与管理网不能同时勾选。OVS 网络需先在宿主机创建对应 OVS 网桥，
+            创建虚拟机时会注入 openvswitch 虚拟端口并按 VLAN 打标签。
+          </p>
         </Card>
       ) : null}
+      {view === "topology" ? (
+        <Card title="网络与接口拓扑">
+          <NetworkTopology networks={networks} instances={instances} interfaces={interfaces} />
+        </Card>
+      ) : null}
+      {view === "list" ? (
       <Card title={`共 ${networks.length} 个网络`}>
         {networks.length === 0 ? (
           <Empty text={canManage ? "尚未登记网络，请先在上方登记节点上已验证的网络。" : "尚未登记网络。"} />
@@ -164,7 +218,7 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
               {networks.map((network) => (
                 <tr key={network.id}>
                   <td><strong>{network.name}</strong></td>
-                  <td>{NETWORK_TYPES.find((item) => item.value === network.type)?.label ?? network.type}</td>
+                  <td>{TYPE_LABEL.get(network.type) ?? network.type}</td>
                   <td className="mono">{network.bridge || "-"}</td>
                   <td>{network.vlan_id ?? "-"}</td>
                   <td>
@@ -187,6 +241,7 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
           </table>
         )}
       </Card>
+      ) : null}
     </>
   );
 }

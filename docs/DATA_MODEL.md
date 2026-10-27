@@ -30,7 +30,7 @@
 | 任务类型 | `INSTANCE_CREATE` / `INSTANCE_START` / `INSTANCE_SHUTDOWN` / `INSTANCE_FORCE_STOP` / `INSTANCE_REBOOT` / `INSTANCE_DELETE` / `IMAGE_IMPORT` / `IMAGE_DELETE` / `NODE_REFRESH` / `RECONCILE` | Task.type |
 | 磁盘角色 | `SYSTEM` / `DATA` | Disk.role |
 | 磁盘状态 | `CREATING` / `READY` / `DELETING` / `DELETED` / `FAILED` | Disk.status |
-| 网络类型 | `LIBVIRT_NETWORK` / `BRIDGE` | Network.type |
+| 网络类型 | `LIBVIRT_NETWORK` / `BRIDGE` / `OVS` | Network.type |
 | 网络可用性 | `ACTIVE` / `INACTIVE` / `UNKNOWN` | NetworkAvailability.status |
 | 预留状态 | `HELD` / `COMMITTED` / `RELEASED` / `EXPIRED` | ResourceReservation.status |
 | 审计结果 | `SUCCESS` / `FAILURE` / `DENIED` | AuditEvent.result |

@@ -154,6 +154,46 @@ func parseDomainAddresses(output string) []DomainAddress {
 	return result
 }
 
+// DomainInterface 是域网卡信息。
+type DomainInterface struct {
+	Name   string `json:"name"`
+	Type   string `json:"type"`
+	Source string `json:"source"`
+	Model  string `json:"model"`
+	MAC    string `json:"mac"`
+}
+
+// DomainInterfaces 返回域网卡列表。
+func (c *Client) DomainInterfaces(ctx context.Context, name string) ([]DomainInterface, error) {
+	if strings.TrimSpace(name) == "" {
+		return nil, apierr.New(apierr.CodeInvalidArgument, "域名不能为空", nil)
+	}
+	output, err := c.run(ctx, "domiflist", name)
+	if err != nil {
+		return nil, err
+	}
+	var result []DomainInterface
+	for _, line := range strings.Split(output, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 5 {
+			continue
+		}
+		model := fields[3]
+		mac := fields[4]
+		if model == "Model" || strings.HasPrefix(mac, "MAC") {
+			continue
+		}
+		result = append(result, DomainInterface{
+			Name:   fields[0],
+			Type:   fields[1],
+			Source: fields[2],
+			Model:  model,
+			MAC:    mac,
+		})
+	}
+	return result, nil
+}
+
 // DomainVNCPort 返回域 VNC 图形设备的本地端口。
 func (c *Client) DomainVNCPort(ctx context.Context, name string) (int, error) {
 	if strings.TrimSpace(name) == "" {

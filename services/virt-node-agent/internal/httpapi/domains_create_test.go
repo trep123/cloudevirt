@@ -23,6 +23,7 @@ type fakeOperator struct {
 	defineCall int
 	startCall  int
 	addresses  []libvirt.DomainAddress
+	interfaces []libvirt.DomainInterface
 	vncPort    int
 }
 
@@ -50,6 +51,10 @@ func (f *fakeOperator) DomainState(ctx context.Context, name string) (string, er
 
 func (f *fakeOperator) DomainAddresses(ctx context.Context, name string) ([]libvirt.DomainAddress, error) {
 	return f.addresses, nil
+}
+
+func (f *fakeOperator) DomainInterfaces(ctx context.Context, name string) ([]libvirt.DomainInterface, error) {
+	return f.interfaces, nil
 }
 
 func (f *fakeOperator) DomainVNCPort(ctx context.Context, name string) (int, error) {

@@ -122,6 +122,10 @@ class AgentClient:
         """读取域内网卡的 IPv4/IPv6 地址。"""
         return self.get_json(f'/api/v1/domains/{quote(name, safe="")}/addresses')
 
+    def domain_interfaces(self, name: str) -> dict:
+        """读取域网卡接口信息。"""
+        return self.get_json(f'/api/v1/domains/{quote(name, safe="")}/interfaces')
+
     def domain_action(self, name: str, action: str) -> dict:
         """执行域操作：start / shutdown / force-stop / reboot。"""
         return self.request_json(f'/api/v1/domains/{name}/{action}', 'POST', {})

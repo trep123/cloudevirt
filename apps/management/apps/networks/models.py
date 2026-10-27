@@ -12,6 +12,7 @@ class NetworkType(models.TextChoices):
 
     LIBVIRT_NETWORK = 'LIBVIRT_NETWORK', 'libvirt 网络'
     BRIDGE = 'BRIDGE', 'Linux 网桥'
+    OVS = 'OVS', 'Open vSwitch 网桥'
 
 
 class Network(models.Model):
