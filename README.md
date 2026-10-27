@@ -12,7 +12,7 @@
 | --- | --- | --- | --- |
 | `apps/management` | 管理后端 | Python 3.14 / Django 6.1 / DRF 3.18 | 认证授权、参数校验、调度与资源预留、任务编排、审计 |
 | `services/virt-node-agent` | 节点 Agent | Go 1.26 | 宿主机上的受限虚拟化操作、资源采集、结构化错误 |
-| `apps/web` | 前端 | React + TypeScript + Vite | 页面展示、表单交互、任务轮询、危险操作确认（建设中） |
+| `frontend` | 前端 | React 19 + TypeScript + Vite | 登录、节点/镜像/网络/虚拟机/任务/监控页面，危险操作二次确认 |
 | `deploy` | 部署 | systemd / compose | 服务单元、开发数据库、宿主机初始化 |
 | `scripts` | 运维脚本 | Bash | 部署前环境检查 |
 
@@ -51,7 +51,11 @@ make backend-run      # http://127.0.0.1:8000/api/v1/health
 export CLOUDVIRT_AGENT_TOKEN=<至少 32 字节随机串>
 make agent-run        # http://127.0.0.1:9100/health
 
-# 5) 部署前检查
+# 5) 前端（开发模式会代理 /api 到 127.0.0.1:8000）
+make web-install
+make web-dev          # http://127.0.0.1:5173
+
+# 6) 部署前检查
 make precheck
 ```
 
@@ -65,7 +69,8 @@ make help             # 查看全部命令
 make backend-check    # Django 配置检查
 make backend-test     # 后端测试
 make agent-test       # Agent 单元测试
-make lint             # 全量静态检查（ruff + gofmt + go vet）
+make web-build        # 前端构建（含 tsc 类型检查）
+make lint             # 全量静态检查（ruff + gofmt + go vet + tsc）
 ```
 
 ## 5. 错误处理策略

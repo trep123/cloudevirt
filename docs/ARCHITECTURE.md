@@ -244,3 +244,24 @@ Agent 侧等价结构：{"code":"LIBVIRT_UNAVAILABLE","message":"...","request_i
 | ADR-008 | 孤儿资源默认只出报告，不自动删除 | 《手册》8.3，避免误删 | 已定 |
 | ADR-009 | 认证方式：同源部署用 Session + CSRF；跨域/独立部署用 DRF Token，Token 不持久化到 localStorage | 兼顾安全与部署形态；细节见 RBAC_AND_SETTINGS.md 第 3 章 | 已定 |
 | ADR-010 | 域类型默认 kvm；仅当环境显式声明 TCG（CLOUDVIRT_ALLOW_TCG=true）时使用 qemu，且相关验收必须标注「TCG 模拟，非硬件加速」 | 本环境无 /dev/kvm，需保留开发验证通路，同时禁止把 TCG 结果当作生产结论 | 已定 |
+
+## 7. 前端实现（模块 K 基础版）
+
+技术栈：React 19 + TypeScript + Vite；同源 Session + CSRF（ADR-009），开发模式由 Vite 代理 `/api` 到后端。
+
+| 页面 | 能力 |
+| --- | --- |
+| 登录 / 强制改密 | 用户名密码登录；`must_change_password` 时强制进入改密页 |
+| 虚拟机 | 列表（观测状态/任务状态/错误分离展示）、创建表单（节点/镜像/网络/规格）、启动/关机/重启/强停、删除（磁盘保留或删除二次确认） |
+| 节点 | 状态、资源快照与过期标记、手动刷新 |
+| 镜像 | 列表、登记节点已有文件、删除 |
+| 网络 | 白名单列表（管理网显式标注不可接入） |
+| 任务 | 列表与详情（事件流水） |
+| 监控 | 概览统计、活跃告警、手动对账 |
+
+约定：
+
+- API 客户端统一处理 `credentials: same-origin`、从 `csrftoken` Cookie 读取并附加 `X-CSRFToken`；
+- 错误统一解析 `{error:{code,message,details,request_id}}`，界面展示 message + code + request_id；
+- 危险操作（强停、删除、删盘）必须二次确认；权限不足由后端 403 兜底，前端不做安全边界；
+- 资源类数值统一格式化（B→TiB），时间按本地时区展示。
