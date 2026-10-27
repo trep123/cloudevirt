@@ -34,6 +34,7 @@ func main() {
 	}
 
 	client := libvirt.NewClient(time.Duration(cfg.MaxRequestSeconds) * time.Second)
+	client.LeaseFile = cfg.DHCPLeaseFile
 	handler := httpapi.NewRouter(httpapi.Dependencies{
 		Version:          cfg.Version,
 		Token:            cfg.Token,

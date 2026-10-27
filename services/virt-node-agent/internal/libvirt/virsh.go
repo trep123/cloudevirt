@@ -49,6 +49,8 @@ type Client struct {
 	URI string
 	// Timeout 是单次命令超时。
 	Timeout time.Duration
+	// LeaseFile 是 OVS 独立 DHCP 的租约文件路径。
+	LeaseFile string
 }
 
 // NewClient 创建默认客户端。
@@ -121,7 +123,57 @@ func (c *Client) DomainAddresses(ctx context.Context, name string) ([]DomainAddr
 			addresses = append(addresses, item)
 		}
 	}
+
+	// libvirt 租约来源不包含 OVS 独立 dnsmasq，按 MAC 补充租约文件中的地址
+	if c.LeaseFile != "" {
+		if interfaces, err := c.DomainInterfaces(ctx, name); err == nil {
+			leases := parseDHCPLeases(c.LeaseFile)
+			for _, item := range interfaces {
+				address, ok := leases[strings.ToLower(item.MAC)]
+				if !ok {
+					continue
+				}
+				protocol := "ipv4"
+				if strings.Contains(address, ":") {
+					protocol = "ipv6"
+				}
+				key := protocol + "|" + address
+				if seen[key] {
+					continue
+				}
+				seen[key] = true
+				addresses = append(addresses, DomainAddress{
+					Interface: item.Name,
+					MAC:       item.MAC,
+					Protocol:  protocol,
+					Address:   address,
+				})
+			}
+		}
+	}
 	return addresses, nil
+}
+
+// parseDHCPLeases 解析 dnsmasq 租约文件，返回 MAC -> IP。
+func parseDHCPLeases(path string) map[string]string {
+	result := make(map[string]string)
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return result
+	}
+	for _, line := range strings.Split(string(content), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 3 {
+			continue
+		}
+		mac := strings.ToLower(fields[1])
+		address := fields[2]
+		if mac == "" || address == "" {
+			continue
+		}
+		result[mac] = address
+	}
+	return result
 }
 
 // parseDomainAddresses 解析 virsh domifaddr 表格输出。

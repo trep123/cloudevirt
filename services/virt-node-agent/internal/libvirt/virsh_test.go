@@ -1,6 +1,8 @@
 package libvirt
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -49,6 +51,19 @@ func TestParseDomainAddresses(t *testing.T) {
 	}
 	if addresses[1].Protocol != "ipv6" || addresses[1].Address != "fd00::10" {
 		t.Errorf("IPv6 解析错误: %+v", addresses[1])
+	}
+}
+
+// TestParseDHCPLeases 校验 dnsmasq 租约解析。
+func TestParseDHCPLeases(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "leases")
+	content := "1793153280 32:26:7a:a7:bd:03 192.168.150.105 * 01:32:26:7a:a7:bd:03\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	leases := parseDHCPLeases(path)
+	if leases["32:26:7a:a7:bd:03"] != "192.168.150.105" {
+		t.Fatalf("租约解析错误: %+v", leases)
 	}
 }
 

@@ -16,6 +16,7 @@ const (
 	defaultListen            = "127.0.0.1:9100"
 	defaultImageDir          = "/var/lib/cloudvirt/images"
 	defaultDiskDir           = "/var/lib/cloudvirt/disks"
+	defaultDHCPLeaseFile     = "/var/lib/misc/dnsmasq.ovs.leases"
 	defaultMaxRequestSeconds = 120
 
 	// MinTokenLength 是 Agent 共享令牌的最小长度，过短视为配置错误。
@@ -32,6 +33,8 @@ type Config struct {
 	ImageDir string
 	// DiskDir 是虚拟磁盘根目录，所有磁盘路径必须位于该目录内。
 	DiskDir string
+	// DHCPLeaseFile 是 OVS 独立 DHCP 的租约文件，用于补充域 IP。
+	DHCPLeaseFile string
 	// MaxRequestSeconds 是单个请求的最长处理时间。
 	MaxRequestSeconds int
 	// AllowDestructive 是宿主机侧的额外安全开关，不能替代后端授权。
@@ -49,6 +52,7 @@ func Load() (Config, error) {
 		Token:            os.Getenv("CLOUDVIRT_AGENT_TOKEN"),
 		ImageDir:         envOrDefault("CLOUDVIRT_IMAGE_DIR", defaultImageDir),
 		DiskDir:          envOrDefault("CLOUDVIRT_DISK_DIR", defaultDiskDir),
+		DHCPLeaseFile:    envOrDefault("CLOUDVIRT_DHCP_LEASE_FILE", defaultDHCPLeaseFile),
 		AllowDestructive: envBool("CLOUDVIRT_ALLOW_DESTRUCTIVE"),
 		Version:          envOrDefault("CLOUDVIRT_AGENT_VERSION", "0.1.0"),
 	}

@@ -146,23 +146,32 @@ virsh -c qemu:///system list --all
 
 ### 6.1 Open vSwitch 网桥（可选）
 
-当前开发环境已安装 `openvswitch-switch` 并创建 `ovsbr0`，通过 veth 接入 libvirt `default` 网络以复用 DHCP/NAT，**不修改管理网卡 ens18**：
+当前开发环境已安装 `openvswitch-switch` 并创建 `ovsbr0`，使用独立 DHCP/NAT，**不修改管理网卡 ens18**：
+
+| 项 | 值 |
+| --- | --- |
+| OVS 网桥 | `ovsbr0` |
+| 网关内网口 | `ovsbr0-int`，192.168.150.1/24 |
+| DHCP | dnsmasq，192.168.150.100-200，租约文件 `/var/lib/misc/dnsmasq.ovs.leases` |
+| NAT | nftables 表 `inet cloudvirt_ovs`，出接口 ens18 |
+| 持久化 | `cloudvirt-ovs-net.service` + `cloudvirt-ovs-dhcp.service` |
 
 ```bash
-sudo apt install -y openvswitch-switch
+sudo apt install -y openvswitch-switch dnsmasq
 sudo ovs-vsctl add-br ovsbr0
-sudo ip link set ovsbr0 up
-# veth 接入 libvirt 默认网络（持久化由 cloudvirt-ovs-link.service 完成）
-sudo ip link add ovs-virbr type veth peer name virbr-ovs
-sudo ovs-vsctl add-port ovsbr0 ovs-virbr
-sudo ip link set ovs-virbr up && sudo ip link set virbr-ovs up
-sudo ip link set virbr-ovs master virbr0
+sudo ovs-vsctl --may-exist add-port ovsbr0 ovsbr0-int -- set Interface ovsbr0-int type=internal
+sudo ip link set ovsbr0 up && sudo ip link set ovsbr0-int up
+sudo ip addr replace 192.168.150.1/24 dev ovsbr0-int
+sudo sysctl -w net.ipv4.ip_forward=1
+# 部署 scripts/cloudvirt-ovs-net.sh、scripts/cloudvirt-ovs-dhcp.conf
+# 与 deploy/systemd/cloudvirt-ovs-*.service 后：
+sudo systemctl enable --now cloudvirt-ovs-net.service cloudvirt-ovs-dhcp.service
 ```
 
-- 持久化单元：`/etc/systemd/system/cloudvirt-ovs-link.service`，脚本 `/usr/local/sbin/cloudvirt-ovs-link.sh`
-- 平台网络白名单中登记：名称 `ovs-nat`、类型 `OVS`、网桥 `ovsbr0`
-- 创建虚拟机时会注入 `<virtualport type='openvswitch'/>`；VLAN 通过接口的 `<vlan><tag/></vlan>` 注入
-- 若需要把 OVS 直接桥接物理上联，必须单独规划并从带外控制台操作，禁止直接改动管理网卡
+- 平台网络白名单登记：名称 `ovs-nat`、类型 `OVS`、网桥 `ovsbr0`，子网 `192.168.150.0/24`、网关 `192.168.150.1`、DHCP 池 `192.168.150.100-200`
+- 创建虚拟机时注入 `<virtualport type='openvswitch'/>`
+- Agent 通过 `CLOUDVIRT_DHCP_LEASE_FILE`（默认 `/var/lib/misc/dnsmasq.ovs.leases`）补充 OVS 虚拟机的 DHCP 地址
+- 若要把 OVS 直接桥接物理上联，必须单独规划并从带外控制台操作，禁止直接改动管理网卡
 
 ## 7. 服务部署
 

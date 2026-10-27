@@ -1,0 +1,13 @@
+[Unit]
+Description=CloudVirt OVS DHCP server
+After=cloudvirt-ovs-net.service
+Requires=cloudvirt-ovs-net.service
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/dnsmasq --keep-in-foreground --conf-file=/etc/cloudvirt/ovs-dhcp.conf
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

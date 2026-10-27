@@ -1,0 +1,12 @@
+[Unit]
+Description=CloudVirt OVS network and NAT
+After=openvswitch-switch.service
+Wants=openvswitch-switch.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/cloudvirt-ovs-net.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
