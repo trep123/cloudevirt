@@ -7,9 +7,11 @@
  * - 错误统一抛 ApiError，保留后端 error.code / request_id 以便排查。
  */
 
-import type { ApiErrorBody, CurrentUser, Paginated } from "./types";
+import { type ApiErrorBody, type CurrentUser, type Paginated } from "./types";
 
 const BASE = "/api/v1";
+
+type PaginatedNodeAccess = { count: number; next: string | null; previous: string | null; results: import("./types").NodeAccess[] };
 
 export class ApiError extends Error {
   readonly status: number;
@@ -92,6 +94,8 @@ export const api = {
   }) => request<import("./types").Image>("/images", { method: "POST", body: JSON.stringify(body) }),
   deleteImage: (id: number) =>
     request<void>(`/images/${id}`, { method: "DELETE" }),
+  disks: (statusFilter?: string) =>
+    request<Paginated<import("./types").Disk>>(`/disks${statusFilter ? `?status=${statusFilter}` : "?page_size=100"}`),
   instances: () => request<Paginated<import("./types").Instance>>("/instances?page_size=100"),
   createInstance: (body: {
     name: string;
@@ -117,6 +121,26 @@ export const api = {
     ),
   tasks: () => request<Paginated<import("./types").Task>>("/tasks?page_size=50"),
   task: (id: string) => request<import("./types").Task>(`/tasks/${id}`),
+  templates: () => request<Paginated<import("./types").Template>>("/templates?page_size=100"),
+  createTemplate: (body: { name: string; vcpu: number; memory_mib: number; disk_gib: number; description?: string; is_public?: boolean }) =>
+    request<import("./types").Template>("/templates", { method: "POST", body: JSON.stringify(body) }),
+  updateTemplate: (id: number, body: Partial<{ name: string; vcpu: number; memory_mib: number; disk_gib: number; description: string; is_public: boolean }>) =>
+    request<import("./types").Template>(`/templates/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteTemplate: (id: number) => request<void>(`/templates/${id}`, { method: "DELETE" }),
+  users: () => request<Paginated<import("./types").User>>("/users?page_size=100"),
+  createUser: (body: { username: string; email?: string; display_name?: string; password?: string; roles?: string[]; is_active?: boolean }) =>
+    request<import("./types").User>("/users", { method: "POST", body: JSON.stringify(body) }),
+  updateUser: (id: number, body: Partial<{ email: string; display_name: string; roles: string[]; is_active: boolean }>) =>
+    request<import("./types").User>(`/users/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteUser: (id: number) => request<void>(`/users/${id}`, { method: "DELETE" }),
+  resetUserPassword: (id: number, password: string) =>
+    request<{ ok: boolean }>(`/users/${id}/reset-password`, { method: "POST", body: JSON.stringify({ password }) }),
+  userAudit: (id: number) => request<{ results: import("./types").AuditEvent[] }>(`/users/${id}/audit`),
+  nodeAccess: (nodeId?: number) =>
+    request<PaginatedNodeAccess>("/node-access" + (nodeId ? "?node=" + nodeId : "")),
+  createNodeAccess: (body: { node: number; user?: number; group?: number; permission: string }) =>
+    request<import("./types").NodeAccess>("/node-access", { method: "POST", body: JSON.stringify(body) }),
+  deleteNodeAccess: (id: number) => request<void>(`/node-access/${id}`, { method: "DELETE" }),
   networks: () => request<Paginated<import("./types").Network>>("/networks?page_size=100"),
   overview: () => request<import("./types").Overview>("/monitoring/overview"),
   alerts: () => request<Paginated<import("./types").Alert>>("/monitoring/alerts?status=ACTIVE"),

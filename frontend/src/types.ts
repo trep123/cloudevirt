@@ -66,6 +66,7 @@ export interface Network {
 
 export interface Disk {
   id: number;
+  instance: number;
   role: string;
   name: string;
   size_gib: number;
@@ -162,4 +163,51 @@ export interface TaskReference {
   id: string;
   status: string;
   status_url: string;
+}
+
+export interface Template {
+  id: number;
+  name: string;
+  description: string;
+  vcpu: number;
+  memory_mib: number;
+  disk_gib: number;
+  is_public: boolean;
+  created_by: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface User {
+  id: number;
+  username: string;
+  display_name: string;
+  email: string;
+  is_active: boolean;
+  roles: string[];
+  permissions: string[];
+  must_change_password: boolean;
+  last_login: string | null;
+  date_joined: string;
+}
+
+export interface AuditEvent {
+  id: number;
+  action: string;
+  target_type: string;
+  target_id: string;
+  details: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface NodeAccess {
+  id: number;
+  node: number;
+  node_name: string;
+  user: number | null;
+  username: string;
+  group: number | null;
+  group_name: string;
+  permission: string;
+  created_at: string;
 }

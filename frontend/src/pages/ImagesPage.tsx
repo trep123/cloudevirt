@@ -11,6 +11,8 @@ export function ImagesPage() {
   const [name, setName] = useState("");
   const [nodeId, setNodeId] = useState<string>("");
   const [relativePath, setRelativePath] = useState("");
+  const [osFamily, setOsFamily] = useState("");
+  const [osVersion, setOsVersion] = useState("");
   const [busy, setBusy] = useState(false);
 
   const reload = useCallback(async () => {
@@ -38,9 +40,11 @@ export function ImagesPage() {
         name,
         node: Number(nodeId),
         relative_path: relativePath,
+        os_family: osFamily || undefined,
+        os_version: osVersion || undefined,
       });
       setName("");
-      setRelativePath("");
+      setRelativePath(""); setOsFamily(""); setOsVersion("");
       await reload();
     } catch (err) {
       setError(describeError(err));
@@ -83,7 +87,7 @@ export function ImagesPage() {
           </label>
           <label>
             相对路径
-            <input value={relativePath} onChange={(e) => setRelativePath(e.target.value)} placeholder="iso/ubuntu.qcow2" required />
+            <input value={relativePath} onChange={(e) => setRelativePath(e.target.value)} placeholder="ubuntu" />
           </label>
           <button className="action primary" type="submit" disabled={busy || !nodeId}>
             {busy ? "校验中…" : "导入"}
