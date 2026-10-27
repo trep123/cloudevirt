@@ -148,13 +148,22 @@ button.action:disabled { opacity: 0.5; cursor: not-allowed; }
 .ip-tag { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; padding: 1px 6px; border-radius: 4px; background: #e0f2fe; color: #075985; white-space: nowrap; }
 .ip-ipv6 { background: #ede9fe; color: #5b21b6; }
 .vnc-panel { margin-bottom: 10px; }
-.vnc-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.vnc-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
 .vnc-status { font-size: 12px; color: #475569; }
 .vnc-connected { color: #166534; }
 .vnc-error { color: #b91c1c; }
 .vnc-disconnected { color: #92400e; }
-.vnc-screen { width: 100%; height: 480px; background: #000; border-radius: 8px; overflow: hidden; }
+.vnc-capture { font-size: 11px; padding: 2px 8px; border-radius: 999px; }
+.vnc-capture.on { background: #dcfce7; color: #166534; }
+.vnc-capture.off { background: #e5e7eb; color: #374151; }
+.vnc-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.vnc-screen { width: 100%; height: 480px; background: #000; border-radius: 8px; overflow: hidden; outline: none; }
 .vnc-screen canvas { display: block; margin: 0 auto; }
+.vnc-clipboard { margin-top: 10px; border-top: 1px solid #e2e8f0; padding-top: 10px; }
+.vnc-clipboard-title { font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 6px; }
+.vnc-clipboard textarea { width: 100%; padding: 8px 9px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; resize: vertical; }
+.vnc-clipboard-guest { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 8px; font-size: 12px; color: #475569; }
+.vnc-clipboard-guest code { background: #f1f5f9; padding: 3px 6px; border-radius: 4px; max-width: 100%; overflow: auto; }
 
 .json {
   background: #0f172a;

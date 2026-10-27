@@ -13,7 +13,11 @@ declare module "@novnc/novnc" {
     resizeSession: boolean;
     viewOnly: boolean;
     background: string;
+    focus(options?: FocusOptions): void;
+    blur(): void;
     disconnect(): void;
+    sendCtrlAltDel(): void;
+    clipboardPasteFrom(text: string): void;
     addEventListener(type: string, listener: (event: Event) => void): void;
     removeEventListener(type: string, listener: (event: Event) => void): void;
   }
