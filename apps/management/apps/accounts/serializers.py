@@ -68,7 +68,10 @@ class UserSerializer(serializers.ModelSerializer):
     def get_permissions(self, obj) -> list[str]:
         """返回用户经角色继承的全部权限码（按字母序）。"""
         return sorted(
-            obj.groups.values_list('permissions__content_type__app_label', 'permissions__codename')
+            f'{app_label}.{codename}'
+            for app_label, codename in obj.groups.values_list(
+                'permissions__content_type__app_label', 'permissions__codename'
+            )
         )
 
 

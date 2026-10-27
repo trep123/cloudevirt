@@ -8,17 +8,19 @@ import { MonitoringPage } from "./pages/MonitoringPage";
 import { NetworksPage } from "./pages/NetworksPage";
 import { NodesPage } from "./pages/NodesPage";
 import { TasksPage } from "./pages/TasksPage";
+import { UsersPage } from "./pages/UsersPage";
 import type { CurrentUser } from "./types";
 
-type PageKey = "instances" | "nodes" | "images" | "networks" | "tasks" | "monitoring";
+type PageKey = "instances" | "nodes" | "images" | "networks" | "tasks" | "monitoring" | "users";
 
-const NAV: { key: PageKey; label: string }[] = [
+const NAV: { key: PageKey; label: string; permission?: string }[] = [
   { key: "instances", label: "虚拟机" },
   { key: "nodes", label: "节点" },
   { key: "images", label: "镜像" },
   { key: "networks", label: "网络" },
   { key: "tasks", label: "任务" },
   { key: "monitoring", label: "监控" },
+  { key: "users", label: "用户与权限", permission: "accounts.manage_user" },
 ];
 
 export default function App() {
@@ -64,7 +66,7 @@ export default function App() {
     <div className="layout">
       <aside className="sidebar">
         <h1>CloudVirt</h1>
-        {NAV.map((item) => (
+        {NAV.filter((item) => !item.permission || user.permissions.includes(item.permission)).map((item) => (
           <button
             key={item.key}
             className={page === item.key ? "active" : ""}
@@ -88,6 +90,7 @@ export default function App() {
         {page === "networks" ? <NetworksPage /> : null}
         {page === "tasks" ? <TasksPage /> : null}
         {page === "monitoring" ? <MonitoringPage /> : null}
+        {page === "users" ? <UsersPage /> : null}
       </main>
     </div>
   );

@@ -134,8 +134,8 @@ export const api = {
   updateUser: (id: number, body: Partial<{ email: string; display_name: string; roles: string[]; is_active: boolean }>) =>
     request<import("./types").User>(`/users/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteUser: (id: number) => request<void>(`/users/${id}`, { method: "DELETE" }),
-  resetUserPassword: (id: number, password: string) =>
-    request<{ ok: boolean }>(`/users/${id}/reset-password`, { method: "POST", body: JSON.stringify({ password }) }),
+  resetUserPassword: (id: number) =>
+    request<{ username: string; password: string }>(`/users/${id}/reset-password`, { method: "POST" }),
   userAudit: (id: number) => request<{ results: import("./types").AuditEvent[] }>(`/users/${id}/audit`),
   nodeAccess: (nodeId?: number) =>
     request<PaginatedNodeAccess>("/node-access" + (nodeId ? "?node=" + nodeId : "")),

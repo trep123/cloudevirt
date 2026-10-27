@@ -13,6 +13,7 @@ export function UsersPage() {
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState<User | null>(null);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
+  const [credential, setCredential] = useState<{ username: string; password: string } | null>(null);
 
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -69,11 +70,14 @@ export function UsersPage() {
   }
 
   async function resetPassword(user: User) {
-    const pwd = window.prompt(`为 ${user.username} 设置新密码（至少 12 位）`);
-    if (!pwd) return;
+    if (!window.confirm(`确认重置 ${user.username} 的密码？旧密码将立即失效。`)) return;
+    setError(null);
+    setNotice(null);
     try {
-      await api.resetUserPassword(user.id, pwd);
-      setNotice(`已重置 ${user.username} 的密码`);
+      const result = await api.resetUserPassword(user.id);
+      setCredential(result);
+      setNotice(`已重置 ${result.username} 的密码，临时口令仅显示一次`);
+      await reload();
     } catch (err) { setError(describeError(err)); }
   }
 
@@ -91,6 +95,12 @@ export function UsersPage() {
       <div className="page-head"><h2>用户管理</h2><button className="action" onClick={() => void reload()}>刷新</button></div>
       <ErrorBanner message={error} />
       {notice ? <div className="banner banner-info">{notice}</div> : null}
+      {credential ? (
+        <div className="banner banner-info">
+          临时口令（关闭后不可再查看）：<strong>{credential.username}</strong> / <code>{credential.password}</code>
+          <button className="action" onClick={() => setCredential(null)}>我已记录</button>
+        </div>
+      ) : null}
       <Card title="创建用户">
         <form className="inline" onSubmit={submit}>
           <label>用户名<input value={username} onChange={(e) => setUsername(e.target.value)} required /></label>
