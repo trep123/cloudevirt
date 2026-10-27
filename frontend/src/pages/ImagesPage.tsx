@@ -4,6 +4,7 @@ import { api } from "../api";
 import { Card, Empty, ErrorBanner, StatusBadge, describeError, formatBytes } from "../components/ui";
 import type { Image, Node } from "../types";
 
+
 export function ImagesPage() {
   const [images, setImages] = useState<Image[]>([]);
   const [nodes, setNodes] = useState<Node[]>([]);
@@ -14,6 +15,9 @@ export function ImagesPage() {
   const [osFamily, setOsFamily] = useState("");
   const [osVersion, setOsVersion] = useState("");
   const [busy, setBusy] = useState(false);
+  const [editImage, setEditImage] = useState<Image | null>(null);
+  const [editFamily, setEditFamily] = useState("");
+  const [editVersion, setEditVersion] = useState("");
 
   const reload = useCallback(async () => {
     try {
@@ -57,6 +61,26 @@ export function ImagesPage() {
     if (!window.confirm(`确认删除镜像 ${image.name}？将同时清理节点上的文件。`)) return;
     try {
       await api.deleteImage(image.id);
+      await reload();
+    } catch (err) {
+      setError(describeError(err));
+    }
+  }
+
+  function showEdit(image: Image) {
+    setEditImage(image);
+    setEditFamily(image.os_family || "");
+    setEditVersion(image.os_version || "");
+  }
+
+  async function saveEdit() {
+    if (!editImage) return;
+    try {
+      await api.request<Image>(`/images/${editImage.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ os_family: editFamily, os_version: editVersion }),
+      });
+      setEditImage(null);
       await reload();
     } catch (err) {
       setError(describeError(err));
@@ -123,6 +147,7 @@ export function ImagesPage() {
                   <td>{formatBytes(image.virtual_size_bytes)}</td>
                   <td className="mono">{image.relative_path}</td>
                   <td>
+                    <button className="action" onClick={() => showEdit(image)}>编辑</button>
                     <button className="action danger" onClick={() => void remove(image)}>删除</button>
                   </td>
                 </tr>
@@ -131,6 +156,16 @@ export function ImagesPage() {
           </table>
         )}
       </Card>
+      {editImage ? (
+        <Card title={`编辑镜像：${editImage.name}`}>
+          <form className="inline" onSubmit={(e) => { e.preventDefault(); void saveEdit(); }}>
+            <label>系统系列<input value={editFamily} onChange={(e) => setEditFamily(e.target.value)} placeholder="ubuntu" /></label>
+            <label>系统版本<input value={editVersion} onChange={(e) => setEditVersion(e.target.value)} placeholder="24.04" /></label>
+            <button className="action primary" type="submit">保存</button>
+            <button className="action" type="button" onClick={() => setEditImage(null)}>取消</button>
+          </form>
+        </Card>
+      ) : null}
     </>
   );
 }

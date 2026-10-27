@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { api } from "../api";
 import { Card, Empty, ErrorBanner, StatusBadge, describeError, formatTime } from "../components/ui";
-import type { Image, Instance, Network, Node } from "../types";
+import type { Image, Instance, Network, Node, Template } from "../types";
 
 const ACTIONS: { key: string; label: string; danger?: boolean }[] = [
   { key: "start", label: "启动" },
@@ -16,6 +16,7 @@ export function InstancesPage() {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [images, setImages] = useState<Image[]>([]);
   const [networks, setNetworks] = useState<Network[]>([]);
+  const [templates, setTemplates] = useState<Template[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -27,19 +28,32 @@ export function InstancesPage() {
   const [vcpu, setVcpu] = useState(2);
   const [memory, setMemory] = useState(2048);
   const [disk, setDisk] = useState(20);
+  const [templateId, setTemplateId] = useState("");
+
+  function applyTemplate(id: number | null) {
+    if (!id) { setTemplateId(""); return; }
+    const tpl = templates.find((t) => t.id === id);
+    if (!tpl) return;
+    setTemplateId(String(id));
+    setVcpu(tpl.vcpu);
+    setMemory(tpl.memory_mib);
+    setDisk(tpl.disk_gib);
+  }
 
   const reload = useCallback(async () => {
     try {
-      const [instancePage, nodePage, imagePage, networkPage] = await Promise.all([
+      const [instancePage, nodePage, imagePage, networkPage, templatePage] = await Promise.all([
         api.instances(),
         api.nodes(),
         api.images(),
         api.networks(),
+        api.templates(),
       ]);
       setInstances(instancePage.results);
       setNodes(nodePage.results);
       setImages(imagePage.results.filter((image) => image.is_ready));
       setNetworks(networkPage.results.filter((network) => network.is_usable));
+      setTemplates(templatePage.results);
       setError(null);
     } catch (err) {
       setError(describeError(err));
@@ -110,6 +124,13 @@ export function InstancesPage() {
       {notice ? <div className="banner banner-info">{notice}</div> : null}
       <Card title="创建虚拟机">
         <form className="inline" onSubmit={submit}>
+          <label>
+            模板
+            <select value={templateId} onChange={(e) => applyTemplate(Number(e.target.value) || null)}>
+              <option value="">自定义</option>
+              {templates.map((tpl) => <option key={tpl.id} value={tpl.id}>{tpl.name} ({tpl.vcpu}C{tpl.memory_mib}M{tpl.disk_gib}G)</option>)}
+            </select>
+          </label>
           <label>
             名称
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="vm-demo-01" required />

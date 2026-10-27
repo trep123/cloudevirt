@@ -69,6 +69,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
+  request,
   me: () => request<CurrentUser>("/auth/me"),
   login: (username: string, password: string) =>
     request<CurrentUser>("/auth/login", {

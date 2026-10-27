@@ -8,16 +8,20 @@ export function DisksPage() {
   const [disks, setDisks] = useState<Disk[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("");
+  const [instanceFilter, setInstanceFilter] = useState("");
 
   const reload = useCallback(async () => {
     try {
-      const page = await api.disks(statusFilter);
+      const params = new URLSearchParams({ page_size: "100" });
+      if (statusFilter) params.set("status", statusFilter);
+      if (instanceFilter) params.set("instance", instanceFilter);
+      const page = await api.request<import("../types").Paginated<import("../types").Disk>>(`/disks?${params.toString()}`);
       setDisks(page.results);
       setError(null);
     } catch (err) {
       setError(describeError(err));
     }
-  }, [statusFilter]);
+  }, [statusFilter, instanceFilter]);
 
   useEffect(() => { void reload(); }, [reload]);
 
@@ -25,6 +29,9 @@ export function DisksPage() {
     <>
       <div className="page-head">
         <h2>磁盘与卷</h2>
+        <label>实例 ID
+          <input value={instanceFilter} onChange={(e) => setInstanceFilter(e.target.value)} placeholder="过滤" />
+        </label>
         <label>状态
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
             <option value="">全部</option>
