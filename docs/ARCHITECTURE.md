@@ -112,22 +112,36 @@ UNKNOWN → ONLINE ⇄ DEGRADED → OFFLINE；MAINTENANCE 为人工置位，不�
 | GET | /api/v1/health | 健康检查（免认证） | 200 |
 | POST | /api/v1/auth/login/ | 登录 | 200 |
 | POST | /api/v1/auth/logout/ | 登出 | 200 |
-| GET/POST | /api/v1/nodes/ | 节点列表 / 注册 | 200 / 201 |
+| GET/POST | /api/v1/nodes/ | 节点列表（`nodes.view_node`） / 注册（`nodes.add_node`） | 200 / 201 |
 | GET | /api/v1/nodes/{id}/ | 节点详情（含资源与采样时间） | 200 |
-| POST | /api/v1/nodes/{id}/refresh/ | 主动刷新资源 | 202 |
-| GET | /api/v1/images/ | 镜像列表 | 200 |
+| POST | /api/v1/nodes/{id}/refresh/ | 主动刷新资源（`nodes.refresh_node`，同步返回最新节点） | 200 |
+| GET | /api/v1/images/ | 镜像列表（`images.view_image`） | 200 |
+| POST | /api/v1/images/ | 导入/登记镜像（`images.add_image`，由节点 Agent 检查文件） | 201 / 200 |
 | POST | /api/v1/images/ | 镜像导入（上传或登记） | 202 |
-| DELETE | /api/v1/images/{id}/ | 删除镜像（被引用 → 409 IMAGE_IN_USE） | 202 |
-| GET/POST | /api/v1/instances/ | 实例列表 / 创建 | 200 / **202** |
+| DELETE | /api/v1/images/{id}/ | 删除镜像（`images.delete_image`，`purge_file` 显式声明是否删文件） | 204 |
+| GET/POST | /api/v1/instances/ | 实例列表（`instances.view_instance`） / 创建（`instances.add_instance`，**202 + 任务**） | 200 / 202 |
 | GET | /api/v1/instances/{id}/ | 实例详情 | 200 |
-| POST | /api/v1/instances/{id}/start/ | 启动 | 202 |
+| POST | /api/v1/instances/{id}/start/ | 启动（已运行返回 200 幂等） | 202 |
 | POST | /api/v1/instances/{id}/shutdown/ | 正常关机 | 202 |
 | POST | /api/v1/instances/{id}/force-stop/ | 强制停止（高权限 + 二次确认） | 202 |
 | POST | /api/v1/instances/{id}/reboot/ | 重启 | 202 |
-| DELETE | /api/v1/instances/{id}/ | 删除（参数显式声明是否删除磁盘） | 202 |
-| GET | /api/v1/tasks/ | 任务列表 | 200 |
+| DELETE | /api/v1/instances/{id}/ | 删除（`purge_disk` 显式声明是否删盘，删盘需 `delete_disk_instance`） | 202 |
+| GET | /api/v1/disks/ | 磁盘记录列表（`instances.view_instance`，支持 `instance` / `status` 过滤） | 200 |
+| GET/POST | /api/v1/templates/ | 模板列表 / 创建（`templates.view_template` / `add_template`） | 200 / 201 |
+| GET/PATCH/DELETE | /api/v1/templates/{id}/ | 模板详情 / 更新 / 软删除 | 200 / 204 |
+| GET/POST | /api/v1/node-access/ | 节点授权列表 / 创建（`nodes.add_node`） | 200 / 201 |
+| DELETE | /api/v1/node-access/{id}/ | 删除授权 | 204 |
+| GET | /api/v1/users/{id}/audit/ | 用户最近审计事件（`accounts.manage_user`） | 200 |
+| GET | /api/v1/tasks/ | 任务列表（`tasks.view_task`） | 200 |
+| GET | /api/v1/tasks/{id}/ | 任务详情与事件流水 | 200 |
+| POST | /api/v1/tasks/{id}/cancel/ | 取消等待中任务（`tasks.cancel_task`） | 200 |
+| POST | /api/v1/tasks/{id}/retry/ | 重试失败任务（`tasks.retry_task`） | 200 |
 | GET | /api/v1/tasks/{id}/ | 任务详情与进度 | 200 |
-| GET | /api/v1/networks/ | 网络列表（白名单） | 200 |
+| POST | /api/v1/images/inspect | 检查镜像文件：路径边界、`qemu-img info`、SHA-256 | 200 |
+| DELETE | /api/v1/images | 删除镜像文件（需 `CLOUDVIRT_ALLOW_DESTRUCTIVE=true`） | 200 |
+| GET | /api/v1/networks/ | 网络白名单列表（`networks.view_network`） | 200 |
+| POST | /api/v1/networks/ | 登记白名单网络（`networks.manage_network`） | 201 |
+| PATCH/DELETE | /api/v1/networks/{id}/ | 更新 / 软删除白名单（管理网不可设为默认） | 200 / 204 |
 | GET | /api/v1/audit/ | 审计事件 | 200 |
 | GET | /api/v1/monitoring/overview/ | 资源与告警概览 | 200 |
 | GET | /api/v1/monitoring/reconciliation/ | 对账差异 | 200 |
@@ -149,7 +163,8 @@ UNKNOWN → ONLINE ⇄ DEGRADED → OFFLINE；MAINTENANCE 为人工置位，不�
 | POST | /api/v1/disks | 创建磁盘（路径受根目录约束） |
 | GET | /api/v1/disks/{name}/info | qemu-img info 复核 |
 | DELETE | /api/v1/disks/{name} | 删除磁盘（二次校验引用与路径） |
-| GET | /api/v1/networks | 白名单网络列表与状态 |
+| GET | /api/v1/networks | 本机 libvirt 网络列表与活动状态 |
+| GET | /api/v1/disks | 磁盘目录文件清单（名称、实际/虚拟容量），供孤儿与容量核对 |
 
 - 所有 Agent 请求需 `Authorization: Bearer <token>`；失败返回统一错误结构。
 - 用户侧权限与对象级授权规则见 [RBAC_AND_SETTINGS.md](./RBAC_AND_SETTINGS.md)。
@@ -236,3 +251,24 @@ Agent 侧等价结构：{"code":"LIBVIRT_UNAVAILABLE","message":"...","request_i
 | ADR-008 | 孤儿资源默认只出报告，不自动删除 | 《手册》8.3，避免误删 | 已定 |
 | ADR-009 | 认证方式：同源部署用 Session + CSRF；跨域/独立部署用 DRF Token，Token 不持久化到 localStorage | 兼顾安全与部署形态；细节见 RBAC_AND_SETTINGS.md 第 3 章 | 已定 |
 | ADR-010 | 域类型默认 kvm；仅当环境显式声明 TCG（CLOUDVIRT_ALLOW_TCG=true）时使用 qemu，且相关验收必须标注「TCG 模拟，非硬件加速」 | 本环境无 /dev/kvm，需保留开发验证通路，同时禁止把 TCG 结果当作生产结论 | 已定 |
+
+## 7. 前端实现（模块 K 基础版）
+
+技术栈：React 19 + TypeScript + Vite；同源 Session + CSRF（ADR-009），开发模式由 Vite 代理 `/api` 到后端。
+
+| 页面 | 能力 |
+| --- | --- |
+| 登录 / 强制改密 | 用户名密码登录；`must_change_password` 时强制进入改密页 |
+| 虚拟机 | 列表（观测状态/任务状态/错误分离展示）、创建表单（节点/镜像/网络/规格）、启动/关机/重启/强停、删除（磁盘保留或删除二次确认） |
+| 节点 | 状态、资源快照与过期标记、手动刷新 |
+| 镜像 | 列表、登记节点已有文件、删除 |
+| 网络 | 白名单列表（管理网显式标注不可接入） |
+| 任务 | 列表与详情（事件流水） |
+| 监控 | 概览统计、活跃告警、手动对账 |
+
+约定：
+
+- API 客户端统一处理 `credentials: same-origin`、从 `csrftoken` Cookie 读取并附加 `X-CSRFToken`；
+- 错误统一解析 `{error:{code,message,details,request_id}}`，界面展示 message + code + request_id；
+- 危险操作（强停、删除、删盘）必须二次确认；权限不足由后端 403 兜底，前端不做安全边界；
+- 资源类数值统一格式化（B→TiB），时间按本地时区展示。

@@ -172,11 +172,74 @@ virsh -c qemu:///system list --all
 | 迁移与角色同步 | `make backend-migrate` | 迁移后由 post_migrate 自动同步角色；新增业务模型后再执行 `python manage.py sync_roles` 补齐权限绑定 |
 | 创建首个管理员 | `CLOUDVIRT_BOOTSTRAP_ADMIN=true python manage.py bootstrap_admin --username admin` | 受部署开关保护，已存在管理员时拒绝执行；输出一次性口令并强制首次改密 |
 | 环境自检 | `make precheck` | 生产口径下缺 /dev/kvm 判失败；开发测试可用 `CLOUDVIRT_ALLOW_TCG=true` 降级 |
+| 周期对账 | `python manage.py reconcile` | 由 systemd timer / cron 周期执行，检测状态漂移、孤儿域、过期预留并生成告警 |
 
 登录采用同源 Session + CSRF（ADR-009）：前端需先请求 `/api/v1/auth/me`（或读取登录响应）获取 `csrftoken` Cookie，
 写操作时携带 `X-CSRFToken` 请求头；跨域部署改用 DRF Token 方案。
 
-## 10. 当前 BLOCKED 项（需负责人落实）
+
+## 10. 反向代理（nginx）与前端托管
+
+前端构建产物由 nginx 直接托管，`/api/` 反向代理到 Django，保持**同源**，因此 Session + CSRF 方案无需改配置（ADR-009）。
+
+| 项 | 值 |
+| --- | --- |
+| 站点配置 | `deploy/nginx/cloudvirt.conf`（软链到 `/etc/nginx/sites-enabled/cloudvirt`） |
+| 静态目录 | `/var/www/cloudvirt`（`npm run build` 的 `dist` 内容） |
+| 后端上游 | `127.0.0.1:8000`（gunicorn，见 `deploy/systemd/cloudvirt-management.service`） |
+| 代理头 | `Host`、`X-Real-IP`、`X-Forwarded-For`、`X-Forwarded-Proto` |
+| 缓存 | `/assets/` 30 天强缓存，`index.html` 不缓存 |
+
+部署命令：
+
+```bash
+# 前端
+cd frontend && npm ci && npm run build
+sudo mkdir -p /var/www/cloudvirt && sudo cp -r dist/* /var/www/cloudvirt/
+
+# nginx 站点
+sudo ln -sf $PWD/deploy/nginx/cloudvirt.conf /etc/nginx/sites-available/cloudvirt
+sudo ln -sf /etc/nginx/sites-available/cloudvirt /etc/nginx/sites-enabled/cloudvirt
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo nginx -s reload
+```
+
+后端需要的环境变量（代理场景）：
+
+| 变量 | 示例 | 说明 |
+| --- | --- | --- |
+| `DJANGO_ALLOWED_HOSTS` | `127.0.0.1,localhost,172.20.30.117` | 站点域名或 IP；**用哪个地址访问就必须包含哪个**，否则 400 |
+| `DJANGO_CSRF_TRUSTED_ORIGINS` | `http://172.20.30.117` | 与访问协议+域名/端口完全一致；缺失时登录等写操作被 403 拒绝 |
+| `DJANGO_USE_X_FORWARDED_HOST` | `false` | nginx 已透传 Host，一般无需开启 |
+
+外部 IP 访问的最小改动（以本机 `172.20.30.117` 为例）：
+
+```bash
+# /etc/cloudvirt/management.env
+DJANGO_ALLOWED_HOSTS=127.0.0.1,localhost,172.20.30.117
+DJANGO_CSRF_TRUSTED_ORIGINS=http://127.0.0.1,http://localhost,http://172.20.30.117
+```
+
+改完需重启后端（环境变量在进程启动时读取）：
+
+```bash
+sudo systemctl restart cloudvirt-management   # 或按 scripts/serve_local.sh 的方式重启 gunicorn
+```
+
+`scripts/serve_local.sh` 会自动把本机所有非回环网卡 IP 追加进这两个变量，
+因此本地演示直接 `CLOUDVIRT_AGENT_TOKEN=... ./scripts/serve_local.sh` 即可用外部 IP 访问。
+
+验证（实测已通过的命令）：
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1/            # 200 前端
+curl -s http://127.0.0.1/api/v1/health                                  # {"status":"ok",...}
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1/api/v1/auth/me  # 401（未登录）
+```
+
+本地一键启动（开发/演示）：`CLOUDVIRT_AGENT_TOKEN=<token> ./scripts/serve_local.sh`。
+
+## 11. 当前 BLOCKED 项（需负责人落实）
 
 | 项 | 影响 | 建议动作 |
 | --- | --- | --- |

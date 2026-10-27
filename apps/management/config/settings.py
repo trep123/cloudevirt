@@ -81,6 +81,10 @@ def parse_database_url(url: str) -> dict[str, object]:
 DEBUG = read_bool('DJANGO_DEBUG', False)
 ALLOWED_HOSTS = read_list('DJANGO_ALLOWED_HOSTS', ['localhost', '127.0.0.1'])
 
+# 反向代理（nginx）场景：显式声明可信来源与转发的 Host/Proto
+CSRF_TRUSTED_ORIGINS = read_list('DJANGO_CSRF_TRUSTED_ORIGINS', [])
+USE_X_FORWARDED_HOST = read_bool('DJANGO_USE_X_FORWARDED_HOST', False)
+
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', '')
 if not SECRET_KEY:
     if not DEBUG:
@@ -105,6 +109,7 @@ INSTALLED_APPS = [
     'apps.instances',
     'apps.tasks',
     'apps.networks',
+    'apps.templates',
     'apps.monitoring',
     'apps.audit',
 ]
@@ -177,6 +182,20 @@ SECURITY_LOGIN_LOCK_SECONDS = int(os.environ.get('SECURITY_LOGIN_LOCK_SECONDS', 
 SECURITY_PASSWORD_MIN_LENGTH = int(os.environ.get('SECURITY_PASSWORD_MIN_LENGTH', '12'))
 SECURITY_LOGIN_MAX_ATTEMPTS = int(os.environ.get('SECURITY_LOGIN_MAX_ATTEMPTS', '10'))
 SECURITY_LOGIN_WINDOW_SECONDS = int(os.environ.get('SECURITY_LOGIN_WINDOW_SECONDS', '300'))
+
+# 节点 Agent 调用配置（模块 C 起使用）
+AGENT_SHARED_TOKEN = os.environ.get('AGENT_SHARED_TOKEN', '')
+AGENT_REQUEST_TIMEOUT_SECONDS = int(os.environ.get('AGENT_REQUEST_TIMEOUT_SECONDS', '30'))
+
+# 实例规格上限（后续迁移到系统设置表）
+INSTANCE_MAX_VCPU = int(os.environ.get('INSTANCE_MAX_VCPU', '64'))
+INSTANCE_MAX_MEMORY_MIB = int(os.environ.get('INSTANCE_MAX_MEMORY_MIB', '131072'))
+INSTANCE_MAX_DISK_GIB = int(os.environ.get('INSTANCE_MAX_DISK_GIB', '2048'))
+# 关机等待与状态轮询
+INSTANCE_SHUTDOWN_TIMEOUT_SECONDS = int(os.environ.get('INSTANCE_SHUTDOWN_TIMEOUT_SECONDS', '60'))
+INSTANCE_STATE_POLL_INTERVAL_SECONDS = float(
+    os.environ.get('INSTANCE_STATE_POLL_INTERVAL_SECONDS', '2')
+)
 
 LANGUAGE_CODE = 'zh-hans'
 TIME_ZONE = 'UTC'

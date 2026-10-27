@@ -12,26 +12,43 @@
 | 登录/登出/改密、锁定与限流 | 已实现 | `apps/accounts/services.py`、`views.py` |
 | 权限判定与拒绝审计 | 已实现 | `common/permissions.py`（`check_permission`、`RequiresPermission`） |
 | 用户管理（创建/更新/停用/重置密码） | 已实现 | `apps/accounts/views.py` |
+| 任务查看/取消/重试 | 已实现 | `apps/tasks/views.py`，权限 `tasks.view_task` / `cancel_task` / `retry_task` |
+| 镜像查看/导入/删除 | 已实现 | `apps/images/views.py`，权限 `images.view_image` / `add_image` / `delete_image` |
+| 实例查看/创建 | 已实现 | `apps/instances/views.py`，权限 `instances.view_instance` / `add_instance` |
+| 实例启动/关机/强停/重启 | 已实现 | 权限 `instances.start_instance` / `shutdown_instance` / `force_stop_instance` / `reboot_instance` |
+| 实例删除与删盘 | 已实现 | `instances.delete_instance`；删盘另需 `instances.delete_disk_instance`（仅 Admin） |
+| 镜像引用保护 | 已实现 | 删除被实例引用的镜像返回 409 `IMAGE_IN_USE` |
+| 网络白名单 | 已实现 | `apps/networks/`，权限 `networks.view_network` / `manage_network`（仅 Admin）；管理网禁止接入 |
+| 监控与对账 | 已实现 | 查看用 `monitoring.view_alert`；触发对账需 `monitoring.run_reconciliation`（仅 Admin） |
+| 磁盘清单 | 已实现 | `GET /api/v1/disks`，复用 `instances.view_instance` 权限（只读） |
+| 模板管理 | 已实现 | `apps/templates/`，权限 `templates.view_template`（Viewer+）/ `add_template`（Admin）；创建实例可选模板 |
+| 节点对象级授权 | 已实现 | `apps/nodes/access.py` + `/api/v1/node-access`；存在任意授权记录后非 Admin 只能访问被授权节点 |
+| 用户权限矩阵与审计 | 已实现 | `UserSerializer` 增加 `permissions`；`GET /users/{id}/audit` 返回最近审计事件 |
 | 首个管理员引导 | 已实现 | `bootstrap_admin` 命令（需 `CLOUDVIRT_BOOTSTRAP_ADMIN=true`） |
 | 审计事件 | 已实现 | `apps/audit`（事件模型 + `record_audit`） |
-| 节点级对象授权（NodeAccess） | 待模块 C | 节点模型建立后补充 |
+| 节点注册/刷新权限 | 已实现 | `nodes.add_node`、`nodes.refresh_node`（随节点模型同步到角色） |
 | 系统设置表 | 待阶段 4 | 当前阈值走环境变量（见第 8 章） |
 | 密码策略在线配置 | 待阶段 4 | 当前走 `SECURITY_*` 环境变量 |
+
+已知限制（模块 E）：
+
+1. MVP 采用「登记节点已有文件」的导入方式（Agent 负责检查文件），**尚未实现浏览器上传通道**；
+2. 镜像引用检查已接入：删除被实例引用的镜像返回 409 `IMAGE_IN_USE`。
 
 ## 1. 角色定义
 
 | 角色 | 定位 | 典型使用者 | Django 映射 |
 | --- | --- | --- | --- |
-| Admin | 系统配置、节点、镜像、实例全局管理；用户与权限管理；审计查看 | 平台管理员 | Group `Admin` |
-| Operator | 在**授权范围内**创建、启动、关机、重启虚拟机；可导入镜像 | 业务运维 | Group `Operator` |
-| Viewer | 只读查看节点、镜像、实例、任务 | 审计/观察人员 | Group `Viewer` |
+| 管理员 / 超级管理员 | 系统配置、节点、镜像、实例全局管理；用户与权限管理；审计查看；拥有全部权限 | 平台管理员 | Group `Admin`；`is_superuser` 另天然拥有全部权限 |
+| 学员 | 虚拟机、网络、镜像、磁盘操作；节点、模板、任务、监控只读 | 培训学员 | Group `Operator` |
+| 一般用户 | 仅虚拟机操作；其余模块只读 | 普通用户 | Group `Viewer` |
 
 - 角色即 Django Group，权限即 `Permission`（ADR-006）。初始化由数据迁移创建三个 Group 并绑定权限，禁止在代码里硬编码角色名判断（统一走 Permission）。
 - 用户可同时属于多个 Group；权限取并集；对象级范围另按第 4 章判定。
 
 ## 2. 权限码表
 
-| 权限 codename | 说明 | Admin | Operator | Viewer |
+| 权限 codename | 说明 | Admin | Operator（学员） | Viewer（一般用户） |
 | --- | --- | --- | --- | --- |
 | `node.view` | 查看节点与资源 | ✅ | ✅ | ✅ |
 | `node.create` | 注册节点 | ✅ | ❌ | ❌ |
@@ -42,15 +59,15 @@
 | `image.upload` | 导入/登记镜像 | ✅ | ✅ | ❌ |
 | `image.delete` | 删除镜像 | ✅ | ✅（仅自己创建的） | ❌ |
 | `network.view` | 查看网络 | ✅ | ✅ | ✅ |
-| `network.manage` | 新增/变更网络白名单 | ✅ | ❌ | ❌ |
+| `network.manage` | 新增/变更网络白名单 | ✅ | ✅ | ❌ |
 | `instance.view` | 查看实例 | ✅ | ✅ | ✅ |
-| `instance.create` | 创建实例 | ✅ | ✅（授权节点内） | ❌ |
-| `instance.start` | 启动 | ✅ | ✅（授权范围内） | ❌ |
-| `instance.shutdown` | 正常关机 | ✅ | ✅（授权范围内） | ❌ |
-| `instance.reboot` | 重启 | ✅ | ✅（授权范围内） | ❌ |
-| `instance.force_stop` | 强制停止（断电风险，需二次确认 + 审计） | ✅ | ✅（授权范围内） | ❌ |
-| `instance.delete` | 删除实例（注销记录） | ✅ | ✅（授权范围内） | ❌ |
-| `instance.delete_disk` | 删除时一并删除虚拟磁盘（不可逆，需输入确认 + 审计） | ✅ | ❌ | ❌ |
+| `instance.create` | 创建实例 | ✅ | ✅（授权节点内） | ✅ |
+| `instance.start` | 启动 | ✅ | ✅（授权范围内） | ✅ |
+| `instance.shutdown` | 正常关机 | ✅ | ✅（授权范围内） | ✅ |
+| `instance.reboot` | 重启 | ✅ | ✅（授权范围内） | ✅ |
+| `instance.force_stop` | 强制停止（断电风险，需二次确认 + 审计） | ✅ | ✅（授权范围内） | ✅ |
+| `instance.delete` | 删除实例（注销记录） | ✅ | ✅（授权范围内） | ✅ |
+| `instance.delete_disk` | 删除时一并删除虚拟磁盘（不可逆，需输入确认 + 审计） | ✅ | ✅ | ❌ |
 | `task.view` | 查看任务 | ✅ | ✅ | ✅ |
 | `task.cancel` | 取消未开始任务 | ✅ | ✅（自己的任务） | ❌ |
 | `task.retry` | 重试失败任务 | ✅ | ✅（自己的任务） | ❌ |
@@ -60,7 +77,7 @@
 | `user.manage` | 用户/角色/节点授权管理 | ✅ | ❌ | ❌ |
 | `settings.manage` | 修改系统设置 | ✅ | ❌ | ❌ |
 
-- 上表是**默认基线**；Admin 可在「角色权限」页调整 Operator/Viewer 的权限集合（内置角色不可删除，可改权限）。
+- 上表是**默认基线**；Admin 可在「角色权限」页调整学员/一般用户的权限集合（内置角色不可删除，可改权限）。
 - 危险权限（`instance.force_stop`、`instance.delete_disk`、`user.manage`、`settings.manage`）的操作必须写审计，且建议限流。
 
 ## 3. 认证与会话

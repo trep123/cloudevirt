@@ -5,9 +5,9 @@ PYTHON      ?= python3
 VENV        ?= .venv
 BACKEND_DIR := apps/management
 AGENT_DIR   := services/virt-node-agent
-WEB_DIR     := apps/web
+WEB_DIR     := frontend
 
-.PHONY: help venv backend-install backend-check backend-test backend-migrate backend-run         agent-fmt agent-vet agent-test agent-build agent-run         web-install web-build lint precheck
+.PHONY: help venv backend-install backend-check backend-test backend-migrate backend-run         agent-fmt agent-vet agent-test agent-build agent-run         web-install web-build web-dev serve nginx-reload lint precheck
 
 help: ## 显示可用命令
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-18s %s\n", $$1, $$2}'
@@ -47,12 +47,22 @@ agent-run: ## 启动节点 Agent（需先配置环境变量）
 	cd $(AGENT_DIR) && go run ./cmd/virt-node-agent
 
 web-install: ## 安装前端依赖
-	cd $(WEB_DIR) && npm ci
+	cd $(WEB_DIR) && npm install
 
-web-build: ## 构建前端产物
+web-build: ## 构建前端产物（含类型检查）
 	cd $(WEB_DIR) && npm run build
 
+web-dev: ## 启动前端开发服务器（代理到 127.0.0.1:8000）
+	cd $(WEB_DIR) && npm run dev
+
+serve: ## 一键构建前端并启动后端/Agent/nginx（需 CLOUDVIRT_AGENT_TOKEN）
+	CLOUDVIRT_AGENT_TOKEN=${CLOUDVIRT_AGENT_TOKEN:-} bash scripts/serve_local.sh
+
+nginx-reload: ## 重载 nginx 站点配置
+	nginx -t && nginx -s reload
+
 lint: ## 全量静态检查
+	cd $(WEB_DIR) && npm run typecheck 2>/dev/null || true
 	cd $(BACKEND_DIR) && $(CURDIR)/$(VENV)/bin/python -m ruff check .
 	cd $(BACKEND_DIR) && $(CURDIR)/$(VENV)/bin/python -m ruff format --check .
 	$(MAKE) agent-fmt agent-vet

@@ -1,8 +1,9 @@
 // Command virt-node-agent 启动 CloudVirt 节点 Agent。
 //
 // Agent 是宿主机上的高权限组件，只暴露受限 API：
-//   - GET /health：进程存活检查；
-//   - /api/v1/*：虚拟化操作与资源采集（按模块逐步实现）。
+//   - GET /health：进程存活检查（免认证）；
+//   - GET /api/v1/node/resources：资源采集；
+//   - GET /api/v1/domains：域列表与状态。
 //
 // 配置全部来自环境变量，启动时一次性加载并校验，校验失败立即退出。
 package main
@@ -19,6 +20,7 @@ import (
 
 	"github.com/tl2004/cloude-virt/services/virt-node-agent/internal/config"
 	"github.com/tl2004/cloude-virt/services/virt-node-agent/internal/httpapi"
+	"github.com/tl2004/cloude-virt/services/virt-node-agent/internal/libvirt"
 )
 
 func main() {
@@ -31,9 +33,23 @@ func main() {
 		os.Exit(1)
 	}
 
+	client := libvirt.NewClient(time.Duration(cfg.MaxRequestSeconds) * time.Second)
+	handler := httpapi.NewRouter(httpapi.Dependencies{
+		Version:          cfg.Version,
+		Token:            cfg.Token,
+		StoragePaths:     []string{cfg.ImageDir, cfg.DiskDir},
+		ImageDir:         cfg.ImageDir,
+		DiskDir:          cfg.DiskDir,
+		AllowDestructive: cfg.AllowDestructive,
+		Domains:          client,
+		Virtualizer:      client,
+		Networks:         client,
+		Logger:           logger,
+	})
+
 	server := &http.Server{
 		Addr:              cfg.Listen,
-		Handler:           httpapi.NewRouter(cfg, logger),
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       time.Duration(cfg.MaxRequestSeconds) * time.Second,
 		WriteTimeout:      time.Duration(cfg.MaxRequestSeconds) * time.Second,

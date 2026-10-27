@@ -40,17 +40,17 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | A | 基础工程与部署配置 | NEW→部分完成（2026-10-26） | 阶段 1 | 无 | Ansible 初始化待补；前端工程待建 | 全仓 |
 | B | 用户认证、角色和授权 | NEW | 阶段 1（完善于 4） | A | 无 | 后端 accounts、前端登录 |
-| C | 节点管理与心跳 | NEW | 阶段 2 | A、D | Agent 可达 | 后端 nodes、Agent host |
-| D | Go 节点 Agent | NEW | 阶段 2 | A | Go 工具链、libvirt 开发库 | services/virt-node-agent |
-| E | 镜像管理 | NEW | 阶段 3 | A、B、D | 镜像目录、qemu-img | 后端 images、Agent storage |
+| C | 节点管理与心跳 | NEW→完成（2026-10-26） | 阶段 2 | A、D | 无 | 后端 nodes、Agent host |
+| D | Go 节点 Agent | NEW→部分完成（2026-10-26） | 阶段 2（创建能力在阶段 3） | A | 创建/生命周期接口待阶段 3 | services/virt-node-agent |
+| E | 镜像管理 | NEW→完成（2026-10-26，上传通道待后续） | 阶段 3 | A、B、D | 浏览器上传通道未实现 | 后端 images、Agent storage |
 | F | 存储与虚拟磁盘 | NEW | 阶段 3 | D、E | 磁盘目录与容量 | 后端 instances、Agent storage |
 | G | 实例模型与状态机 | NEW | 阶段 3 | A | 无 | 后端 instances |
-| H | 虚拟机创建 | NEW | 阶段 3 | C、D、E、F、G、J | 真实 KVM（验收） | 后端 + Agent + 前端 |
-| I | 生命周期操作 | NEW | 阶段 3 | G、H、J | 真实 KVM（验收） | 后端 + Agent + 前端 |
+| H | 虚拟机创建 | NEW→创建链路完成（2026-10-26） | 阶段 3 | C、D、E、F、G、J | 生命周期操作与前端待做 | 后端 + Agent |
+| I | 生命周期操作 | NEW→完成（2026-10-26，前端待做） | 阶段 3 | G、H、J | 无 | 后端 + Agent |
 | J | 任务队列、幂等与恢复 | NEW | 阶段 2（完善于 4） | A | 无 | 后端 tasks |
 | K | 前端页面与 API 客户端 | NEW | 阶段 2（完善于 3） | B、L | 无 | apps/web |
 | L | API 统一规范 | NEW→完成（2026-10-26） | 阶段 1 | A | 无 | 后端 common |
-| M | 网络管理 | NEW | 阶段 3（完善于 5） | D | libvirt 网络 / 网桥 | 后端 networks、Agent |
+| M | 网络管理 | NEW→完成（2026-10-26，多节点可用性待阶段 5） | 阶段 3（完善于 5） | D | 无 | 后端 networks、Agent |
 | N | 监控、对账和告警 | NEW | 阶段 4（完善于 6） | C、J | 无 | 后端 monitoring |
 | O | 安全加固 | NEW | 阶段 4 | B、D、L | 生产环境（验收） | 全栈 |
 | P | 备份、恢复与升级 | NEW | 阶段 6 | 全部 | 备份目标位置 | 运维 + 文档 |

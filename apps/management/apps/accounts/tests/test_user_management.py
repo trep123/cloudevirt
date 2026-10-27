@@ -39,6 +39,9 @@ class UserManagementTests(TestCase):
         created = get_user_model().objects.get(username='operator01')
         self.assertEqual(UserProfile.objects.get(user=created).display_name, '运维一号')
         self.assertIn('Operator', created.groups.values_list('name', flat=True))
+        permissions = response.json()['permissions']
+        self.assertTrue(permissions)
+        self.assertTrue(all(isinstance(code, str) and '.' in code for code in permissions))
         self.assertTrue(
             AuditEvent.objects.filter(
                 action=AuditAction.USER_CREATE, target_id=str(created.pk)

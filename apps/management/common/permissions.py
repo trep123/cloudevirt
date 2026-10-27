@@ -100,3 +100,129 @@ class RequiresPasswordChange(BasePermission):
         if profile is not None and profile.must_change_password:
             raise AppError(ErrorCode.PERMISSION_DENIED, '请先修改初始密码')
         return True
+
+
+class CanOperateNode(RequiresPermission):
+    """查看节点与资源的权限。"""
+
+    codename = 'nodes.view_node'
+    target_type = 'node'
+
+
+class CanManageNode(RequiresPermission):
+    """维护节点与节点授权的权限。"""
+
+    codename = 'nodes.add_node'
+    target_type = 'node'
+
+
+class CanRegisterNode(RequiresPermission):
+    """注册/变更/注销节点的权限。"""
+
+    codename = 'nodes.add_node'
+    target_type = 'node'
+
+
+class CanRefreshNode(RequiresPermission):
+    """主动刷新节点资源的权限。"""
+
+    codename = 'nodes.refresh_node'
+    target_type = 'node'
+
+
+class CanViewTask(RequiresPermission):
+    """查看任务的权限。"""
+
+    codename = 'tasks.view_task'
+    target_type = 'task'
+
+
+class CanCancelTask(RequiresPermission):
+    """取消任务的权限。"""
+
+    codename = 'tasks.cancel_task'
+    target_type = 'task'
+
+
+class CanRetryTask(RequiresPermission):
+    """重试任务的权限。"""
+
+    codename = 'tasks.retry_task'
+    target_type = 'task'
+
+
+class CanViewImage(RequiresPermission):
+    """查看镜像的权限。"""
+
+    codename = 'images.view_image'
+    target_type = 'image'
+
+
+class CanImportImage(RequiresPermission):
+    """导入镜像的权限。"""
+
+    codename = 'images.add_image'
+    target_type = 'image'
+
+
+class CanDeleteImage(RequiresPermission):
+    """删除镜像的权限。"""
+
+    codename = 'images.delete_image'
+    target_type = 'image'
+
+
+class CanViewInstance(RequiresPermission):
+    """查看实例的权限。"""
+
+    codename = 'instances.view_instance'
+    target_type = 'instance'
+
+
+class CanCreateInstance(RequiresPermission):
+    """创建实例的权限。"""
+
+    codename = 'instances.add_instance'
+    target_type = 'instance'
+
+
+class CanViewNetwork(RequiresPermission):
+    """查看网络的权限。"""
+
+    codename = 'networks.view_network'
+    target_type = 'network'
+
+
+class CanManageNetwork(RequiresPermission):
+    """维护网络白名单的权限。"""
+
+    codename = 'networks.manage_network'
+    target_type = 'network'
+
+
+class CanViewMonitoring(RequiresPermission):
+    """查看监控、告警与对账结果的权限。"""
+
+    codename = 'monitoring.view_alert'
+    target_type = 'monitoring'
+
+
+class CanRunReconciliation(RequiresPermission):
+    """手动触发对账的权限。"""
+
+    codename = 'monitoring.run_reconciliation'
+    target_type = 'monitoring'
+
+
+class CanViewTemplate(RequiresPermission):
+    """查看模板的权限。"""
+
+    codename = 'templates.view_template'
+    target_type = 'template'
+
+
+class CanManageTemplate(RequiresPermission):
+    """维护模板的权限。"""
+
+    codename = 'templates.add_template'
+    target_type = 'template'

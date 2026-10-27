@@ -213,3 +213,20 @@ class UserResetPasswordView(APIView):
             details={'username': user.get_username()},
         )
         return Response({'username': user.get_username(), 'password': password})
+
+
+class UserAuditView(APIView):
+    """用户最近审计事件，用于详情页展示操作历史。"""
+
+    permission_classes = [CanManageUser, RequiresPasswordChange]
+
+    def get(self, request, pk: int) -> Response:
+        """返回该用户最近 50 条审计事件。"""
+        from apps.audit.models import AuditEvent
+
+        events = list(
+            AuditEvent.objects.filter(actor_id=pk)
+            .order_by('-created_at')[:50]
+            .values('id', 'action', 'target_type', 'target_id', 'details', 'created_at')
+        )
+        return Response({'results': events})
