@@ -83,6 +83,7 @@ def parse_database_url(url: str) -> dict[str, object]:
 DEBUG = read_bool('DJANGO_DEBUG', False)
 CONSOLE_REQUIRE_TLS = read_bool('CONSOLE_REQUIRE_TLS', not DEBUG)
 CONSOLE_MAX_SESSIONS = int(os.environ.get('CONSOLE_MAX_SESSIONS', '3'))
+ALLOWED_HOSTS = read_list('DJANGO_ALLOWED_HOSTS', ['localhost', '127.0.0.1'])
 
 # 反向代理（nginx）场景：显式声明可信来源与转发的 Host/Proto
 CSRF_TRUSTED_ORIGINS = read_list('DJANGO_CSRF_TRUSTED_ORIGINS', [])
