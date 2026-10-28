@@ -10,6 +10,8 @@ from urllib.parse import urlparse
 
 # 应用版本，用于健康检查与升级追踪（见 docs/ENVIRONMENT_DEPLOYMENT.md 第 8 章）
 APP_VERSION = '0.1.0'
+IMAGE_UPLOAD_MAX_BYTES = int(os.environ.get('IMAGE_UPLOAD_MAX_BYTES', str(16 * 1024**3)))
+IMAGE_INSPECT_TIMEOUT_SECONDS = int(os.environ.get('IMAGE_INSPECT_TIMEOUT_SECONDS', '1800'))
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 

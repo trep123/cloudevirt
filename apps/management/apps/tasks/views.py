@@ -52,6 +52,14 @@ class TaskCancelView(APIView):
         task.save(update_fields=['status', 'locked_at', 'locked_by', 'updated_at'])
         record_event(task, to_status=TaskStatus.CANCELLED, message='任务被用户取消')
         release_cancelled_task(task)
+        if task.type == 'IMAGE_IMPORT' and task.resource_type == 'image':
+            from apps.images.models import Image
+
+            Image.objects.filter(pk=task.resource_id, is_deleted=False).update(
+                status='FAILED',
+                error_code='CONFLICT',
+                error_message='镜像校验任务已取消，可以重新校验',
+            )
         return Response(TaskDetailSerializer(task).data)
 
 

@@ -44,10 +44,10 @@
 如果只复制 install.sh 且当前目录没有源码，脚本会尝试拉取：
 
     https://github.com/trep123/cloudevirt.git
-    feature/ovs-network-topology
+    master
 
 可通过 CLOUDVIRT_REPO_URL / CLOUDVIRT_REPO_REF 改变来源。远端拉取只包含已经推送的代码。
-UI 优化与安装器一并维护在 feature/ovs-network-topology 分支，可使用完整部署包，
+UI 优化与安装器一并维护在 master 主分支，可使用完整部署包，
 或从该分支获取源码后执行 install.sh。指定其他分支时，请确认包含 scripts/install_ovs.sh。
 
 安装过程需要访问 Ubuntu 软件源、Python 包源、Node.js 下载源、npm registry，
@@ -99,6 +99,7 @@ UI 优化与安装器一并维护在 feature/ovs-network-topology 分支，可�
 | /var/www/cloudvirt | 前端构建产物 |
 
 不自动下载虚拟机 OS 镜像。部署后将已获得的镜像放入 images 目录并在镜像页面登记。
+也可直接使用镜像页面的浏览器分片上传，上传后异步校验，详见 [镜像上传说明](IMAGE_UPLOADS.md)。
 Agent 使用独立 cloudvirt-agent 系统账号，通过 libvirt/kvm 组访问宿主机能力；
 管理后端、worker 与定时作业使用 cloudvirt 账号。
 

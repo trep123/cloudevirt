@@ -1,8 +1,10 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/tl2004/cloude-virt/services/virt-node-agent/internal/apierr"
 	"github.com/tl2004/cloude-virt/services/virt-node-agent/internal/storage"
@@ -24,7 +26,12 @@ func inspectImageHandler(deps Dependencies) http.HandlerFunc {
 			), requestID)
 			return
 		}
-		info, err := storage.Inspect(deps.ImageDir, payload.RelativePath)
+		// Hashing a multi-GiB image belongs to a background management task.
+		deadline := time.Now().Add(30 * time.Minute)
+		_ = http.NewResponseController(writer).SetWriteDeadline(deadline)
+		ctx, cancel := context.WithDeadline(request.Context(), deadline)
+		defer cancel()
+		info, err := storage.InspectContext(ctx, deps.ImageDir, payload.RelativePath)
 		if err != nil {
 			writeAPIError(writer, deps.Logger, err, requestID)
 			return
@@ -39,7 +46,7 @@ func deleteImageHandler(deps Dependencies) http.HandlerFunc {
 		requestID := RequestIDFromContext(request.Context())
 		if !deps.AllowDestructive {
 			writeAPIError(writer, deps.Logger, apierr.New(
-				apierr.CodeConflict, "宿主机未开启破坏性操作开关", nil,
+				apierr.CodeConflict, "节点未开启文件删除；可取消清理文件仅移除记录，或由管理员启用 CLOUDVIRT_ALLOW_DESTRUCTIVE", nil,
 			), requestID)
 			return
 		}

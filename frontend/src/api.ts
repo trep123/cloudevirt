@@ -122,6 +122,71 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return payload as T;
 }
 
+export function uploadImageChunk(
+  id: string,
+  offset: number,
+  chunk: Blob,
+  signal: AbortSignal,
+  onProgress: (bytes: number) => void,
+): Promise<{ offset: number }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const abort = () => xhr.abort();
+    const done = () => signal.removeEventListener("abort", abort);
+    xhr.open(
+      "PUT",
+      `${BASE}/images/uploads/${encodeURIComponent(id)}/chunk?offset=${offset}`,
+    );
+    xhr.withCredentials = true;
+    xhr.timeout = 150000;
+    xhr.setRequestHeader("Content-Type", "application/octet-stream");
+    xhr.setRequestHeader("X-CSRFToken", readCookie("csrftoken"));
+    xhr.upload.onprogress = (e) => onProgress(e.loaded);
+    xhr.onload = () => {
+      done();
+      let payload;
+      try {
+        payload = JSON.parse(xhr.responseText);
+      } catch {
+        reject(
+          new ApiError(xhr.status, {
+            code: "INVALID_RESPONSE",
+            message: "分片响应无法解析，请查询节点进度后继续",
+            details: {},
+            request_id: "",
+          }),
+        );
+        return;
+      }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(payload);
+      else {
+        if (xhr.status === 401)
+          window.dispatchEvent(new Event("cloudvirt:session-expired"));
+        reject(new ApiError(xhr.status, payload.error || null));
+      }
+    };
+    xhr.onerror = () => {
+      done();
+      reject(new Error("上传连接中断，已接收分片保留，可继续上传"));
+    };
+    xhr.ontimeout = () => {
+      done();
+      reject(new Error("分片响应超时，请查询节点进度后继续上传"));
+    };
+    xhr.onabort = () => {
+      done();
+      reject(new DOMException("上传已暂停", "AbortError"));
+    };
+    signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) {
+      done();
+      reject(new DOMException("上传已暂停", "AbortError"));
+      return;
+    }
+    xhr.send(chunk);
+  });
+}
+
 export const api = {
   request,
   me: () => request<CurrentUser>("/auth/me").then(acceptSession),
@@ -174,7 +239,7 @@ export const api = {
     os_family?: string;
     os_version?: string;
   }) =>
-    request<import("./types").Image>("/images", {
+    request<{ image: import("./types").Image; task_id: string }>("/images", {
       method: "POST",
       body: JSON.stringify(body),
     }),

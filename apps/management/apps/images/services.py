@@ -46,6 +46,8 @@ def validate_relative_path(relative_path: str) -> str:
     candidate = (relative_path or '').strip()
     if not candidate:
         raise AppError(ErrorCode.VALIDATION_ERROR, '镜像路径不能为空')
+    if any(segment.startswith('.upload-') for segment in candidate.split('/')):
+        raise AppError(ErrorCode.VALIDATION_ERROR, '上传临时分片不能登记为镜像，请先完成上传')
     if candidate.startswith('/') or '..' in candidate.split('/'):
         raise AppError(
             ErrorCode.VALIDATION_ERROR,
@@ -94,6 +96,7 @@ def import_image(
 
     image = Image.objects.create(
         name=name,
+        node=node,
         format=ImageFormat.QCOW2,
         relative_path=path,
         status=ImageStatus.VERIFYING,
@@ -147,7 +150,7 @@ def delete_image(
     Args:
         image: 目标镜像。
         purge_file: 是否同时删除节点上的文件（需 Agent 开启破坏性开关）。
-        node: 执行删除的节点，缺省取第一个在线节点。
+        node: 执行删除的节点，缺省严格使用镜像绑定节点。
         client: Agent 客户端，缺省按节点创建。
 
     Returns:
@@ -157,6 +160,14 @@ def delete_image(
         AppError: 未指定节点或 Agent 拒绝删除。
     """
     references = image.instances.filter(is_deleted=False).count()
+    from apps.tasks.models import ACTIVE_STATUSES, Task
+
+    if image.status == ImageStatus.UPLOADING:
+        raise AppError(ErrorCode.CONFLICT, '请使用取消上传清理未完成的临时文件')
+    if Task.objects.filter(
+        resource_type='image', resource_id=str(image.pk), status__in=ACTIVE_STATUSES
+    ).exists():
+        raise AppError(ErrorCode.OPERATION_IN_PROGRESS, '镜像仍在校验，请等待任务结束')
     if references:
         raise AppError(
             ErrorCode.IMAGE_IN_USE,
@@ -164,17 +175,22 @@ def delete_image(
             details={'instances': references},
         )
 
-    image.status = ImageStatus.DELETING
-    image.save(update_fields=['status', 'updated_at'])
-
     if purge_file:
-        target = node or Node.objects.filter(is_deleted=False).exclude(status='OFFLINE').first()
+        if node and image.node_id and node.pk != image.node_id:
+            raise AppError(ErrorCode.CONFLICT, '删除节点与镜像所属节点不一致')
+        target = node or image.node
+        if target:
+            target = Node.objects.filter(pk=target.pk, is_deleted=False).first()
         if target is None:
             image.status = ImageStatus.FAILED
             image.error_code = ErrorCode.NODE_OFFLINE
-            image.error_message = '没有可用节点执行删除'
+            image.error_message = (
+                '旧镜像未绑定节点，请先选择实际节点重新校验，或取消清理文件仅删除记录'
+            )
             image.save(update_fields=['status', 'error_code', 'error_message', 'updated_at'])
-            raise AppError(ErrorCode.NODE_OFFLINE, '没有可用节点执行删除')
+            raise AppError(ErrorCode.CONFLICT, image.error_message)
+        if not target.is_schedulable:
+            raise AppError(ErrorCode.NODE_OFFLINE, '镜像所属节点不可用')
         agent = client or AgentClient(target.endpoint)
         try:
             agent.delete_image(image.relative_path)

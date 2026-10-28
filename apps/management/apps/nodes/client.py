@@ -18,6 +18,30 @@ from common.errors import AppError, ErrorCode
 logger = logging.getLogger(__name__)
 
 
+def agent_http_error(exc):
+    """Preserve the Agent's public error, never return raw HTML or authentication status."""
+    try:
+        payload = json.loads(exc.read(8192).decode('utf-8'))
+        detail = payload.get('error', payload)
+        code = detail.get('code', '')
+        message = str(detail.get('message', ''))[:500]
+        request_id = str(detail.get('request_id', ''))[:128]
+    except ValueError, AttributeError, TypeError:
+        code, message, request_id = '', '', ''
+    if code == 'UNAUTHORIZED' or exc.code in {401, 403}:
+        code, message = (
+            ErrorCode.OPERATION_FAILED,
+            '节点 Agent 认证失败，请检查管理端和节点共享令牌配置',
+        )
+    elif code not in ErrorCode.values:
+        code, message = ErrorCode.OPERATION_FAILED, '节点 Agent 返回异常响应，请检查节点日志和版本'
+    if not message:
+        message = '节点 Agent 执行失败，请检查节点日志'
+    return AppError(
+        code, message, details={'agent_status': exc.code, 'agent_request_id': request_id}
+    )
+
+
 class AgentClient:
     """节点 Agent 客户端。"""
 
@@ -54,11 +78,7 @@ class AgentClient:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 payload = response.read().decode('utf-8')
         except urllib.error.HTTPError as exc:
-            raise AppError(
-                ErrorCode.NODE_OFFLINE,
-                '节点 Agent 返回异常状态',
-                details={'status': exc.code},
-            ) from exc
+            raise agent_http_error(exc) from exc
         except urllib.error.URLError as exc:
             raise AppError(ErrorCode.NODE_OFFLINE, '无法连接节点 Agent') from exc
         except TimeoutError as exc:
@@ -94,17 +114,40 @@ class AgentClient:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 raw = response.read().decode('utf-8')
         except urllib.error.HTTPError as exc:
-            detail = exc.read().decode('utf-8', errors='ignore')[:200]
-            raise AppError(
-                ErrorCode.OPERATION_FAILED,
-                '节点 Agent 拒绝了该操作',
-                details={'status': exc.code, 'response': detail},
-            ) from exc
+            raise agent_http_error(exc) from exc
         except urllib.error.URLError as exc:
             raise AppError(ErrorCode.NODE_OFFLINE, '无法连接节点 Agent') from exc
         except TimeoutError as exc:
             raise AppError(ErrorCode.COMMAND_TIMEOUT, '调用节点 Agent 超时') from exc
-        return json.loads(raw) if raw else {}
+        try:
+            return json.loads(raw) if raw else {}
+        except json.JSONDecodeError as exc:
+            raise AppError(ErrorCode.OPERATION_FAILED, '节点 Agent 响应格式错误') from exc
+
+    def upload_chunk(self, upload_id: str, offset: int, size: int, extension: str, data: bytes):
+        query = f'?offset={offset}&size={size}&extension={extension}'
+        request = urllib.request.Request(
+            f'{self.endpoint}/api/v1/images/uploads/{upload_id}{query}',
+            data=data,
+            method='PUT',
+            headers={
+                'Authorization': f'Bearer {self.token}',
+                'Content-Type': 'application/octet-stream',
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                return json.loads(response.read().decode('utf-8'))
+        except urllib.error.HTTPError as exc:
+            raise agent_http_error(exc) from exc
+        except urllib.error.URLError as exc:
+            raise AppError(
+                ErrorCode.NODE_OFFLINE, '无法连接节点 Agent，上传已暂停，可查询进度后继续'
+            ) from exc
+        except TimeoutError as exc:
+            raise AppError(
+                ErrorCode.COMMAND_TIMEOUT, '分片响应超时，请查询已接收进度后继续'
+            ) from exc
 
     def inspect_image(self, relative_path: str) -> dict:
         """请求 Agent 检查镜像文件（格式、容量、校验和）。"""

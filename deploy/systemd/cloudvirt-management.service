@@ -12,6 +12,7 @@ EnvironmentFile=/etc/cloudvirt/management.env
 ExecStart=/opt/cloudvirt/.venv/bin/gunicorn config.wsgi:application \
     --bind 127.0.0.1:8000 \
     --workers 4 \
+    --timeout 180 \
     --access-logfile /var/log/cloudvirt/management-access.log \
     --error-logfile /var/log/cloudvirt/management-error.log
 Restart=always

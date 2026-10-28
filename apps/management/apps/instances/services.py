@@ -191,6 +191,11 @@ def create_instance(
         locked_node = type(node).objects.select_for_update().get(pk=node.pk)
         # Also serialize cross-node requests and idempotency lookup for this account.
         get_user_model().objects.select_for_update().get(pk=user.pk)
+        image = type(image).objects.select_for_update().get(pk=image.pk)
+        if image.is_deleted or image.status != ImageStatus.READY:
+            raise AppError(ErrorCode.CONFLICT, '镜像已删除或尚未校验完成')
+        if image.node_id and image.node_id != locked_node.pk:
+            raise AppError(ErrorCode.CONFLICT, '镜像文件位于其他节点，请选择镜像所属节点')
         if scoped_key:
             previous = Task.objects.filter(
                 idempotency_key=scoped_key, requested_by=user, type=TaskType.INSTANCE_CREATE

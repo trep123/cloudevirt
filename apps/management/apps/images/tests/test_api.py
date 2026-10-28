@@ -67,8 +67,9 @@ class ImageApiTests(TestCase):
                 content_type='application/json',
             )
 
-        self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.json()['status'], 'READY')
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.json()['image']['status'], 'VERIFYING')
+        self.assertTrue(response.json()['task_id'])
         self.assertTrue(AuditEvent.objects.filter(action=AuditAction.IMAGE_IMPORT).exists())
 
     def test_viewer_cannot_import_image(self) -> None:
@@ -154,7 +155,7 @@ class ImageApiTests(TestCase):
 
     def test_operator_can_delete_image(self) -> None:
         """Operator 可删除镜像并记录审计。"""
-        image = Image.objects.create(name='drop', status=ImageStatus.READY)
+        image = Image.objects.create(name='drop', status=ImageStatus.READY, node=self.node)
         self.client.login(username='image-operator', password='Str0ngPassw0rd')
 
         with mock.patch('apps.nodes.client.AgentClient.delete_image', return_value={}):

@@ -188,12 +188,16 @@ export function VmWizard({
                   操作系统镜像
                   <select
                     value={image}
-                    onChange={(e) => setImage(e.target.value)}
+                    onChange={(e) => {
+                      setImage(e.target.value);
+                      setNode("");
+                    }}
                   >
                     <option value="">选择已审核镜像</option>
                     {images.map((i) => (
                       <option key={i.id} value={i.id}>
                         {i.name} · {i.os_family || i.format}
+                        {i.node_name ? ` · ${i.node_name}` : ""}
                       </option>
                     ))}
                   </select>
@@ -211,11 +215,20 @@ export function VmWizard({
                     onChange={(e) => setNode(e.target.value)}
                   >
                     <option value="">选择可调度节点</option>
-                    {nodes.map((n) => (
-                      <option key={n.id} value={n.id}>
-                        {n.name}
-                      </option>
-                    ))}
+                    {nodes
+                      .filter((n) => {
+                        const selectedImage = images.find(
+                          (i) => i.id === Number(image),
+                        );
+                        return (
+                          !selectedImage?.node || selectedImage.node === n.id
+                        );
+                      })
+                      .map((n) => (
+                        <option key={n.id} value={n.id}>
+                          {n.name}
+                        </option>
+                      ))}
                   </select>
                 </label>
                 <label>

@@ -60,6 +60,10 @@ func NewRouter(deps Dependencies) http.Handler {
 	})
 
 	api := http.NewServeMux()
+	api.HandleFunc("GET /api/v1/images/uploads/{id}", imageUploadHandler(deps))
+	api.HandleFunc("PUT /api/v1/images/uploads/{id}", imageUploadHandler(deps))
+	api.HandleFunc("POST /api/v1/images/uploads/{id}/complete", imageUploadHandler(deps))
+	api.HandleFunc("DELETE /api/v1/images/uploads/{id}", imageUploadHandler(deps))
 	api.HandleFunc("GET /api/v1/storage-pools", infrastructureHandler(deps, false))
 	api.HandleFunc("POST /api/v1/storage-pools", infrastructureHandler(deps, false))
 	api.HandleFunc("GET /api/v1/domains/{name}/snapshots", infrastructureHandler(deps, true))

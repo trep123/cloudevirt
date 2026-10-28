@@ -10,12 +10,17 @@ class ImageSerializer(serializers.ModelSerializer):
     """镜像输出结构。"""
 
     is_ready = serializers.BooleanField(read_only=True)
+    node_name = serializers.CharField(source='node.name', read_only=True, default='')
+    upload_id = serializers.UUIDField(source='upload.pk', read_only=True, default=None)
 
     class Meta:
         model = Image
         fields = (
             'id',
             'name',
+            'node',
+            'node_name',
+            'upload_id',
             'format',
             'relative_path',
             'size_bytes',

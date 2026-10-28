@@ -4,6 +4,8 @@
 禁止由用户指定绝对路径。
 """
 
+import uuid
+
 from django.conf import settings
 from django.db import models
 
@@ -30,6 +32,14 @@ class Image(models.Model):
     """镜像记录。"""
 
     name = models.CharField('名称', max_length=128)
+    node = models.ForeignKey(
+        'nodes.Node',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='images',
+        verbose_name='所属节点',
+    )
     format = models.CharField('格式', max_length=16, choices=ImageFormat.choices)
     relative_path = models.CharField('相对路径', max_length=255)
     size_bytes = models.BigIntegerField('文件大小(字节)', default=0)
@@ -83,3 +93,17 @@ class Image(models.Model):
     def is_ready(self) -> bool:
         """是否可用。"""
         return self.status == ImageStatus.READY and not self.is_deleted
+
+
+class ImageUpload(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    image = models.OneToOneField(Image, on_delete=models.PROTECT, related_name='upload')
+    original_name = models.CharField(max_length=255)
+    size_bytes = models.BigIntegerField()
+    extension = models.CharField(max_length=8)
+    task = models.ForeignKey('tasks.Task', on_delete=models.SET_NULL, null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f'{self.pk}:{self.original_name}'

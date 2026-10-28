@@ -133,5 +133,5 @@ class ImageServiceTests(TestCase):
             delete_image(image, purge_file=True)
 
         image.refresh_from_db()
-        self.assertEqual(image.status, ImageStatus.FAILED)
+        self.assertEqual(image.status, ImageStatus.READY)
         self.assertFalse(image.is_deleted)

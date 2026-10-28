@@ -1,5 +1,6 @@
 """镜像 API：列表、导入、详情、删除。"""
 
+from django.db import transaction
 from rest_framework import generics
 from rest_framework.response import Response
 
@@ -7,7 +8,8 @@ from apps.audit.models import AuditAction
 from apps.audit.services import record_audit
 from apps.images.models import Image
 from apps.images.serializers import ImageImportSerializer, ImageSerializer, ImageUpdateSerializer
-from apps.images.services import delete_image, import_image
+from apps.images.services import delete_image
+from apps.images.uploads import accepted, check_node, register_image
 from common.permissions import CanDeleteImage, CanImportImage, CanViewImage, RequiresPasswordChange
 
 
@@ -15,7 +17,7 @@ class ImageListCreateView(generics.ListCreateAPIView):
     """镜像列表与导入。"""
 
     permission_classes = [RequiresPasswordChange]
-    queryset = Image.objects.filter(is_deleted=False)
+    queryset = Image.objects.filter(is_deleted=False).select_related('node', 'upload')
 
     def get_permissions(self):
         """按动作选择权限类。"""
@@ -30,17 +32,10 @@ class ImageListCreateView(generics.ListCreateAPIView):
         return ImageSerializer
 
     def create(self, request, *args, **kwargs) -> Response:
-        """导入镜像并以输出序列化器回显真实检测结果。"""
+        """登记节点文件并立即返回异步校验任务。"""
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        image = import_image(
-            name=serializer.validated_data['name'],
-            node=serializer.validated_data['node'],
-            relative_path=serializer.validated_data['relative_path'],
-            created_by=request.user,
-            os_family=serializer.validated_data.get('os_family', ''),
-            os_version=serializer.validated_data.get('os_version', ''),
-        )
+        image, task = register_image(serializer.validated_data, request.user)
         record_audit(
             action=AuditAction.IMAGE_IMPORT,
             actor=request.user,
@@ -52,10 +47,7 @@ class ImageListCreateView(generics.ListCreateAPIView):
                 'status': image.status,
             },
         )
-        return Response(
-            ImageSerializer(image).data,
-            status=201 if image.is_ready else 200,
-        )
+        return accepted(image, task)
 
 
 class ImageDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -94,10 +86,14 @@ class ImageDetailView(generics.RetrieveUpdateDestroyAPIView):
             },
         )
 
+    @transaction.atomic
     def perform_destroy(self, instance) -> None:
         """删除镜像：purge_file 参数显式声明是否删除节点文件。"""
         purge_raw = self.request.query_params.get('purge_file', 'true')
         purge_file = purge_raw.strip().lower() not in {'0', 'false', 'no'}
+        instance = Image.objects.select_for_update().get(pk=instance.pk)
+        if purge_file and instance.node:
+            check_node(self.request.user, instance.node)
         delete_image(instance, purge_file=purge_file)
         record_audit(
             action=AuditAction.IMAGE_DELETE,

@@ -53,7 +53,10 @@ func SafePath(root, relative string) (string, error) {
 	resolved, err := filepath.EvalSymlinks(cleaned)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return "", apierr.New(apierr.CodeNotFound, "文件不存在", err)
+			return "", apierr.New(apierr.CodeNotFound, "节点镜像目录中找不到文件；请核对所选节点和相对路径，或使用浏览器上传", err)
+		}
+		if errors.Is(err, os.ErrPermission) {
+			return "", apierr.New(apierr.CodeOperationFailed, "Agent 无权访问目录；请检查目录遍历权限及 cloudvirt-agent 用户权限", err)
 		}
 		return "", apierr.New(apierr.CodeOperationFailed, "路径解析失败", err)
 	}
@@ -77,6 +80,12 @@ type qemuImgOutput struct {
 	Format           string `json:"format"`
 	ActualSizeBytes  int64  `json:"actual-size"`
 	VirtualSizeBytes int64  `json:"virtual-size"`
+	BackingFilename  string `json:"backing-filename"`
+	FormatSpecific   struct {
+		Data struct {
+			DataFile string `json:"data-file"`
+		} `json:"data"`
+	} `json:"format-specific"`
 }
 
 // Inspect 检查文件：校验路径、读取 qemu-img 信息并流式计算 SHA-256。
@@ -90,13 +99,45 @@ type qemuImgOutput struct {
 //
 //	文件信息；任何一步失败都返回带错误码的错误。
 func Inspect(root, relative string) (FileInfo, error) {
+	return InspectContext(context.Background(), root, relative)
+}
+
+func InspectContext(ctx context.Context, root, relative string) (FileInfo, error) {
+	if strings.HasPrefix(filepath.Base(relative), ".upload-") {
+		return FileInfo{}, apierr.New(apierr.CodeInvalidArgument, "上传临时分片不能作为可用镜像，请先完成发布", nil)
+	}
 	path, err := SafePath(root, relative)
 	if err != nil {
 		return FileInfo{}, err
 	}
 
-	output, err := exec.Command("qemu-img", "info", "--output=json", "--", path).Output()
+	statBeforeOpen, err := os.Stat(path)
+	if err != nil || !statBeforeOpen.Mode().IsRegular() || statBeforeOpen.Size() == 0 {
+		return FileInfo{}, apierr.New(apierr.CodeInvalidArgument, "镜像必须为非空普通文件", err)
+	}
+	file, err := os.Open(path)
 	if err != nil {
+		return FileInfo{}, apierr.New(apierr.CodeOperationFailed, "Agent 无法读取镜像文件；请检查文件及上级目录权限", err)
+	}
+	stat, err := file.Stat()
+	if err != nil || !stat.Mode().IsRegular() || stat.Size() == 0 {
+		file.Close()
+		return FileInfo{}, apierr.New(apierr.CodeInvalidArgument, "镜像必须为非空普通文件", err)
+	}
+	// ISO9660 volume descriptors identify installation media; qemu-img calls these RAW.
+	var magic [5]byte
+	_, _ = file.ReadAt(magic[:], 16*2048+1)
+	file.Close()
+	commandCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	output, err := exec.CommandContext(commandCtx, "qemu-img", "info", "--output=json", "--", path).Output()
+	if err != nil {
+		if errors.Is(err, exec.ErrNotFound) {
+			return FileInfo{}, apierr.New(apierr.CodeOperationFailed, "节点未安装 qemu-img，请安装 qemu-utils", err)
+		}
+		if commandCtx.Err() != nil {
+			return FileInfo{}, apierr.New(apierr.CodeCommandTimeout, "解析镜像超时", err)
+		}
 		return FileInfo{}, apierr.New(apierr.CodeInvalidArgument, "无法解析镜像格式", err)
 	}
 	var parsed qemuImgOutput
@@ -104,7 +145,13 @@ func Inspect(root, relative string) (FileInfo, error) {
 		return FileInfo{}, apierr.New(apierr.CodeOperationFailed, "qemu-img 输出解析失败", err)
 	}
 
-	checksum, size, err := checksumAndSize(path)
+	if parsed.BackingFilename != "" || parsed.FormatSpecific.Data.DataFile != "" {
+		return FileInfo{}, apierr.New(apierr.CodeInvalidArgument, "不接受依赖外部 backing/data 文件的镜像，请先转换为独立镜像", nil)
+	}
+	if string(magic[:]) == "CD001" {
+		parsed.Format = "iso"
+	}
+	checksum, size, err := checksumAndSizeContext(ctx, path)
 	if err != nil {
 		return FileInfo{}, err
 	}
@@ -124,6 +171,22 @@ func Inspect(root, relative string) (FileInfo, error) {
 
 // checksumAndSize 流式计算 SHA-256 并统计文件大小，避免一次性读入内存。
 func checksumAndSize(path string) (string, int64, error) {
+	return checksumAndSizeContext(context.Background(), path)
+}
+
+type contextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (r contextReader) Read(buffer []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return r.reader.Read(buffer)
+}
+
+func checksumAndSizeContext(ctx context.Context, path string) (string, int64, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return "", 0, apierr.New(apierr.CodeOperationFailed, "文件无法打开", err)
@@ -131,8 +194,11 @@ func checksumAndSize(path string) (string, int64, error) {
 	defer file.Close()
 
 	hasher := sha256.New()
-	written, err := io.Copy(hasher, file)
+	written, err := io.Copy(hasher, contextReader{ctx: ctx, reader: file})
 	if err != nil {
+		if ctx.Err() != nil {
+			return "", 0, apierr.New(apierr.CodeCommandTimeout, "镜像校验超时，可在任务中心查看或重新校验", err)
+		}
 		return "", 0, apierr.New(apierr.CodeOperationFailed, "文件读取失败", err)
 	}
 	return hex.EncodeToString(hasher.Sum(nil)), written, nil
@@ -142,6 +208,10 @@ func checksumAndSize(path string) (string, int64, error) {
 func Remove(root, relative string) error {
 	path, err := SafePath(root, relative)
 	if err != nil {
+		var apiError *apierr.Error
+		if errors.As(err, &apiError) && apiError.Code == apierr.CodeNotFound {
+			return nil
+		}
 		return err
 	}
 	if err := os.Remove(path); err != nil {

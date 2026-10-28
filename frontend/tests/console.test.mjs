@@ -24,7 +24,8 @@ const { canEnterRoute } = await moduleFrom("src/app/permission.ts");
 const { validateAddress } = await moduleFrom(
   "src/features/networks/validateAddress.ts",
 );
-const { api, ApiError } = await moduleFrom("src/api.ts");
+const { api, ApiError, uploadImageChunk } = await moduleFrom("src/api.ts");
+const { newUploadId } = await moduleFrom("src/features/images/uploadId.ts");
 const { Card, StatusBadge, ErrorBanner } = await moduleFrom(
   "src/components/ui.tsx",
 );
@@ -164,4 +165,64 @@ test("create requests preserve caller idempotency key and CSRF token", async (t)
   assert.equal(sent.headers.get("Idempotency-Key"), "stable-key");
   assert.equal(sent.headers.get("X-CSRFToken"), "csrf-value");
   assert.equal(sent.credentials, "same-origin");
+});
+test("browser upload ids are UUIDv4 and do not depend on secure-context randomUUID", () => {
+  assert.match(
+    newUploadId(),
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+  );
+  assert.notEqual(newUploadId(), newUploadId());
+});
+test("upload chunks send raw binary with CSRF, offset, cookies and progress", async () => {
+  const previous = globalThis.XMLHttpRequest;
+  globalThis.document = { cookie: "csrftoken=upload-csrf" };
+  let sent,
+    progressed = 0;
+  class FakeXHR {
+    upload = {};
+    headers = {};
+    open(method, url) {
+      this.method = method;
+      this.url = url;
+    }
+    setRequestHeader(key, value) {
+      this.headers[key] = value;
+    }
+    send(body) {
+      sent = {
+        body,
+        method: this.method,
+        url: this.url,
+        headers: this.headers,
+        credentials: this.withCredentials,
+      };
+      this.upload.onprogress({ loaded: 4 });
+      this.status = 200;
+      this.responseText = '{"offset":12}';
+      this.onload();
+    }
+  }
+  globalThis.XMLHttpRequest = FakeXHR;
+  try {
+    const blob = new Blob(["data"]);
+    const result = await uploadImageChunk(
+      "upload-id",
+      8,
+      blob,
+      new AbortController().signal,
+      (bytes) => {
+        progressed = bytes;
+      },
+    );
+    assert.equal(result.offset, 12);
+    assert.equal(sent.body, blob);
+    assert.equal(sent.method, "PUT");
+    assert.match(sent.url, /\/images\/uploads\/upload-id\/chunk\?offset=8$/);
+    assert.equal(sent.headers["Content-Type"], "application/octet-stream");
+    assert.equal(sent.headers["X-CSRFToken"], "upload-csrf");
+    assert.equal(sent.credentials, true);
+    assert.equal(progressed, 4);
+  } finally {
+    globalThis.XMLHttpRequest = previous;
+  }
 });

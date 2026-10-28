@@ -9,7 +9,7 @@ CONFIG_DIR=/etc/cloudvirt
 DATA_DIR=/var/lib/libvirt/images/cloudvirt
 WEB_ROOT=/var/www/cloudvirt
 REPO_URL="${CLOUDVIRT_REPO_URL:-https://github.com/trep123/cloudevirt.git}"
-REPO_REF="${CLOUDVIRT_REPO_REF:-feature/ovs-network-topology}"
+REPO_REF="${CLOUDVIRT_REPO_REF:-master}"
 SOURCE_DIR=""
 DOMAIN="${CLOUDVIRT_DOMAIN:-}"
 PORT="${CLOUDVIRT_PORT:-443}"
@@ -450,7 +450,8 @@ server {
         proxy_set_header X-Forwarded-For \$remote_addr;
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_connect_timeout 5s;
-        proxy_read_timeout 60s;
+        proxy_send_timeout 180s;
+        proxy_read_timeout 180s;
     }
     location = /vnc {
         proxy_pass http://127.0.0.1:9100;
