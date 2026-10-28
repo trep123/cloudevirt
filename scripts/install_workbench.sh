@@ -68,7 +68,9 @@ ProtectSystem=full
 ProtectHome=true
 PrivateTmp=true
 PrivateDevices=true
-RestrictAddressFamilies=AF_UNIX
+# The helper reserves a loopback VNC port before asking systemd to start a unit.
+# The broker itself continues to listen exclusively on its authenticated Unix socket.
+RestrictAddressFamilies=AF_UNIX AF_INET
 TasksMax=32
 MemoryMax=128M
 [Install]
