@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { api } from "../api";
 import { describeError, StatusBadge } from "./ui";
+import { Icon } from "./icons";
 import { useState } from "react";
 import type { Task } from "../types";
 
@@ -8,18 +9,35 @@ export function PageHeader({
   title,
   description,
   children,
+  back,
+  meta,
 }: {
-  title: string;
-  description: string;
+  title: ReactNode;
+  description?: ReactNode;
   children?: ReactNode;
+  /** 返回上级：{ label, onClick } */
+  back?: { label: string; onClick: () => void };
+  /** 标题右侧的状态等附加信息 */
+  meta?: ReactNode;
 }) {
   return (
     <div className="page-head">
-      <div>
-        <h2>{title}</h2>
-        <p className="page-description">{description}</p>
+      <div className="page-head-main">
+        {back ? (
+          <button type="button" className="page-back" onClick={back.onClick}>
+            <Icon name="arrowLeft" size={14} />
+            {back.label}
+          </button>
+        ) : null}
+        <div className="page-title-row">
+          <h1 className="page-title">{title}</h1>
+          {meta ? <div className="page-meta">{meta}</div> : null}
+        </div>
+        {description ? (
+          <p className="page-description">{description}</p>
+        ) : null}
       </div>
-      <div className="actions">{children}</div>
+      {children ? <div className="actions page-actions">{children}</div> : null}
     </div>
   );
 }
@@ -27,15 +45,29 @@ export function ResourceStatCard({
   label,
   value,
   note,
+  icon,
+  tone = "brand",
+  children,
 }: {
   label: string;
   value: ReactNode;
-  note: string;
+  note: ReactNode;
+  icon?: string;
+  tone?: "brand" | "ok" | "warn" | "bad" | "info";
+  children?: ReactNode;
 }) {
   return (
-    <div className="resource-stat">
-      <span>{label}</span>
+    <div className={`resource-stat stat-${tone}`}>
+      <div className="resource-stat-top">
+        <span className="resource-stat-label">{label}</span>
+        {icon ? (
+          <span className="resource-stat-icon">
+            <Icon name={icon} size={16} />
+          </span>
+        ) : null}
+      </div>
       <strong>{value}</strong>
+      {children}
       <small>{note}</small>
     </div>
   );
@@ -43,29 +75,41 @@ export function ResourceStatCard({
 export function ResourceUsageChart({
   range,
   onRange,
+  children,
 }: {
   range: string;
   onRange: (value: string) => void;
+  children?: ReactNode;
 }) {
   return (
-    <section className="card">
-      <div className="card-head">
-        <h2>集群资源趋势</h2>
-        <select
-          aria-label="趋势时间范围"
-          value={range}
-          onChange={(e) => onRange(e.target.value)}
-        >
-          {["1 小时", "24 小时", "7 天", "30 天"].map((v) => (
-            <option key={v}>{v}</option>
-          ))}
-        </select>
-      </div>
-      <div className="chart-empty">
-        <span className="chart-symbol">⌁</span>
-        <strong>暂无时序数据</strong>
-        <p>当前 Agent 尚未上报 CPU、磁盘 I/O 和网络趋势。</p>
-        <p>时间范围：{range} · 接入指标采集后展示实际数据</p>
+    <section className="card usage-card">
+      <header className="card-head">
+        <div className="card-title">
+          <h2>集群资源使用</h2>
+          <p>基于最近一次有效采样</p>
+        </div>
+        <div className="card-extra">
+          <select
+            aria-label="趋势时间范围"
+            className="select-sm"
+            value={range}
+            onChange={(e) => onRange(e.target.value)}
+          >
+            {["1 小时", "24 小时", "7 天", "30 天"].map((v) => (
+              <option key={v}>{v}</option>
+            ))}
+          </select>
+        </div>
+      </header>
+      {children}
+      <div className="chart-empty chart-empty-compact">
+        <Icon name="trend" size={18} />
+        <div>
+          <strong>暂无时序数据</strong>
+          <p>
+            当前 Agent 尚未上报 CPU、磁盘 I/O 和网络趋势 · 时间范围：{range}
+          </p>
+        </div>
       </div>
     </section>
   );
@@ -89,11 +133,16 @@ export function Drawer({
     <dialog ref={ref} className="console-drawer" onCancel={onClose}>
       <header>
         <h2>{title}</h2>
-        <button className="action" onClick={onClose} aria-label="关闭详情">
-          关闭
+        <button
+          className="icon-btn"
+          onClick={onClose}
+          aria-label="关闭详情"
+          title="关闭"
+        >
+          <Icon name="close" size={16} />
         </button>
       </header>
-      {children}
+      <div className="console-drawer-body">{children}</div>
     </dialog>
   );
 }
@@ -127,8 +176,15 @@ export function ConfirmOperationModal({
         else onCancel();
       }}
     >
-      <h2>{operation}确认</h2>
-      <p>{description}</p>
+      <div className="confirm-head">
+        <span className="confirm-icon">
+          <Icon name="alert" size={18} />
+        </span>
+        <div>
+          <h2>{operation}确认</h2>
+          <p>{description}</p>
+        </div>
+      </div>
       <dl>
         <dt>目标资源</dt>
         <dd>{target}</dd>

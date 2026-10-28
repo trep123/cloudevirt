@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { api } from "../api";
 import { Card, Empty, ErrorBanner, StatusBadge, describeError, formatTime } from "../components/ui";
+import { PageHeader } from "../components/ConsoleUI";
 import { ROLE_OPTIONS } from "../roles";
 import type { AuditEvent, User } from "../types";
 
@@ -91,7 +92,9 @@ export function UsersPage() {
 
   return (
     <>
-      <div className="page-head"><h2>用户管理</h2><button className="action" onClick={() => void reload()}>刷新</button></div>
+      <PageHeader title="用户管理" description="平台账号、角色分配与登录状态">
+        <button className="action" onClick={() => void reload()}>刷新</button>
+      </PageHeader>
       <ErrorBanner message={error} />
       {notice ? <div className="banner banner-info">{notice}</div> : null}
       {credential ? (

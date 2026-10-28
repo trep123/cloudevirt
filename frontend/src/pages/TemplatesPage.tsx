@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { api } from "../api";
 import { Card, Empty, ErrorBanner, StatusBadge, describeError, formatTime } from "../components/ui";
+import { PageHeader } from "../components/ConsoleUI";
 import { can } from "../permissions";
 import type { CurrentUser, Template } from "../types";
 
@@ -109,10 +110,12 @@ export function TemplatesPage({ user }: { user: CurrentUser }) {
 
   return (
     <>
-      <div className="page-head">
-        <h2>规格模板</h2>
+      <PageHeader
+        title="规格模板"
+        description="预设 vCPU、内存与磁盘组合，创建虚拟机时可快速套用"
+      >
         <button className="action" onClick={() => void reload()}>刷新</button>
-      </div>
+      </PageHeader>
       <ErrorBanner message={error} />
       {notice ? <div className="banner banner-info">{notice}</div> : null}
       {canManage ? (

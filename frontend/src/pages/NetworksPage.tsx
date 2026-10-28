@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { api } from "../api";
 import { NetworkTopology } from "../components/NetworkTopology";
-import { Drawer, ConfirmOperationModal } from "../components/ConsoleUI";
+import { Drawer, ConfirmOperationModal, PageHeader } from "../components/ConsoleUI";
 import { validateAddress } from "../features/networks/validateAddress";
 import {
   Card,
@@ -200,9 +200,10 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
 
   return (
     <>
-      <div className="page-head">
-        <h2>网络白名单</h2>
-        <div className="actions">
+      <PageHeader
+        title="网络白名单"
+        description="登记宿主机网桥 / VLAN 与地址规划，仅白名单内网络可供虚拟机接入"
+      >
           {canManage ? (
             <button
               className="action primary"
@@ -229,8 +230,7 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
           <button className="action" onClick={() => void reload()}>
             刷新
           </button>
-        </div>
-      </div>
+      </PageHeader>
       <ErrorBanner message={error} />
       {notice ? <div className="banner banner-info">{notice}</div> : null}
       {canManage && showForm ? (

@@ -17,6 +17,7 @@ import {
   formatBytes,
   formatTime,
 } from "../components/ui";
+import { PageHeader } from "../components/ConsoleUI";
 import { can } from "../permissions";
 import type { CurrentUser, Image, Node } from "../types";
 
@@ -157,12 +158,14 @@ export function ImagesPage({ user }: { user: CurrentUser }) {
 
   return (
     <>
-      <div className="page-head">
-        <h2>镜像</h2>
+      <PageHeader
+        title="镜像"
+        description="管理可用于创建虚拟机的操作系统镜像，支持浏览器分片上传与校验"
+      >
         <button className="action" onClick={() => void reload()}>
           刷新
         </button>
-      </div>
+      </PageHeader>
       <ErrorBanner message={error} />
       {notice ? <div className="banner banner-info">{notice}</div> : null}
       {canImport ? (
