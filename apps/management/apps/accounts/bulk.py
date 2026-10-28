@@ -701,7 +701,7 @@ class AccountTemplateView(APIView):
 
     def get(self, request):
         require_admin(request.user, 'accounts.import_user')
-        format = request.query_params.get('format', 'csv')
+        format = request.query_params.get('file_format', 'csv')
         if format not in {'csv', 'xlsx'}:
             raise AppError(ErrorCode.INVALID_ARGUMENT, '格式仅支持 CSV 或 XLSX')
         return download(

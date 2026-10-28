@@ -264,7 +264,7 @@ export function AccountBatchPanel({
                     className="action"
                     disabled={!canImport}
                     onClick={() =>
-                      void download("/users/import-template?format=" + value)
+                      void download("/users/import-template?file_format=" + value)
                     }
                   >
                     {value.toUpperCase()} 模板

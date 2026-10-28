@@ -68,6 +68,14 @@ class AccountAdministrationTests(TestCase):
         execute_account_batch(batch.task)
         self.assertEqual(get_user_model().objects.filter(username='new-user').count(), 1)
 
+    def test_template_downloads_are_not_intercepted_by_content_negotiation(self):
+        for format in ['csv', 'xlsx']:
+            response = self.client.get('/api/v1/users/import-template', {'file_format': format})
+            self.assertEqual(response.status_code, 200, response.content[:100])
+            rows = parse_file(SimpleUploadedFile('template.' + format, response.content))
+            self.assertEqual(rows[0]['input']['username'], 'user_example')
+            self.assertEqual(response['Cache-Control'], 'no-store')
+
     def test_partial_mode_isolates_invalid_rows(self):
         response = self.preview(
             'username,display_name,role_codes\ngood-user,有效,Viewer\nbad-user,错误,missing-role\n'

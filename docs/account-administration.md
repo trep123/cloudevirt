@@ -69,7 +69,7 @@
 
 - 用户：`GET/POST /api/v1/users`，`GET/PATCH/DELETE /api/v1/users/{id}`。
 - 角色：`GET/POST /api/v1/console/roles`，`PATCH/DELETE /api/v1/console/roles/{id}`，`GET /api/v1/console/permissions`。
-- 模板：`GET /api/v1/users/import-template?format=csv|xlsx`。
+- 模板：`GET /api/v1/users/import-template?file_format=csv|xlsx`（避免与 DRF 的格式协商参数冲突）。
 - 批次：`POST /api/v1/users/batches`；导入使用 multipart file、mode、strict；导出使用 JSON kind=export、format、fields、ids 或 filters。
 - 批次状态/确认/清理：`GET/POST/DELETE /api/v1/users/batches/{id}`；下载：`GET /api/v1/users/batches/{id}/download`。
 - 独立权限：manage_user、manage_role、import_user、export_user、export_sensitive_user。创建、更新、禁用、重置、角色变化、批次和下载均写入审计。
