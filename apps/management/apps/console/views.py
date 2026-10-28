@@ -6,6 +6,7 @@ from datetime import timedelta
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -50,7 +51,7 @@ def owned_desktop(request, pk, lock=False):
 
 
 class DesktopAuthorizeView(APIView):
-    permission_classes = [CanViewInstance, RequiresPasswordChange]
+    permission_classes = [IsAuthenticated, RequiresPasswordChange]
 
     @transaction.atomic
     def get(self, request):
@@ -70,6 +71,14 @@ class DesktopAuthorizeView(APIView):
             uuid.UUID(match[1])
         except ValueError as exc:
             raise AppError(ErrorCode.PERMISSION_DENIED) from exc
+        from .models import WorkspaceControlSession
+
+        if WorkspaceControlSession.objects.filter(pk=match[1]).exists():
+            from .workspace_gateway import authorize_workspace
+
+            return authorize_workspace(request, match[1])
+        if not request.user.has_perm('instances.view_instance'):
+            raise AppError(ErrorCode.PERMISSION_DENIED)
         session = owned_desktop(request, match[1], lock=True)
         if session.claimed or session.revoked or session.expires_at <= timezone.now():
             raise AppError(ErrorCode.PERMISSION_DENIED, '控制台票据已使用或过期，请重新授权')

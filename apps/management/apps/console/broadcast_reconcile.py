@@ -54,7 +54,7 @@ def reconcile_one(pk, reset_connections=True):
         with transaction.atomic():
             broadcast = (
                 Broadcast.objects.select_for_update(of=('self',), skip_locked=True)
-                .select_related('source', 'instance__node', 'owner')
+                .select_related('source', 'instance__node', 'owner', 'workspace__owner')
                 .filter(pk=pk)
                 .first()
             )
@@ -67,6 +67,10 @@ def reconcile_one(pk, reset_connections=True):
                 and owner.has_perm('instances.view_instance')
                 and instances_for(owner).filter(pk=broadcast.instance_id).exists()
             )
+            if broadcast.kind == 'page':
+                from .workspaces import valid
+
+                allowed = valid(broadcast.workspace)
             if broadcast.active and (
                 not allowed
                 or not broadcast.source.enabled
@@ -77,11 +81,16 @@ def reconcile_one(pk, reset_connections=True):
                 broadcast.stop_complete = False
                 broadcast.state = 'STOPPING'
                 broadcast.public_token_hash = ''
-            client = AgentClient(broadcast.instance.node.endpoint, timeout=3)
+            endpoint = (
+                settings.WORKBENCH_AGENT_ENDPOINT
+                if broadcast.kind == 'page'
+                else broadcast.instance.node.endpoint
+            )
+            client = AgentClient(endpoint, timeout=3)
             path = '/api/v1/desktop-streams/' + str(broadcast.publish_id)
             if not broadcast.active:
                 try:
-                    if broadcast.kind == 'desktop':
+                    if broadcast.kind in {'desktop', 'page'}:
                         result = client.request_json(path, 'DELETE', {})
                         if result.get('status') != 'STOPPED':
                             broadcast.save()
@@ -94,6 +103,21 @@ def reconcile_one(pk, reset_connections=True):
                 broadcast.save()
                 return
             try:
+                if broadcast.kind == 'page':
+                    if broadcast.workspace.state != 'READY':
+                        broadcast.state = 'STARTING'
+                        broadcast.error = '正在建立服务端工作台'
+                        broadcast.save()
+                        return
+                    client.request_json(
+                        path,
+                        'POST',
+                        {
+                            'workspace': str(broadcast.workspace_id),
+                            'generation': str(broadcast.publish_id),
+                            'password': broadcast.workspace.vnc_password,
+                        },
+                    )
                 if broadcast.kind == 'desktop':
                     if broadcast.instance.observed_state != 'RUNNING':
                         raise AppError(ErrorCode.CONFLICT, '虚拟机已不在运行状态')
@@ -115,17 +139,19 @@ def reconcile_one(pk, reset_connections=True):
                         broadcast.attempts = 0
                 else:
                     broadcast.live_since = None
-                    broadcast.state = 'STARTING' if broadcast.kind == 'desktop' else 'WAITING'
+                    broadcast.state = (
+                        'STARTING' if broadcast.kind in {'desktop', 'page'} else 'WAITING'
+                    )
                     broadcast.error = '等待采集画面或视频源发布'
-                    if broadcast.kind == 'desktop':
+                    if broadcast.kind in {'desktop', 'page'}:
                         broadcast.attempts += 1
             except AppError as error:
                 broadcast.error = error.message[:256]
                 broadcast.live_since = None
-                broadcast.state = 'STARTING' if broadcast.kind == 'desktop' else 'WAITING'
-                if broadcast.kind == 'desktop':
+                broadcast.state = 'STARTING' if broadcast.kind in {'desktop', 'page'} else 'WAITING'
+                if broadcast.kind in {'desktop', 'page'}:
                     broadcast.attempts += 1
-            if broadcast.kind == 'desktop' and broadcast.attempts >= 3:
+            if broadcast.kind in {'desktop', 'page'} and broadcast.attempts >= 3:
                 broadcast.state = 'ERROR'
                 broadcast.active = False
                 broadcast.stop_complete = False

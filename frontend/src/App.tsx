@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
 import { PublicWatchPage } from "./features/console/PublicWatchPage";
+import {
+  WorkbenchEntry,
+  WorkbenchPage,
+} from "./features/console/WorkbenchPage";
 import { api, ApiError } from "./api";
 import { usePath, navigate } from "./app/router";
 import { canEnterRoute } from "./app/permission";
@@ -29,7 +33,7 @@ export default function App() {
     [booted, setBooted] = useState(false),
     [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    if (location.pathname === "/watch") {
+    if (["/watch", "/workbench-entry"].includes(location.pathname)) {
       setBooted(true);
       return;
     }
@@ -49,7 +53,7 @@ export default function App() {
   }, [user, path, prefix]);
   useEffect(() => {
     const expired = () => {
-      if (location.pathname === "/watch") return;
+      if (["/watch", "/workbench-entry"].includes(location.pathname)) return;
       setUser(null);
       navigate("/login");
     };
@@ -67,11 +71,15 @@ export default function App() {
     }
   }
   if (path === "/watch") return <PublicWatchPage />;
+  if (path === "/workbench-entry") return <WorkbenchEntry />;
   if (!booted)
     return (
       <div className="login-screen">
         <div className="login" role="status">
-          <span className="auth-spinner auth-spinner-muted" aria-hidden="true" />
+          <span
+            className="auth-spinner auth-spinner-muted"
+            aria-hidden="true"
+          />
           正在连接 CloudVirt…
         </div>
       </div>
@@ -118,6 +126,7 @@ export default function App() {
       </div>
     );
   else if (key === "dashboard") content = <DashboardPage admin={admin} />;
+  else if (key === "workbench") content = <WorkbenchPage />;
   else if ((key === "clusters" || key === "pools") && admin)
     content = <OrganizationPage key={key} kind={key} />;
   else if (key === "storage-pools" && admin) content = <StoragePoolsPage />;

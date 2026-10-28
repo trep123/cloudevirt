@@ -30,6 +30,22 @@ func signedConsoleTicket(secret string, ticket consoleTicket) string {
 	mac.Write([]byte("console-v1." + payload))
 	return payload + "." + hex.EncodeToString(mac.Sum(nil))
 }
+
+func TestWorkspaceTicketCannotMixScopes(t *testing.T) {
+	ticket := consoleTicket{SID: "34ee37a0-f2fb-4bc2-aa49-c6f8d034126c", Workspace: "00000000-0000-4000-8000-000000000001", Generation: "00000000-0000-4000-8000-000000000002", Exp: time.Now().Unix() + 30}
+	if _, valid := parseConsoleTicket("workspace-secret", signedConsoleTicket("workspace-secret", ticket)); !valid {
+		t.Fatal("workspace ticket rejected")
+	}
+	ticket.Domain = "cv-test"
+	if _, valid := parseConsoleTicket("workspace-secret", signedConsoleTicket("workspace-secret", ticket)); valid {
+		t.Fatal("mixed VM/workspace scope accepted")
+	}
+	ticket.Domain = ""
+	ticket.Generation = ""
+	if _, valid := parseConsoleTicket("workspace-secret", signedConsoleTicket("workspace-secret", ticket)); valid {
+		t.Fatal("missing workspace generation accepted")
+	}
+}
 func TestConsoleTicketScopeExpiryAndReplay(t *testing.T) {
 	secret := "test-secret"
 	ticket := consoleTicket{SID: "34ee37a0-f2fb-4bc2-aa49-c6f8d034126c", Domain: "cv-test", Exp: time.Now().Unix() + 30}

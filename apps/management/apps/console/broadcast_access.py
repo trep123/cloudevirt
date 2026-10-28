@@ -31,6 +31,14 @@ class LinkPolicy:
     def available(self, broadcast):
         return (
             broadcast.active
+            and (
+                not broadcast.workspace_id
+                or (
+                    broadcast.workspace.active
+                    and broadcast.workspace.expires_at
+                    and broadcast.workspace.expires_at > timezone.now()
+                )
+            )
             and broadcast.owner.is_active
             and broadcast.source.enabled
             and bool(broadcast.public_token_hash)

@@ -16,6 +16,7 @@ PORT="${CLOUDVIRT_PORT:-443}"
 HTTPS=true
 ENABLE_OVS=false
 ENABLE_MEDIA=false
+ENABLE_WORKBENCH=false
 ALLOW_DESTRUCTIVE=false
 TMP_DIR=""
 STEP=preflight
@@ -31,6 +32,7 @@ CloudVirt / Ubuntu 26.x amd64
   --http                Use HTTP instead of self-signed HTTPS (default port 80).
   --enable-ovs          Configure a dedicated OVS bridge, DHCP and NAT.
   --enable-media        Install a loopback-only MediaMTX gateway and LAN ICE listener.
+  --enable-workbench    Install persistent shared browser workspaces (includes media).
   --allow-destructive   Allow Agent force-stop and deletion operations.
   --help                Show this help without changing the system.
 
@@ -67,6 +69,7 @@ while (($#)); do
         --http) HTTPS=false; [[ "$PORT" != 443 ]] || PORT=80; shift;;
         --enable-ovs) ENABLE_OVS=true; shift;;
         --enable-media) ENABLE_MEDIA=true; shift;;
+        --enable-workbench) ENABLE_WORKBENCH=true; ENABLE_MEDIA=true; shift;;
         --allow-destructive) ALLOW_DESTRUCTIVE=true; shift;;
         --help|-h) usage; exit 0;;
         *) die "Unknown option: $1";;
@@ -141,6 +144,7 @@ fi
 if [[ -f "$CONFIG_DIR/install-secrets.env" ]]; then
     log "Stopping application jobs while deploying (running guests are not stopped)"
     systemctl stop cloudvirt-collect_node_status.timer cloudvirt-reconcile.timer cloudvirt-cleanup_console_sessions.timer cloudvirt-reconcile_broadcasts.timer 2>/dev/null || true
+    systemctl stop cloudvirt-reconcile_workspaces.timer cloudvirt-reconcile_workspaces.service 2>/dev/null || true
     systemctl stop cloudvirt-collect_node_status.service cloudvirt-reconcile.service cloudvirt-cleanup_console_sessions.service cloudvirt-reconcile_broadcasts.service 2>/dev/null || true
     systemctl stop cloudvirt-worker cloudvirt-management cloudvirt-agent 2>/dev/null || true
 fi
@@ -379,10 +383,11 @@ UMask=0007
 ReadWritePaths=
 ReadWritePaths=$DATA_DIR /var/log/cloudvirt
 ENV
-for job in collect_node_status reconcile cleanup_console_sessions reconcile_broadcasts; do
+for job in collect_node_status reconcile cleanup_console_sessions reconcile_broadcasts reconcile_workspaces; do
     interval=30
     [[ "$job" != reconcile ]] || interval=60
     [[ "$job" != reconcile_broadcasts ]] || interval=15
+    [[ "$job" != reconcile_workspaces ]] || interval=15
     cat > "/etc/systemd/system/cloudvirt-$job.service" <<ENV
 [Unit]
 Description=CloudVirt $job
@@ -484,6 +489,15 @@ STEP=health
 if [[ "$ENABLE_MEDIA" == true ]]; then
     bash "$APP_DIR/scripts/install_media.sh" --host "${CLOUDVIRT_MEDIA_HOST:-$DOMAIN}"
 fi
+if [[ "$ENABLE_WORKBENCH" == true ]]; then
+    [[ "$HTTPS" == true ]] || die "Shared workspaces require HTTPS"
+    bash "$APP_DIR/scripts/install_workbench.sh" --origin "$ORIGIN" --ca "$CONFIG_DIR/tls/server.crt"
+    if grep -q '^WORKBENCH_ENABLED=' "$CONFIG_DIR/management.env"; then
+        sed -i 's/^WORKBENCH_ENABLED=.*/WORKBENCH_ENABLED=true/' "$CONFIG_DIR/management.env"
+    else
+        printf '\nWORKBENCH_ENABLED=true\n' >> "$CONFIG_DIR/management.env"
+    fi
+fi
 wait_url() {
     local url=$1 attempts=0
     shift
@@ -535,6 +549,7 @@ if [[ "$ENABLE_OVS" == true ]]; then
     bash "$APP_DIR/scripts/install_ovs.sh" "$APP_DIR"
 fi
 systemctl enable --now cloudvirt-collect_node_status.timer cloudvirt-reconcile.timer cloudvirt-cleanup_console_sessions.timer cloudvirt-reconcile_broadcasts.timer
+systemctl enable --now cloudvirt-reconcile_workspaces.timer
 for service in cloudvirt-agent cloudvirt-management cloudvirt-worker nginx postgresql; do
     systemctl is-active --quiet "$service" || die "Service is not active: $service"
 done

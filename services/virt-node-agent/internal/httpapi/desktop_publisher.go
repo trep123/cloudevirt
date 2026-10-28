@@ -153,20 +153,29 @@ func desktopStreamHandler(deps Dependencies) http.HandlerFunc {
 		}
 		if request.Method == http.MethodPost && !strings.HasSuffix(request.URL.Path, "/lease") {
 			var input struct {
-				Domain   string `json:"domain"`
-				Password string `json:"password"`
+				Workspace  string `json:"workspace"`
+				Generation string `json:"generation"`
+				Domain     string `json:"domain"`
+				Password   string `json:"password"`
 			}
 			decoder := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 4096))
 			decoder.DisallowUnknownFields()
-			if decoder.Decode(&input) != nil || !domainxml.ValidName(input.Domain) || len(input.Password) < 1 || len(input.Password) > 64 {
+			if decoder.Decode(&input) != nil || (input.Workspace == "" && !domainxml.ValidName(input.Domain)) || (input.Workspace != "" && (input.Domain != "" || !consoleID.MatchString(input.Workspace) || input.Generation != id)) || len(input.Password) < 1 || len(input.Password) > 64 {
 				writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeInvalidArgument, "桌面发布参数无效", nil), RequestIDFromContext(request.Context()))
 				return
 			}
-			if deps.Virtualizer == nil {
+			if deps.Virtualizer == nil && input.Workspace == "" {
 				writeAPIError(writer, deps.Logger, errNoVirtualizer, RequestIDFromContext(request.Context()))
 				return
 			}
-			port, err := deps.Virtualizer.DomainVNCPort(request.Context(), input.Domain)
+			var port int
+			var err error
+			if input.Workspace != "" {
+				port, err = workspacePort(request.Context(), input.Workspace, input.Generation)
+				input.Domain = "workbench-" + input.Workspace
+			} else {
+				port, err = deps.Virtualizer.DomainVNCPort(request.Context(), input.Domain)
+			}
 			if err == nil {
 				err = publisher.start(id, input.Domain, input.Password, port)
 			}

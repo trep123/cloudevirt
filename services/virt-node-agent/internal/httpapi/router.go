@@ -61,6 +61,9 @@ func NewRouter(deps Dependencies) http.Handler {
 	})
 
 	api := http.NewServeMux()
+	api.HandleFunc("GET /api/v1/workbenches/{id}", workspaceHandler(deps))
+	api.HandleFunc("POST /api/v1/workbenches/{id}", workspaceHandler(deps))
+	api.HandleFunc("DELETE /api/v1/workbenches/{id}", workspaceHandler(deps))
 	api.HandleFunc("POST /api/v1/desktop-streams/{id}", desktopStreamHandler(deps))
 	api.HandleFunc("GET /api/v1/desktop-streams/{id}", desktopStreamHandler(deps))
 	api.HandleFunc("POST /api/v1/desktop-streams/{id}/lease", desktopStreamHandler(deps))

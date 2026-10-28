@@ -76,6 +76,11 @@ class LogoutView(APIView):
         from apps.console.services import login_hash
 
         identity = login_hash(request)
+        from apps.console.models import WorkspaceControlSession
+
+        WorkspaceControlSession.objects.filter(user=request.user, login_hash=identity).update(
+            expires_at=timezone.now()
+        )
         ConsoleSession.objects.filter(user=request.user, login_hash=identity, revoked=False).update(
             expires_at=timezone.now()
         )
@@ -96,6 +101,7 @@ class MeView(APIView):
         """返回用户、角色与权限清单（同时下发 CSRF Cookie 供前端取用）。"""
         data = UserSerializer(request.user).data
         data['permissions'] = sorted(request.user.get_all_permissions())
+        data['workbench_id'] = request.session.get('workbench_id')
         return Response(data)
 
 

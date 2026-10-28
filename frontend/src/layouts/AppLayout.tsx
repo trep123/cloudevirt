@@ -325,6 +325,11 @@ export function AppLayout({
             <kbd>↵</kbd>
           </form>
           <div className="topbar-actions">
+            {user.workbench_id ? (
+              <span className="muted" title="此服务端工作台画面正在共享给持有观看链接的用户">共享工作台</span>
+            ) : user.permissions.includes("console.use_workspace") ? (
+              <button className="action" onClick={() => go("workbench")}>共享工作台</button>
+            ) : null}
             <button
               type="button"
               className="icon-btn"

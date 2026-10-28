@@ -8,8 +8,20 @@ from .broadcast_views import (
 )
 from .media import MediaCreateView, MediaLeaseView, MediaSourceDetailView, MediaSourcesView
 from .views import DesktopAuthorizeView, DesktopCreateView, DesktopLeaseView
+from .workspaces import (
+    MyWorkspaceView,
+    WorkspaceBootstrapView,
+    WorkspaceControlLeaseView,
+    WorkspaceControlView,
+    WorkspaceLinkView,
+)
 
 urlpatterns = [
+    path('console/workspaces/my', MyWorkspaceView.as_view()),
+    path('console/workspaces/my/link', WorkspaceLinkView.as_view()),
+    path('console/workspaces/<uuid:pk>/bootstrap', WorkspaceBootstrapView.as_view()),
+    path('console/workspaces/<uuid:pk>/sessions', WorkspaceControlView.as_view()),
+    path('console/workspace-sessions/<uuid:pk>', WorkspaceControlLeaseView.as_view()),
     path('console/instances/<int:pk>/broadcasts', BroadcastsView.as_view()),
     path('console/broadcasts/<uuid:pk>', BroadcastControlView.as_view()),
     path('console/broadcasts/<uuid:pk>/watch', PublicBroadcastView.as_view()),
