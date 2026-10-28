@@ -290,7 +290,6 @@ export function BrowserUpload({
           <progress
             max={file.size || 1}
             value={received}
-            style={{ width: "100%" }}
           />
           <p>
             节点已确认：{formatBytes(received)} / {formatBytes(file.size)}（

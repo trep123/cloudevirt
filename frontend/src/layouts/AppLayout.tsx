@@ -64,7 +64,11 @@ export function AppLayout({
   onLogout: () => void;
   children: ReactNode;
 }) {
-  const [collapsed, setCollapsed] = useState(false),
+  const [collapsed, setCollapsed] = useState(
+      () =>
+        typeof window !== "undefined" &&
+        !!window.matchMedia?.("(max-width: 900px)").matches,
+    ),
     [query, setQuery] = useState(""),
     [help, setHelp] = useState(false);
   const prefix = admin ? "/admin" : "/app",
