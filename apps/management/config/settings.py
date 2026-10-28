@@ -83,17 +83,6 @@ def parse_database_url(url: str) -> dict[str, object]:
 DEBUG = read_bool('DJANGO_DEBUG', False)
 CONSOLE_REQUIRE_TLS = read_bool('CONSOLE_REQUIRE_TLS', not DEBUG)
 CONSOLE_MAX_SESSIONS = int(os.environ.get('CONSOLE_MAX_SESSIONS', '3'))
-MEDIA_WHEP_BASE_URL = os.environ.get('MEDIA_WHEP_BASE_URL', 'http://127.0.0.1:8889').rstrip('/')
-MEDIA_API_BASE_URL = os.environ.get('MEDIA_API_BASE_URL', 'http://127.0.0.1:9997').rstrip('/')
-WORKBENCH_ENABLED = os.environ.get('WORKBENCH_ENABLED', 'false').lower() == 'true'
-WORKBENCH_AGENT_ENDPOINT = os.environ.get('WORKBENCH_AGENT_ENDPOINT', 'http://127.0.0.1:9100')
-WORKBENCH_MAX_SESSIONS = int(os.environ.get('WORKBENCH_MAX_SESSIONS', '2'))
-TAB_SHARE_MAX_PUBLISHERS = int(os.environ.get('TAB_SHARE_MAX_PUBLISHERS', '8'))
-BROADCAST_MAX_VIEWERS = max(1, min(256, int(os.environ.get('BROADCAST_MAX_VIEWERS', '16'))))
-MEDIA_STUN_URLS = read_list('MEDIA_STUN_URLS', [])
-MEDIA_TURN_URLS = read_list('MEDIA_TURN_URLS', [])
-MEDIA_TURN_SECRET = os.environ.get('MEDIA_TURN_SECRET', '')
-ALLOWED_HOSTS = read_list('DJANGO_ALLOWED_HOSTS', ['localhost', '127.0.0.1'])
 
 # 反向代理（nginx）场景：显式声明可信来源与转发的 Host/Proto
 CSRF_TRUSTED_ORIGINS = read_list('DJANGO_CSRF_TRUSTED_ORIGINS', [])

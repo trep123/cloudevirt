@@ -35,7 +35,6 @@ type DomainLister interface {
 
 // Dependencies 是路由所需的外部依赖。
 type Dependencies struct {
-	Publisher        *DesktopPublisher
 	Version          string
 	Token            string
 	StoragePaths     []string
@@ -61,13 +60,6 @@ func NewRouter(deps Dependencies) http.Handler {
 	})
 
 	api := http.NewServeMux()
-	api.HandleFunc("GET /api/v1/workbenches/{id}", workspaceHandler(deps))
-	api.HandleFunc("POST /api/v1/workbenches/{id}", workspaceHandler(deps))
-	api.HandleFunc("DELETE /api/v1/workbenches/{id}", workspaceHandler(deps))
-	api.HandleFunc("POST /api/v1/desktop-streams/{id}", desktopStreamHandler(deps))
-	api.HandleFunc("GET /api/v1/desktop-streams/{id}", desktopStreamHandler(deps))
-	api.HandleFunc("POST /api/v1/desktop-streams/{id}/lease", desktopStreamHandler(deps))
-	api.HandleFunc("DELETE /api/v1/desktop-streams/{id}", desktopStreamHandler(deps))
 	api.HandleFunc("POST /api/v1/console-sessions/{id}/lease", consoleLeaseHandler(deps))
 	api.HandleFunc("DELETE /api/v1/console-sessions/{id}", consoleLeaseHandler(deps))
 	api.HandleFunc("GET /api/v1/images/uploads/{id}", imageUploadHandler(deps))

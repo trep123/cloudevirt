@@ -19,11 +19,9 @@ import (
 var consoleID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 type consoleTicket struct {
-	Workspace  string `json:"workspace,omitempty"`
-	Generation string `json:"generation,omitempty"`
-	SID        string `json:"sid"`
-	Domain     string `json:"domain"`
-	Exp        int64  `json:"exp"`
+	SID    string `json:"sid"`
+	Domain string `json:"domain"`
+	Exp    int64  `json:"exp"`
 }
 type consoleConnection struct {
 	browser net.Conn
@@ -59,11 +57,7 @@ func parseConsoleTicket(secret, token string) (consoleTicket, bool) {
 		return ticket, false
 	}
 	now := time.Now().Unix()
-	scopeValid := ticket.Workspace == "" && ticket.Generation == "" && domainxml.ValidName(ticket.Domain)
-	if ticket.Workspace != "" {
-		scopeValid = ticket.Domain == "" && consoleID.MatchString(ticket.Workspace) && consoleID.MatchString(ticket.Generation)
-	}
-	return ticket, consoleID.MatchString(ticket.SID) && scopeValid && ticket.Exp >= now && ticket.Exp <= now+35
+	return ticket, consoleID.MatchString(ticket.SID) && domainxml.ValidName(ticket.Domain) && ticket.Exp >= now && ticket.Exp <= now+35
 }
 
 func consumeConsoleTicket(ticket consoleTicket) bool {

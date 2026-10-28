@@ -46,12 +46,6 @@ test("administrator still needs route capability", () => {
   );
 });
 
-test("shared workbench requires its own capability and preserves console scope", () => {
-  assert.equal(canEnterRoute({console_scope:"user",permissions:["instances.view_instance"]},"/app/workbench"),false);
-  const user={console_scope:"user",permissions:["console.use_workspace"]};
-  assert.equal(canEnterRoute(user,"/app/workbench"),true);
-  assert.equal(canEnterRoute(user,"/admin/workbench"),false);
-});
 test("infrastructure administration and snapshot routes preserve role boundaries", () => {
   const user = {
     console_scope: "user",

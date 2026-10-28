@@ -9,7 +9,6 @@ export function canEnterRoute(user: CurrentUser, path: string): boolean {
   )
     return false;
   const required: Record<string, string> = {
-    workbench: "console.use_workspace",
     vms: "instances.view_instance",
     nodes: "nodes.view_node",
     images: "images.view_image",

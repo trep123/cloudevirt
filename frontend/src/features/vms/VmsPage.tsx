@@ -270,7 +270,7 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
             {detail ? (
               <button className="action" onClick={() => setConsoleOpen(true)}>
                 <Icon name="console" size={15} />
-                桌面与视频
+                远程控制台
               </button>
             ) : null}
             {detail ? actions(detail) : null}

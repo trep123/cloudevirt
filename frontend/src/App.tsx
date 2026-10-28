@@ -1,6 +1,4 @@
 import { useEffect, useState } from "react";
-import { PublicWatchPage } from "./features/console/PublicWatchPage";
-import { WorkbenchEntry } from "./features/console/WorkbenchPage";
 import { api, ApiError } from "./api";
 import { usePath, navigate } from "./app/router";
 import { canEnterRoute } from "./app/permission";
@@ -30,10 +28,6 @@ export default function App() {
     [booted, setBooted] = useState(false),
     [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    if (["/watch", "/workbench-entry"].includes(location.pathname)) {
-      setBooted(true);
-      return;
-    }
     api
       .me()
       .then(setUser)
@@ -46,11 +40,10 @@ export default function App() {
   const admin = user?.console_scope === "admin",
     prefix = admin ? "/admin" : "/app";
   useEffect(() => {
-    if (user && ["/", "/login", prefix + "/workbench"].includes(path)) navigate(prefix + "/dashboard");
+    if (user && ["/", "/login"].includes(path)) navigate(prefix + "/dashboard");
   }, [user, path, prefix]);
   useEffect(() => {
     const expired = () => {
-      if (["/watch", "/workbench-entry"].includes(location.pathname)) return;
       setUser(null);
       navigate("/login");
     };
@@ -67,8 +60,6 @@ export default function App() {
       setError(describeError(e));
     }
   }
-  if (path === "/watch") return <PublicWatchPage />;
-  if (path === "/workbench-entry") return <WorkbenchEntry />;
   if (!booted)
     return (
       <div className="login-screen">

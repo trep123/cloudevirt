@@ -54,17 +54,11 @@ func vncProxyHandler(deps Dependencies) http.HandlerFunc {
 			writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeInvalidArgument, "WebSocket 握手无效", nil), requestID)
 			return
 		}
-		if deps.Virtualizer == nil && ticket.Workspace == "" {
+		if deps.Virtualizer == nil {
 			writeAPIError(writer, deps.Logger, errNoVirtualizer, requestID)
 			return
 		}
-		var port int
-		var err error
-		if ticket.Workspace != "" {
-			port, err = workspacePort(request.Context(), ticket.Workspace, ticket.Generation)
-		} else {
-			port, err = deps.Virtualizer.DomainVNCPort(request.Context(), ticket.Domain)
-		}
+		port, err := deps.Virtualizer.DomainVNCPort(request.Context(), ticket.Domain)
 		if err != nil {
 			writeAPIError(writer, deps.Logger, err, requestID)
 			return

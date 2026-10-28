@@ -1,22 +1,7 @@
 import test from "node:test";
 
 import assert from "node:assert/strict";
-import { buildSync } from "esbuild";
 
-async function bundle(entry) {
-  const output = buildSync({
-    entryPoints: [entry],
-    bundle: true,
-    write: false,
-    format: "esm",
-    platform: "browser",
-    plugins: [],
-  });
-  return import(
-    "data:text/javascript;base64," +
-      Buffer.from(output.outputFiles[0].text).toString("base64")
-  );
-}
 // esbuild's async plugin isolates the real session lifecycle from the actual RFB transport.
 import { build } from "esbuild";
 const desktopBuild = await build({
@@ -49,7 +34,6 @@ const { DesktopEngine } = await import(
   "data:text/javascript;base64," +
     Buffer.from(desktopBuild.outputFiles[0].text).toString("base64")
 );
-const { MediaEngine } = await bundle("src/features/console/MediaEngine.ts");
 async function settle() {
   for (let i = 0; i < 30; i++) await Promise.resolve();
 }
@@ -61,8 +45,6 @@ function environment(t) {
     "navigator",
     "fetch",
     "__rfb",
-    "RTCPeerConnection",
-    "MediaStream",
   ];
   const previous = new Map(
     names.map((name) => [
@@ -89,11 +71,6 @@ function environment(t) {
   globalThis.fetch = async (url, init) => {
     requests.push({ url, init });
     if (init.method === "DELETE") return new Response(null, { status: 204 });
-    if (url.includes("/media-sources/"))
-      return new Response(
-        JSON.stringify({ session_id: "media-session", sdp: "v=0\r\n" }),
-        { status: 201 },
-      );
     return new Response(
       JSON.stringify({
         session_id: "desktop-session",
@@ -155,112 +132,6 @@ test("desktop distinguishes handshake/draw and isolates stale connection callbac
     engine.stop();
     assert.equal(states.at(-1), "closed");
     assert.ok(requests.some((request) => request.init.method === "DELETE"));
-  } finally {
-    engine.dispose();
-  }
-});
-
-test("media is playing only after an actual video callback and releases transports", async (t) => {
-  const requests = environment(t),
-    states = [],
-    peers = [];
-  class Stream {
-    tracks = [];
-    addTrack(track) {
-      this.tracks.push(track);
-    }
-    getTracks() {
-      return this.tracks;
-    }
-  }
-  globalThis.MediaStream = Stream;
-  let stopped = 0,
-    callback,
-    canceled = false;
-  const track = {
-    kind: "video",
-    stop() {
-      stopped++;
-    },
-  };
-  class Peer {
-    iceGatheringState = "complete";
-    localDescription = null;
-    connectionState = "new";
-    constructor() {
-      peers.push(this);
-    }
-    addTransceiver() {}
-    async createOffer() {
-      return { type: "offer", sdp: "v=0\r\n" };
-    }
-    async setLocalDescription(value) {
-      this.localDescription = value;
-    }
-    async setRemoteDescription() {}
-    getReceivers() {
-      return [{ track }];
-    }
-    close() {
-      this.closed = true;
-    }
-    async getStats() {
-      return new Map();
-    }
-  }
-  globalThis.RTCPeerConnection = Peer;
-  const video = {
-    srcObject: null,
-    readyState: 2,
-    play: async () => {},
-    pause() {},
-    requestVideoFrameCallback(fn) {
-      callback = fn;
-      return 1;
-    },
-    cancelVideoFrameCallback() {
-      canceled = true;
-    },
-  };
-  let issued = 0;
-  const engine = new MediaEngine(
-    video,
-    1,
-    [],
-    (state) => states.push(state),
-    () => {},
-    async () => {
-      issued++;
-      return [];
-    },
-  );
-  try {
-    engine.start();
-    await settle();
-    peers[0].ontrack({ track });
-    assert.notEqual(states.at(-1), "playing");
-    callback();
-    assert.equal(states.at(-1), "playing");
-    engine.stop();
-    assert.equal(states.at(-1), "closed");
-    assert.ok(peers[0].closed);
-    assert.ok(stopped > 0);
-    assert.ok(canceled);
-    assert.equal(video.srcObject, null);
-    assert.ok(
-      requests.some(
-        (request) =>
-          request.url.includes("/media-sessions/") &&
-          request.init.method === "DELETE",
-      ),
-    );
-    engine.start();
-    await settle();
-    assert.equal(
-      issued,
-      2,
-      "every new media connection obtains current TURN credentials",
-    );
   } finally {
     engine.dispose();
   }

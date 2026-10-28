@@ -1,8 +1,0 @@
-[Unit]
-Description=CloudVirt broadcast publisher lease schedule
-[Timer]
-OnBootSec=20s
-OnUnitInactiveSec=15s
-Unit=cloudvirt-reconcile_broadcasts.service
-[Install]
-WantedBy=timers.target

@@ -22,7 +22,6 @@ ROLE_PERMISSIONS: dict[str, tuple[str, ...]] = {
     ROLE_ADMIN: (ALL_PERMISSIONS,),
     # 学员：虚拟机、网络、镜像、磁盘操作
     ROLE_OPERATOR: (
-        'console.use_workspace',
         'nodes.view_node',
         'nodes.refresh_node',
         'images.view_image',
@@ -48,7 +47,6 @@ ROLE_PERMISSIONS: dict[str, tuple[str, ...]] = {
     ),
     # 一般用户：仅虚拟机操作，其余模块只读
     ROLE_VIEWER: (
-        'console.use_workspace',
         'nodes.view_node',
         'images.view_image',
         'networks.view_network',

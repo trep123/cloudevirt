@@ -4,7 +4,6 @@ import {
   type DesktopState,
   type DesktopMetrics,
 } from "../features/console/DesktopEngine";
-import { MediaPanel } from "../features/console/MediaPanel";
 import { ErrorBanner } from "./ui";
 
 const labels: Record<DesktopState, string> = {
@@ -36,7 +35,6 @@ export function VncConsole({
     [profile, setProfile] = useState("balanced"),
     [scale, setScale] = useState(true),
     [viewOnly, setViewOnly] = useState(false);
-  const [layout, setLayout] = useState("split");
   useEffect(() => {
     if (!target.current || !desktopAvailable) return;
     const current = new DesktopEngine(
@@ -94,16 +92,9 @@ export function VncConsole({
   const value = (number: number | null | undefined, suffix: string) =>
     number == null ? "—" : number.toFixed(1) + suffix;
   return (
-    <div className={"console-workspace layout-" + layout}>
+    <div className="console-workspace">
       <div className="vnc-toolbar workspace-toolbar">
-        <strong>桌面与视频工作区</strong>
-        <label>
-          布局{" "}
-          <select value={layout} onChange={(e) => setLayout(e.target.value)}>
-            <option value="split">左右分屏</option>
-            <option value="stack">上下排列</option>
-          </select>
-        </label>
+        <strong>虚拟机远程控制台</strong>
       </div>
       <div className="console-panes">
         <section className="vnc-panel" aria-label="远程桌面">
@@ -194,7 +185,7 @@ export function VncConsole({
           </div>
           <p className="muted">
             点击桌面捕获键鼠，Ctrl+Alt 释放。后台 30
-            秒后暂停桌面。更新次数不是视频 FPS，绘制耗时不是端到端延迟。
+            秒后暂停桌面。更新次数为屏幕刷新次数，绘制耗时不包含网络耗时。
           </p>
           <details>
             <summary>剪贴板（仅手动发送 / 复制）</summary>
@@ -231,7 +222,6 @@ export function VncConsole({
             </button>
           </details>
         </section>
-        <MediaPanel instanceId={instanceId} />
       </div>
     </div>
   );

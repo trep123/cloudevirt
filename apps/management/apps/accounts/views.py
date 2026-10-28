@@ -72,26 +72,11 @@ class LogoutView(APIView):
             target_type='user',
             target_id=str(request.user.pk),
         )
-        from apps.console.models import ConsoleSession, MediaSession
+        from apps.console.models import ConsoleSession
         from apps.console.services import login_hash
 
         identity = login_hash(request)
-        from apps.console.models import Broadcast, TabShare
-
-        shares = TabShare.objects.filter(broadcast__owner=request.user, login_hash=identity)
-        shares.update(expires_at=timezone.now())
-        Broadcast.objects.filter(tabshare__in=shares, active=True).update(
-            active=False, public_token_hash='', state='STOPPING'
-        )
-        from apps.console.models import WorkspaceControlSession
-
-        WorkspaceControlSession.objects.filter(user=request.user, login_hash=identity).update(
-            expires_at=timezone.now()
-        )
         ConsoleSession.objects.filter(user=request.user, login_hash=identity, revoked=False).update(
-            expires_at=timezone.now()
-        )
-        MediaSession.objects.filter(user=request.user, login_hash=identity, closed=False).update(
             expires_at=timezone.now()
         )
         logout(request)
@@ -108,7 +93,6 @@ class MeView(APIView):
         """返回用户、角色与权限清单（同时下发 CSRF Cookie 供前端取用）。"""
         data = UserSerializer(request.user).data
         data['permissions'] = sorted(request.user.get_all_permissions())
-        data['workbench_id'] = request.session.get('workbench_id')
         return Response(data)
 
 

@@ -1,5 +1,5 @@
 /* =========================================================================
- * Remote console (noVNC desktop + WebRTC media) and public watch page.
+ * Authenticated virtual machine noVNC console.
  * App shell, tables, forms etc. live in ../styles.css.
  * ========================================================================= */
 :root {
@@ -13,12 +13,7 @@
   min-width: 0;
 }
 .console-panes {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: var(--space-4);
-}
-.console-workspace.layout-stack .console-panes {
-  grid-template-columns: minmax(0, 1fr);
+  display: block;
 }
 .console-panes > section {
   min-width: 0;
@@ -31,14 +26,6 @@
 .console-panes .vnc-screen {
   min-height: var(--console-pane-min-height);
   height: 480px;
-}
-.media-panel video {
-  width: 100%;
-  height: 480px;
-  background: var(--console-screen-bg);
-  border-radius: var(--radius-md);
-  object-fit: contain;
-  display: block;
 }
 .console-metrics {
   display: flex;
@@ -180,39 +167,4 @@
   border-radius: var(--radius-xs);
   max-width: 100%;
   overflow: auto;
-}
-
-@media (max-width: 1400px) {
-  .console-panes {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-/* ---------- Broadcast / public watch ---------- */
-.broadcast-card {
-  margin-top: var(--space-4);
-  padding: var(--space-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface-muted);
-}
-.broadcast-card input {
-  width: 100%;
-  margin: var(--space-2) 0;
-}
-.public-watch {
-  min-height: 100vh;
-  padding: var(--space-6);
-  background: var(--app-bg);
-}
-.public-watch > .card {
-  max-width: 1280px;
-  margin: 0 auto;
-}
-.public-watch video {
-  width: 100%;
-  height: min(70vh, 720px);
-  background: var(--console-screen-bg);
-  border-radius: var(--radius-md);
-  object-fit: contain;
 }

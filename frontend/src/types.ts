@@ -186,7 +186,6 @@ export interface Overview {
 }
 
 export interface CurrentUser {
-  workbench_id?: string | null;
   console_scope?: "admin" | "user";
   id: number;
   username: string;

@@ -1,15 +1,11 @@
 """Console authorization, single-use claims, source scopes and cleanup boundaries."""
 
-from unittest.mock import patch
-
 from django.test import TestCase, override_settings
 
-from apps.console.media import safe_resource
-from apps.console.models import ConsoleSession, MediaSession, MediaSource
+from apps.console.models import ConsoleSession
 from apps.console.services import gateway_key
 from apps.instances.models import Instance
 from apps.instances.tests.helpers import make_image, make_node, make_user
-from common.errors import AppError
 
 
 @override_settings(
@@ -85,49 +81,15 @@ class ConsoleTests(TestCase):
             self.client.post(f'/api/v1/console/instances/{self.vm.pk}/sessions').status_code, 409
         )
 
-    def test_media_source_is_not_visible_to_other_users(self):
-        source = MediaSource.objects.create(instance=self.vm, name='camera', stream_path='camera')
-        self.client.force_login(self.other)
-        self.assertEqual(
-            self.client.get(f'/api/v1/console/instances/{self.vm.pk}/media-sources').status_code,
-            404,
-        )
-        self.assertEqual(
-            self.client.post(
-                f'/api/v1/console/media-sources/{source.pk}/sessions',
-                {'sdp': 'v=0\r\n'},
-                content_type='application/json',
-            ).status_code,
-            404,
-        )
-
-    def test_ordinary_user_cannot_register_media(self):
-        self.assertEqual(
-            self.client.post(
-                f'/api/v1/console/instances/{self.vm.pk}/media-sources',
-                {'name': 'camera', 'stream_path': 'camera'},
-                content_type='application/json',
-            ).status_code,
-            403,
-        )
-
-    @patch('apps.console.media.media_request')
-    def test_media_uses_platform_identity_and_hides_upstream_location(self, request):
-        source = MediaSource.objects.create(instance=self.vm, name='camera', stream_path='camera')
-        request.return_value = ('v=0\r\n', '/camera/whep/resource-1', 201)
-        response = self.client.post(
-            f'/api/v1/console/media-sources/{source.pk}/sessions',
-            {'sdp': 'v=0\r\n'},
-            content_type='application/json',
-        )
-        self.assertEqual(response.status_code, 201)
-        self.assertNotIn('upstream_resource', response.json())
-        session = MediaSession.objects.get(pk=response.json()['session_id'])
-        self.assertEqual(session.user, self.owner)
-        self.client.force_login(self.other)
-        self.assertEqual(
-            self.client.delete(f'/api/v1/console/media-sessions/{session.pk}').status_code, 404
-        )
+    def test_removed_publishing_and_viewer_routes_return_not_found(self):
+        for path in [
+            '/api/v1/console/tab-shares',
+            '/api/v1/console/workspaces/my',
+            f'/api/v1/console/instances/{self.vm.pk}/broadcasts',
+            f'/api/v1/console/instances/{self.vm.pk}/media-sources',
+            '/api/v1/console/broadcasts/00000000-0000-4000-8000-000000000001/watch',
+        ]:
+            self.assertEqual(self.client.get(path).status_code, 404)
 
     def test_gateway_uses_the_registered_instance_node(self):
         self.vm.node = make_node(name='second-node', endpoint='http://127.0.0.2:9201')
@@ -141,38 +103,3 @@ class ConsoleTests(TestCase):
         response = self.client.post(f'/api/v1/console/instances/{self.vm.pk}/sessions')
         self.assertEqual(response.status_code, 403)
         self.assertFalse(ConsoleSession.objects.exists())
-
-    @override_settings(
-        MEDIA_TURN_URLS=['turn:relay.invalid:3478'],
-        MEDIA_TURN_SECRET='server-only-secret',
-        MEDIA_STUN_URLS=[],
-    )
-    def test_turn_credentials_are_temporary_and_do_not_expose_server_secret(self):
-        import base64
-        import hashlib
-        import hmac
-
-        from django.utils import timezone
-
-        response = self.client.get(f'/api/v1/console/instances/{self.vm.pk}/media-sources')
-        self.assertEqual(response.status_code, 200)
-        server = response.json()['ice_servers'][0]
-        expiry, owner = server['username'].split(':')
-        self.assertEqual(int(owner), self.owner.pk)
-        remaining = int(expiry) - int(timezone.now().timestamp())
-        self.assertGreaterEqual(remaining, 599)
-        self.assertLessEqual(remaining, 600)
-        expected = base64.b64encode(
-            hmac.new(b'server-only-secret', server['username'].encode(), hashlib.sha1).digest()
-        ).decode()
-        self.assertEqual(server['credential'], expected)
-        self.assertNotIn('server-only-secret', response.content.decode())
-
-    def test_media_location_is_not_an_ssrf_target(self):
-        for location in [
-            'http://attacker.invalid/private',
-            '/different/api',
-            '/camera/whep/../../admin',
-        ]:
-            with self.assertRaises(AppError):
-                safe_resource('http://127.0.0.1:8889/camera/whep', location)

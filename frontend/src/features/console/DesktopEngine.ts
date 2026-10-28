@@ -53,7 +53,6 @@ export class DesktopEngine {
     private state: (value: DesktopState, message?: string) => void,
     private metrics: (value: DesktopMetrics) => void,
     private clipboard: (text: string) => void,
-    private endpoints?: { create: string; lease: string },
   ) {
     window.addEventListener("online", this.online);
     window.addEventListener("offline", this.offline);
@@ -105,8 +104,7 @@ export class DesktopEngine {
       !this.disposed && !this.stopped && generation === this.generation;
     try {
       const session = await api.request<DesktopSession>(
-        this.endpoints?.create ||
-          `/console/instances/${this.instance}/sessions`,
+        `/console/instances/${this.instance}/sessions`,
         { method: "POST" },
       );
       if (!current()) {
@@ -157,7 +155,7 @@ export class DesktopEngine {
           renewing = true;
           try {
             await api.request(
-              `${this.endpoints?.lease || "/console/sessions"}/${session.session_id}`,
+              `/console/sessions/${session.session_id}`,
               {
                 method: "POST",
               },
@@ -253,7 +251,7 @@ export class DesktopEngine {
   }
   private closeSession(id: string) {
     return api
-      .request(`${this.endpoints?.lease || "/console/sessions"}/${id}`, {
+      .request(`/console/sessions/${id}`, {
         method: "DELETE",
         keepalive: true,
       })
