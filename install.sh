@@ -497,6 +497,9 @@ if [[ "$ENABLE_WORKBENCH" == true ]]; then
     else
         printf '\nWORKBENCH_ENABLED=true\n' >> "$CONFIG_DIR/management.env"
     fi
+    # EnvironmentFile changes affect new processes only. The backend was started
+    # before optional component installation, so reload it after enabling the flag.
+    systemctl restart cloudvirt-management.service
 fi
 wait_url() {
     local url=$1 attempts=0
