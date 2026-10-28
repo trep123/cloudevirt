@@ -235,26 +235,69 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
       {notice ? <div className="banner banner-info">{notice}</div> : null}
       {canManage && showForm ? (
         <Drawer
-          title={editing ? "编辑网络" : "登记网络"}
+          title={editing ? `编辑网络 · ${editing.name}` : "登记网络"}
           onClose={() => setShowForm(false)}
+          wide
+          footer={
+            <>
+              <span className="drawer-foot-hint">
+                第 {networkStep + 1} / 5 步
+              </span>
+              <button
+                className="action"
+                type="button"
+                disabled={busy}
+                onClick={() => setShowForm(false)}
+              >
+                取消
+              </button>
+              <button
+                className="action"
+                type="button"
+                disabled={networkStep === 0 || busy}
+                onClick={() => setNetworkStep(networkStep - 1)}
+              >
+                上一步
+              </button>
+              <button
+                className="action primary"
+                type="submit"
+                form="network-wizard-form"
+                disabled={busy}
+              >
+                {busy
+                  ? "提交中…"
+                  : networkStep === 4
+                    ? "确认保存记录"
+                    : "下一步"}
+              </button>
+            </>
+          }
         >
-          <Card title={editing ? `编辑网络：${editing.name}` : "登记网络"}>
-            <ErrorBanner message={error} />
-            <ol className="wizard-steps">
+            <ol className="wizard-steps wizard-steps-compact">
               {["基本信息", "网络模式", "地址配置", "节点范围", "确认"].map(
                 (label, index) => (
                   <li
                     key={label}
-                    className={networkStep === index ? "active" : ""}
+                    className={
+                      networkStep === index
+                        ? "active"
+                        : index < networkStep
+                          ? "complete"
+                          : ""
+                    }
+                    aria-current={networkStep === index ? "step" : undefined}
                   >
                     <span>{index + 1}</span>
-                    {label}
+                    <em>{label}</em>
                   </li>
                 ),
               )}
             </ol>
+            <ErrorBanner message={error} />
             <form
-              className="wizard-fields"
+              id="network-wizard-form"
+              className="wizard-fields drawer-fields"
               onSubmit={(event) => {
                 event.preventDefault();
                 if (networkStep === 2) {
@@ -415,7 +458,7 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
               ) : null}
               {networkStep === 3 ? (
                 <>
-                  <label>
+                  <label className="field-wide">
                     节点范围
                     <input
                       disabled
@@ -458,13 +501,13 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
                       <option value="true">是（禁止虚拟机接入）</option>
                     </select>
                   </label>
-                  <p className="muted">
+                  <p className="muted field-wide">
                     当前 API 尚未提供按节点绑定网络的能力。
                   </p>
                 </>
               ) : null}
               {networkStep === 4 ? (
-                <dl className="info-grid">
+                <dl className="info-grid field-wide">
                   <dt>名称</dt>
                   <dd>{form.name}</dd>
                   <dt>类型</dt>
@@ -485,36 +528,14 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
                   </dd>
                 </dl>
               ) : null}
-              <footer className="actions">
-                <button
-                  className="action"
-                  type="button"
-                  disabled={networkStep === 0 || busy}
-                  onClick={() => setNetworkStep(networkStep - 1)}
-                >
-                  上一步
-                </button>
-                <button
-                  className="action primary"
-                  type="submit"
-                  disabled={busy}
-                >
-                  {busy
-                    ? "提交中…"
-                    : networkStep === 4
-                      ? "确认保存记录"
-                      : "下一步"}
-                </button>
-              </footer>
             </form>
-            <p className="muted">
+            <div className="callout callout-muted">
               管理网禁止接入虚拟机；默认网络与管理网不能同时勾选。OVS
               网络需先在宿主机创建对应 OVS 网桥， 创建虚拟机时会注入 openvswitch
               虚拟端口并按 VLAN 打标签。子网与 DHCP 配置会持久化并在拓扑中展示；
               DHCP/NAT
               由宿主机独立服务提供。此表单保存白名单与配置说明，修改后须在宿主机应用并核验，当前不代表配置已经生效。
-            </p>
-          </Card>
+            </div>
         </Drawer>
       ) : null}
       {view === "topology" ? (
@@ -537,6 +558,7 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
               }
             />
           ) : (
+            <div className="table-scroll">
             <table>
               <thead>
                 <tr>
@@ -548,7 +570,7 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
                   <th>DHCP</th>
                   <th>属性</th>
                   <th>说明</th>
-                  <th>操作</th>
+                  <th className="col-actions">操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -595,23 +617,30 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
                         status={network.is_usable ? "可用" : "禁用"}
                       />
                     </td>
-                    <td>{network.description || "-"}</td>
-                    <td className="actions">
+                    <td>
+                      <span
+                        className="truncate cell-desc"
+                        title={network.description || undefined}
+                      >
+                        {network.description || "-"}
+                      </span>
+                    </td>
+                    <td className="col-actions">
                       {canManage ? (
-                        <>
+                        <div className="row-actions">
                           <button
-                            className="action"
+                            className="action sm"
                             onClick={() => startEdit(network)}
                           >
                             编辑
                           </button>
                           <button
-                            className="action danger"
+                            className="action sm danger"
                             onClick={() => setDeleting(network)}
                           >
                             删除
                           </button>
-                        </>
+                        </div>
                       ) : (
                         "-"
                       )}
@@ -620,6 +649,7 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </Card>
       ) : null}

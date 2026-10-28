@@ -83,6 +83,7 @@ export function MonitoringPage({ user }: { user: CurrentUser }) {
       </Card>
       <Card title="活跃告警">
         {(overview?.active_alerts.length ?? 0) === 0 ? <Empty text="当前没有活跃告警" /> : (
+          <div className="table-scroll">
           <table>
             <thead><tr><th>级别</th><th>类型</th><th>对象</th><th>说明</th><th>最近出现</th></tr></thead>
             <tbody>
@@ -97,12 +98,14 @@ export function MonitoringPage({ user }: { user: CurrentUser }) {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </Card>
       <Card title={`对账历史（最近 ${runs.length} 次）`}>
         {runs.length === 0 ? <Empty text="尚未执行过对账" /> : (
+          <div className="table-scroll">
           <table>
-            <thead><tr><th>批次</th><th>状态</th><th>开始</th><th>完成</th><th>摘要</th><th>操作</th></tr></thead>
+            <thead><tr><th>批次</th><th>状态</th><th>开始</th><th>完成</th><th>摘要</th><th className="col-actions">操作</th></tr></thead>
             <tbody>
               {runs.map((run) => (
                 <tr key={run.id}>
@@ -110,12 +113,13 @@ export function MonitoringPage({ user }: { user: CurrentUser }) {
                   <td><StatusBadge status={run.status} /></td>
                   <td>{formatTime(run.started_at)}</td>
                   <td>{formatTime(run.finished_at)}</td>
-                  <td className="mono muted">{JSON.stringify(run.summary)}</td>
-                  <td><button className="action" onClick={() => void openRun(run)}>查看差异</button></td>
+                  <td className="mono muted"><span className="truncate cell-desc" title={JSON.stringify(run.summary)}>{JSON.stringify(run.summary)}</span></td>
+                  <td className="actions"><button className="action" onClick={() => void openRun(run)}>查看差异</button></td>
                 </tr>
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </Card>
       {selectedRun ? (
@@ -125,6 +129,7 @@ export function MonitoringPage({ user }: { user: CurrentUser }) {
             摘要：<span className="mono">{JSON.stringify(selectedRun.summary)}</span>
           </p>
           {selectedRun.diffs.length === 0 ? <Empty text="本次对账没有差异" /> : (
+            <div className="table-scroll">
             <table>
               <thead><tr><th>类型</th><th>对象</th><th>详情</th><th>处理方式</th><th>备注</th></tr></thead>
               <tbody>
@@ -139,6 +144,7 @@ export function MonitoringPage({ user }: { user: CurrentUser }) {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
           <button className="action" onClick={() => setSelectedRun(null)}>关闭</button>
         </Card>

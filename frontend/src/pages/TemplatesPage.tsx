@@ -134,8 +134,9 @@ export function TemplatesPage({ user }: { user: CurrentUser }) {
       ) : null}
       <Card title={`共 ${templates.length} 个模板`}>
         {templates.length === 0 ? <Empty text="暂无模板" /> : (
+          <div className="table-scroll">
           <table>
-            <thead><tr><th>名称</th><th>vCPU</th><th>内存</th><th>磁盘</th><th>可见性</th><th>说明</th><th>创建时间</th><th>操作</th></tr></thead>
+            <thead><tr><th>名称</th><th>vCPU</th><th>内存</th><th>磁盘</th><th>可见性</th><th>说明</th><th>创建时间</th><th className="col-actions">操作</th></tr></thead>
             <tbody>
               {templates.map((template) => (
                 <tr key={template.id}>
@@ -144,7 +145,7 @@ export function TemplatesPage({ user }: { user: CurrentUser }) {
                   <td>{template.memory_mib} MiB</td>
                   <td>{template.disk_gib} GiB</td>
                   <td><StatusBadge status={template.is_public ? "公开" : "私有"} /></td>
-                  <td>{template.description || "-"}</td>
+                  <td><span className="truncate cell-desc" title={template.description || undefined}>{template.description || "-"}</span></td>
                   <td>{formatTime(template.created_at)}</td>
                   <td className="actions">
                     {canManage ? (
@@ -158,6 +159,7 @@ export function TemplatesPage({ user }: { user: CurrentUser }) {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </Card>
     </>

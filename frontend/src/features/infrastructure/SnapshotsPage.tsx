@@ -157,6 +157,7 @@ export function SnapshotsPage({
             <p className="muted">
               成功采集时间：{new Date(data.sampled_at).toLocaleString()}
             </p>
+            <div className="table-scroll">
             <table>
               <thead>
                 <tr>
@@ -164,7 +165,7 @@ export function SnapshotsPage({
                   <th>创建时间</th>
                   <th>父快照</th>
                   <th>类型</th>
-                  {admin ? <th>操作</th> : null}
+                  {admin ? <th className="col-actions">操作</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -177,7 +178,7 @@ export function SnapshotsPage({
                       {s.supported ? "关机内部快照" : "仅查看 · 其他类型"}
                     </td>
                     {admin ? (
-                      <td>
+                      <td className="actions">
                         <button
                           className="action danger"
                           disabled={
@@ -207,6 +208,7 @@ export function SnapshotsPage({
                 ))}
               </tbody>
             </table>
+            </div>
             {!data.results.length ? <p className="empty">暂无快照。</p> : null}
           </>
         ) : null}

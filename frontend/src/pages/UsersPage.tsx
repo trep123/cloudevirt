@@ -119,8 +119,9 @@ export function UsersPage() {
       </Card>
       <Card title={`共 ${users.length} 个用户`}>
         {users.length === 0 ? <Empty text="暂无用户" /> : (
+          <div className="table-scroll">
           <table>
-            <thead><tr><th>用户名</th><th>显示名</th><th>角色</th><th>状态</th><th>需改密</th><th>最近登录</th><th>操作</th></tr></thead>
+            <thead><tr><th>用户名</th><th>显示名</th><th>角色</th><th>状态</th><th>需改密</th><th>最近登录</th><th className="col-actions">操作</th></tr></thead>
             <tbody>
               {users.map((u) => (
                 <tr key={u.id}>
@@ -144,6 +145,7 @@ export function UsersPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </Card>
       {selected ? (
@@ -154,6 +156,7 @@ export function UsersPage() {
           </div>
           <h3>最近审计事件</h3>
           {audit.length === 0 ? <Empty text="暂无审计记录" /> : (
+            <div className="table-scroll">
             <table>
               <thead><tr><th>时间</th><th>动作</th><th>对象</th><th>详情</th></tr></thead>
               <tbody>
@@ -167,6 +170,7 @@ export function UsersPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </Card>
       ) : null}

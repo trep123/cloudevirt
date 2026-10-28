@@ -57,7 +57,7 @@ export function SettingsPage() {
         </p>
       ) : (
         <form
-          className="card infra-form"
+          className="settings-form"
           onSubmit={async (e) => {
             e.preventDefault();
             setBusy(true);
@@ -79,90 +79,133 @@ export function SettingsPage() {
             }
           }}
         >
-          <h3>普通用户默认资源配额</h3>
-          <p className="muted">
-            每个账号分别计算总配置量。降低限额不会删除或停止已有资源；超额账号不能继续创建。
-          </p>
-          {(
-            [
-              ["instances", "虚拟机数量"],
-              ["vcpu", "vCPU 总核数"],
-              ["memory_mib", "内存总量（MiB）"],
-              ["disk_gib", "磁盘总量（GiB）"],
-            ] as const
-          ).map(([key, label]) => (
-            <label key={key}>
-              {label}
-              <input
-                required
-                type="number"
-                min={1}
-                max={
-                  key === "instances" || key === "vcpu" ? 1000000 : 2147483647
-                }
-                value={config.quota[key]}
-                onChange={(e) =>
-                  setConfig({
-                    ...config,
-                    quota: { ...config.quota, [key]: Number(e.target.value) },
-                  })
-                }
-              />
-            </label>
-          ))}
-          <h3>存储容量提示阈值</h3>
-          <label>
-            警告使用率（%）
-            <input
-              required
-              type="number"
-              min={1}
-              max={99}
-              value={config.storage_warning_percent}
-              onChange={(e) =>
-                setConfig({
-                  ...config,
-                  storage_warning_percent: Number(e.target.value),
-                })
-              }
-            />
-          </label>
-          <label>
-            高风险使用率（%）
-            <input
-              required
-              type="number"
-              min={config.storage_warning_percent + 1}
-              max={100}
-              value={config.storage_critical_percent}
-              onChange={(e) =>
-                setConfig({
-                  ...config,
-                  storage_critical_percent: Number(e.target.value),
-                })
-              }
-            />
-          </label>
-          <button className="action primary" disabled={busy}>
-            {busy ? "正在保存…" : "保存设置"}
-          </button>
+          <section className="card settings-card">
+            <div className="settings-section">
+              <div className="settings-section-intro">
+                <h3>普通用户默认资源配额</h3>
+                <p className="muted">
+                  每个账号分别计算总配置量。降低限额不会删除或停止已有资源；超额账号不能继续创建。
+                </p>
+              </div>
+              <div className="settings-fields">
+                {(
+                  [
+                    ["instances", "虚拟机数量", "台"],
+                    ["vcpu", "vCPU 总核数", "核"],
+                    ["memory_mib", "内存总量", "MiB"],
+                    ["disk_gib", "磁盘总量", "GiB"],
+                  ] as const
+                ).map(([key, label, unit]) => (
+                  <label key={key} className="settings-field">
+                    <span className="field-label">{label}</span>
+                    <span className="input-affix">
+                      <input
+                        required
+                        type="number"
+                        min={1}
+                        max={
+                          key === "instances" || key === "vcpu"
+                            ? 1000000
+                            : 2147483647
+                        }
+                        aria-label={`${label}（${unit}）`}
+                        value={config.quota[key]}
+                        onChange={(e) =>
+                          setConfig({
+                            ...config,
+                            quota: {
+                              ...config.quota,
+                              [key]: Number(e.target.value),
+                            },
+                          })
+                        }
+                      />
+                      <span className="input-suffix">{unit}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="settings-section">
+              <div className="settings-section-intro">
+                <h3>存储容量提示阈值</h3>
+                <p className="muted">
+                  存储使用率达到对应阈值时给出警告或高风险提示；高风险阈值需大于警告阈值。
+                </p>
+              </div>
+              <div className="settings-fields">
+                <label className="settings-field">
+                  <span className="field-label">警告使用率</span>
+                  <span className="input-affix">
+                    <input
+                      required
+                      type="number"
+                      min={1}
+                      max={99}
+                      aria-label="警告使用率（%）"
+                      value={config.storage_warning_percent}
+                      onChange={(e) =>
+                        setConfig({
+                          ...config,
+                          storage_warning_percent: Number(e.target.value),
+                        })
+                      }
+                    />
+                    <span className="input-suffix">%</span>
+                  </span>
+                </label>
+                <label className="settings-field">
+                  <span className="field-label">高风险使用率</span>
+                  <span className="input-affix">
+                    <input
+                      required
+                      type="number"
+                      min={config.storage_warning_percent + 1}
+                      max={100}
+                      aria-label="高风险使用率（%）"
+                      value={config.storage_critical_percent}
+                      onChange={(e) =>
+                        setConfig({
+                          ...config,
+                          storage_critical_percent: Number(e.target.value),
+                        })
+                      }
+                    />
+                    <span className="input-suffix">%</span>
+                  </span>
+                </label>
+              </div>
+            </div>
+            <footer className="settings-foot">
+              <span className="muted">
+                当前配置版本 {config.revision}，保存后立即生效
+              </span>
+              <button className="action primary" disabled={busy}>
+                {busy ? "正在保存…" : "保存设置"}
+              </button>
+            </footer>
+          </section>
         </form>
       )}
-      <section className="card">
-        <h3>节点代理与认证</h3>
-        <p>
-          节点代理连接状态、版本和诊断信息由节点管理提供。账号密码和会话通过平台认证接口管理。
-        </p>
-        <div className="actions">
-          <button className="action" onClick={() => navigate("/admin/nodes")}>
-            管理节点代理
-          </button>
-          <button className="action" onClick={() => navigate("/admin/users")}>
-            用户与角色
-          </button>
-          <button className="action" onClick={() => navigate("/admin/audit")}>
-            配置变更审计
-          </button>
+      <section className="card settings-card">
+        <div className="settings-section">
+          <div className="settings-section-intro">
+            <h3>节点代理与认证</h3>
+            <p className="muted">
+              节点代理连接状态、版本和诊断信息由节点管理提供。账号密码和会话通过平台认证接口管理。
+            </p>
+          </div>
+          <div className="settings-links">
+            <button className="action" onClick={() => navigate("/admin/nodes")}>
+              管理节点代理
+            </button>
+            <button className="action" onClick={() => navigate("/admin/users")}>
+              用户与角色
+            </button>
+            <button className="action" onClick={() => navigate("/admin/audit")}>
+              配置变更审计
+            </button>
+          </div>
         </div>
       </section>
     </>

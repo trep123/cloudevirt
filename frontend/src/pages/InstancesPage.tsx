@@ -221,6 +221,7 @@ export function InstancesPage({ user }: { user: CurrentUser }) {
       ) : null}
       <Card title={`共 ${instances.length} 台虚拟机`}>
         {instances.length === 0 ? <Empty text="暂无虚拟机" /> : (
+          <div className="table-scroll">
           <table>
             <thead>
               <tr>
@@ -231,7 +232,7 @@ export function InstancesPage({ user }: { user: CurrentUser }) {
                 <th>网络</th>
                 <th>IP 地址</th>
                 <th>观测时间</th>
-                <th>操作</th>
+                <th className="col-actions">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -273,6 +274,7 @@ export function InstancesPage({ user }: { user: CurrentUser }) {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </Card>
       {detail ? (
@@ -298,6 +300,7 @@ export function InstancesPage({ user }: { user: CurrentUser }) {
           </div>
           <h3>磁盘</h3>
           {detail.disks.length === 0 ? <Empty text="无磁盘记录" /> : (
+            <div className="table-scroll">
             <table>
               <thead><tr><th>文件名</th><th>角色</th><th>状态</th><th>容量</th><th>设备</th><th>路径</th></tr></thead>
               <tbody>
@@ -313,6 +316,7 @@ export function InstancesPage({ user }: { user: CurrentUser }) {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
           {detail.last_error_message ? <div className="banner banner-error">{detail.last_error_code}: {detail.last_error_message}</div> : null}
           <button className="action" onClick={() => setDetailId(null)}>关闭</button>

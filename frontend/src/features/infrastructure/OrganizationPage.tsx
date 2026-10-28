@@ -168,6 +168,7 @@ export function OrganizationPage({ kind }: { kind: "clusters" | "pools" }) {
         {loading ? (
           <p role="status">正在加载{title}…</p>
         ) : (
+          <div className="table-scroll">
           <table>
             <thead>
               <tr>
@@ -178,7 +179,7 @@ export function OrganizationPage({ kind }: { kind: "clusters" | "pools" }) {
                 <th>vCPU</th>
                 <th>内存</th>
                 <th>磁盘</th>
-                <th>操作</th>
+                <th className="col-actions">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -235,7 +236,7 @@ export function OrganizationPage({ kind }: { kind: "clusters" | "pools" }) {
                       : ""}{" "}
                     GB
                   </td>
-                  <td>
+                  <td className="actions">
                     <button className="action" onClick={() => edit(row)}>
                       编辑 / 分配
                     </button>
@@ -253,6 +254,7 @@ export function OrganizationPage({ kind }: { kind: "clusters" | "pools" }) {
               ))}
             </tbody>
           </table>
+          </div>
         )}
         {!loading && !rows.length ? (
           <p className="empty">
@@ -266,8 +268,29 @@ export function OrganizationPage({ kind }: { kind: "clusters" | "pools" }) {
           onClose={() => {
             if (!busy) setForm(null);
           }}
+          footer={
+            <>
+              <button
+                className="action"
+                type="button"
+                disabled={busy}
+                onClick={() => setForm(null)}
+              >
+                取消
+              </button>
+              <button
+                className="action primary"
+                type="submit"
+                form="organization-form"
+                disabled={busy}
+              >
+                {busy ? "保存中…" : "保存配置"}
+              </button>
+            </>
+          }
         >
           <form
+            id="organization-form"
             className="infra-form"
             onSubmit={(e) => {
               e.preventDefault();
@@ -372,9 +395,6 @@ export function OrganizationPage({ kind }: { kind: "clusters" | "pools" }) {
                 })
               )}
             </fieldset>
-            <button className="action primary" disabled={busy}>
-              {busy ? "保存中…" : "保存配置"}
-            </button>
           </form>
         </Drawer>
       ) : null}

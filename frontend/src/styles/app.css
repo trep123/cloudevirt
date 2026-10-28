@@ -2063,3 +2063,414 @@
     display: none;
   }
 }
+
+/* =====================================================================
+   Layout fixes: tables / row menus / drawers / wizard / settings
+   ===================================================================== */
+
+/* Tables scroll horizontally inside their card only; never vertically.
+   The page itself scrolls, so table headers can't slide under card heads. */
+.shell .card {
+  min-width: 0;
+}
+.shell .table-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-height: none;
+}
+.shell .table-scroll > table,
+.shell .card:not(.card-flush) .table-scroll > table {
+  min-width: 100%;
+  overflow: visible; /* allow the sticky actions column */
+}
+
+/* Action cells: a single non-wrapping row of compact buttons. */
+.shell td.actions {
+  display: table-cell;
+  white-space: nowrap;
+  text-align: right;
+}
+.shell td.actions > * {
+  vertical-align: middle;
+}
+.shell td.actions > * + * {
+  margin-left: 6px;
+}
+.shell td.actions button.action,
+.shell .row-actions button.action {
+  height: 28px;
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: var(--text-sm);
+}
+.shell .row-actions {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+.shell .cell-path .truncate {
+  max-width: 200px;
+}
+.shell .cell-error {
+  display: block;
+  max-width: 140px;
+  font-size: var(--text-xs);
+}
+.shell .cell-desc {
+  max-width: 220px;
+}
+
+/* Row "更多" menu: trigger in the cell, popover portaled to <body>. */
+.row-menu {
+  position: relative;
+  display: inline-flex;
+}
+.row-menu button.row-menu-trigger,
+.shell .row-menu button.row-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: auto;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--gray-600);
+  font: inherit;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.row-menu button.row-menu-trigger:hover:not(:disabled),
+.row-menu.open button.row-menu-trigger {
+  background: var(--gray-100);
+  color: var(--gray-800);
+}
+.row-menu button.row-menu-trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.row-menu-pop {
+  position: fixed;
+  z-index: 1000;
+  min-width: 160px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-md);
+  text-align: left;
+}
+.row-menu-pop button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--gray-800);
+  font: inherit;
+  font-size: var(--text-base);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.row-menu-pop button:hover:not(:disabled) {
+  background: var(--gray-50);
+}
+.row-menu-pop button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.row-menu-pop button.danger-text {
+  color: var(--danger-text);
+}
+
+/* Drawers: header / scrolling body / sticky footer. */
+.console-drawer[open] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.console-drawer > header {
+  flex: none;
+}
+.console-drawer-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+.console-drawer-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 24px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.shell .console-drawer-foot button.action {
+  margin: 0;
+}
+.drawer-foot-hint {
+  margin-right: auto;
+  font-size: var(--text-sm);
+  color: var(--gray-500);
+}
+.console-drawer.console-drawer-wide {
+  width: 640px;
+}
+.console-drawer-body .infra-form {
+  max-width: none;
+}
+.infra-form > button.action {
+  justify-self: end;
+}
+.callout {
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: var(--text-sm);
+  line-height: 1.7;
+}
+.callout-muted {
+  background: var(--gray-50);
+  border: 1px solid var(--gray-100);
+  color: var(--gray-600);
+}
+.console-drawer-body form + .callout {
+  margin-top: 24px;
+}
+
+/* Compact numbered step bar (used inside drawers). */
+.shell .wizard-steps.wizard-steps-compact {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 0;
+  margin: 0 0 24px;
+  padding: 4px 0 18px;
+  list-style: none;
+  background: transparent;
+  border-bottom: 1px solid var(--gray-100);
+}
+.shell .wizard-steps-compact li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--text-sm);
+  text-align: center;
+  white-space: nowrap;
+}
+.shell .wizard-steps-compact li em {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-style: normal;
+}
+.shell .wizard-steps-compact li span {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+}
+.shell .wizard-steps-compact li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 12px;
+  left: calc(50% + 18px);
+  right: calc(-50% + 18px);
+  width: auto;
+  height: 1px;
+  margin: 0;
+  flex: none;
+}
+.shell .drawer-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 20px;
+  max-width: none;
+  min-height: 0;
+}
+.shell .drawer-fields > .muted {
+  margin: 0;
+}
+
+/* Confirm modal extra option */
+.confirm-extra {
+  margin-top: 16px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--gray-50);
+}
+.confirm-extra label.check {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-base);
+  color: var(--gray-700);
+  cursor: pointer;
+}
+.confirm-extra label.check input {
+  width: auto;
+  margin: 0;
+}
+
+/* Settings: section cards with intro column + field grid. */
+.settings-form {
+  margin: 0;
+}
+.shell .card.settings-card {
+  padding: 0;
+  overflow: hidden;
+}
+.settings-section {
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+  gap: 20px 48px;
+  padding: 24px var(--card-pad);
+}
+.settings-section + .settings-section {
+  border-top: 1px solid var(--gray-100);
+}
+.settings-section-intro h3 {
+  margin: 0 0 6px;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--gray-900);
+}
+.settings-section-intro p {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+.settings-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 300px));
+  gap: 16px 24px;
+  align-content: start;
+}
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.input-affix {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--surface);
+  overflow: hidden;
+  transition:
+    border-color var(--duration) var(--ease),
+    box-shadow var(--duration) var(--ease);
+}
+.input-affix:hover {
+  border-color: var(--gray-400);
+}
+.input-affix:focus-within {
+  border-color: var(--brand-500);
+  box-shadow: var(--focus-ring);
+}
+.input-affix input,
+.input-affix input:hover:not(:disabled):not(:focus),
+.input-affix input:focus {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  height: 34px;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.input-suffix {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  padding: 0 12px;
+  border-left: 1px solid var(--border);
+  background: var(--gray-50);
+  color: var(--gray-500);
+  font-size: var(--text-sm);
+}
+.settings-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  padding: 14px var(--card-pad);
+  border-top: 1px solid var(--border);
+  background: var(--gray-25);
+}
+.settings-foot .muted {
+  margin-right: auto;
+  font-size: var(--text-sm);
+}
+.settings-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  align-content: flex-start;
+  gap: 8px;
+}
+@media (max-width: 1100px) {
+  .settings-section {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+}
+@media (max-width: 640px) {
+  .settings-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .shell .drawer-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .shell .wizard-steps-compact li em {
+    display: none;
+  }
+}
+.shell .cell-wrap {
+  display: inline-block;
+  max-width: 120px;
+  white-space: normal;
+  line-height: 1.4;
+  font-size: var(--text-sm);
+}
+.shell .warn-text {
+  color: var(--warning-text, #b54708);
+}
+.shell .cell-name {
+  max-width: 220px;
+}
+/* Keep the actions column reachable when a wide table scrolls. */
+.shell .table-scroll td.col-actions,
+.shell .table-scroll th.col-actions,
+.shell .table-scroll td.actions {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background: var(--surface);
+  box-shadow: inset 1px 0 0 var(--gray-100);
+}
+.shell .table-scroll th.col-actions {
+  background: var(--gray-50);
+}
+.shell .table-scroll tbody tr:hover td.col-actions,
+.shell .table-scroll tbody tr:hover td.actions {
+  background: #f8faff;
+}
+.shell td .badge + .badge {
+  margin-left: 4px;
+}
+.shell form.inline + p.muted {
+  margin: 12px 0 0;
+  font-size: var(--text-sm);
+}

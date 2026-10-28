@@ -65,6 +65,7 @@ export function DisksPage() {
       </Card>
       <Card title={`共 ${disks.length} 个磁盘`}>
         {loading ? <Empty text="加载中…" /> : disks.length === 0 ? <Empty text="暂无磁盘" /> : (
+          <div className="table-scroll">
           <table>
             <thead>
               <tr>
@@ -96,6 +97,7 @@ export function DisksPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </Card>
     </>
