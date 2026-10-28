@@ -10,7 +10,7 @@
 
 沿用现有媒体网关、只读观看页面和 `console.use_workspace` 发布权限。直接页面共享无需 Chromium/Xvfb 服务端工作台组件，也不依赖 `WORKBENCH_ENABLED`。需要 HTTPS、浏览器 `getDisplayMedia` 和 WebRTC，以及已安装的 MediaMTX（完整安装器 `--enable-media` 或原有 `--enable-workbench` 均可安装媒体网关）。
 
-升级应用源码后执行 Django 数据库迁移，重新构建并部署前端，重启管理后端。新增迁移 `console.0005_tab_shares`。保留旧工作台 API 和已有会话供兼容使用，但顶栏入口改为直接共享当前页面。
+升级应用源码后执行 Django 数据库迁移，重新构建并部署前端，重启管理后端。新增迁移 `console.0005_tab_shares`。保留旧工作台 API 供兼容使用，但顶栏入口改为直接共享当前页面，旧 `/admin/workbench`、`/app/workbench` 地址跳转至正常首页。
 
 每个账号最多同时发布一个页面，默认全站最多 8 个浏览器发布者，配置 `TAB_SHARE_MAX_PUBLISHERS`。发布接口绑定当前用户及其登录会话，匿名观看凭证无法创建、续租或停止发布。注销立即撤销观看授权，密码/权限变更由后台回收。
 

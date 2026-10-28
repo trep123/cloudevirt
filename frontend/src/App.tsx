@@ -1,9 +1,6 @@
 import { useEffect, useState } from "react";
 import { PublicWatchPage } from "./features/console/PublicWatchPage";
-import {
-  WorkbenchEntry,
-  WorkbenchPage,
-} from "./features/console/WorkbenchPage";
+import { WorkbenchEntry } from "./features/console/WorkbenchPage";
 import { api, ApiError } from "./api";
 import { usePath, navigate } from "./app/router";
 import { canEnterRoute } from "./app/permission";
@@ -49,7 +46,7 @@ export default function App() {
   const admin = user?.console_scope === "admin",
     prefix = admin ? "/admin" : "/app";
   useEffect(() => {
-    if (user && ["/", "/login"].includes(path)) navigate(prefix + "/dashboard");
+    if (user && ["/", "/login", prefix + "/workbench"].includes(path)) navigate(prefix + "/dashboard");
   }, [user, path, prefix]);
   useEffect(() => {
     const expired = () => {
@@ -126,7 +123,6 @@ export default function App() {
       </div>
     );
   else if (key === "dashboard") content = <DashboardPage admin={admin} />;
-  else if (key === "workbench") content = <WorkbenchPage />;
   else if ((key === "clusters" || key === "pools") && admin)
     content = <OrganizationPage key={key} kind={key} />;
   else if (key === "storage-pools" && admin) content = <StoragePoolsPage />;
