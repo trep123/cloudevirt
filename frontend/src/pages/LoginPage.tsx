@@ -4,39 +4,54 @@ import { api } from "../api";
 import type { CurrentUser } from "../types";
 import { describeError } from "../components/ui";
 
-const FEATURES: { title: string; desc: string; icon: React.ReactNode }[] = [
-  {
-    title: "虚拟机全生命周期管理",
-    desc: "创建、启停、快照与迁移，一处完成。",
-    icon: (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <rect x="3" y="4" width="18" height="12" rx="2" />
-        <path d="M8 20h8M12 16v4" />
+function AuthBackdrop() {
+  return (
+    <div className="auth-bg" aria-hidden="true">
+      <div className="auth-bg-grid" />
+      <div className="auth-bg-orb auth-bg-orb-a" />
+      <div className="auth-bg-orb auth-bg-orb-b" />
+      <div className="auth-bg-orb auth-bg-orb-c" />
+      <svg
+        className="auth-bg-net"
+        viewBox="0 0 1440 900"
+        preserveAspectRatio="xMidYMid slice"
+      >
+        <g className="auth-bg-links">
+          <path d="M80 160 L260 90 L420 210 L300 330 L80 160Z" />
+          <path d="M260 90 L520 60 L420 210" />
+          <path d="M300 330 L180 520 L60 640" />
+          <path d="M180 520 L360 690 L240 840" />
+          <path d="M1060 110 L1220 60 L1380 170 L1250 300 L1060 110Z" />
+          <path d="M1250 300 L1400 420 L1300 560" />
+          <path d="M1300 560 L1120 690 L1200 840 L1390 780 L1300 560" />
+          <path d="M1120 690 L980 820" />
+        </g>
+        <g className="auth-bg-nodes">
+          <circle cx="80" cy="160" r="3" />
+          <circle cx="260" cy="90" r="4" />
+          <circle cx="420" cy="210" r="3" />
+          <circle cx="300" cy="330" r="4.5" />
+          <circle cx="520" cy="60" r="2.5" />
+          <circle cx="180" cy="520" r="3.5" />
+          <circle cx="60" cy="640" r="2.5" />
+          <circle cx="360" cy="690" r="3" />
+          <circle cx="240" cy="840" r="2.5" />
+          <circle cx="1060" cy="110" r="3" />
+          <circle cx="1220" cy="60" r="2.5" />
+          <circle cx="1380" cy="170" r="3.5" />
+          <circle cx="1250" cy="300" r="4.5" />
+          <circle cx="1400" cy="420" r="2.5" />
+          <circle cx="1300" cy="560" r="4" />
+          <circle cx="1120" cy="690" r="3.5" />
+          <circle cx="1200" cy="840" r="2.5" />
+          <circle cx="1390" cy="780" r="3" />
+          <circle cx="980" cy="820" r="2.5" />
+        </g>
       </svg>
-    ),
-  },
-  {
-    title: "多节点集群与资源池",
-    desc: "统一调度计算、存储与网络资源。",
-    icon: (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <rect x="3" y="3" width="18" height="6" rx="1.5" />
-        <rect x="3" y="15" width="18" height="6" rx="1.5" />
-        <path d="M7 6h.01M7 18h.01M12 9v6" />
-      </svg>
-    ),
-  },
-  {
-    title: "浏览器内远程控制台",
-    desc: "无需插件，即开即用的 VNC / WebRTC 访问。",
-    icon: (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <rect x="3" y="4" width="18" height="16" rx="2" />
-        <path d="M3 9h18M7 13l3 2-3 2M12 17h4" />
-      </svg>
-    ),
-  },
-];
+      <div className="auth-bg-vignette" />
+    </div>
+  );
+}
 
 function BrandMark() {
   return (
@@ -83,38 +98,13 @@ export function LoginPage({
 
   return (
     <div className="auth-screen">
-      <aside className="auth-brand">
-        <div className="auth-brand-glow" aria-hidden="true" />
-        <div className="auth-brand-inner">
-          <div className="auth-brand-head">
+      <AuthBackdrop />
+      <main className="auth-main">
+        <div className="auth-card">
+          <div className="auth-card-brand">
             <BrandMark />
             <span className="auth-brand-name">CloudVirt</span>
           </div>
-          <div className="auth-brand-copy">
-            <h2>
-              <span>统一管理您的</span> <span>QEMU / KVM 虚拟化集群</span>
-            </h2>
-            <p>面向企业的私有云虚拟化平台，稳定、安全、可观测。</p>
-            <ul className="auth-features">
-              {FEATURES.map((f) => (
-                <li key={f.title}>
-                  <span className="auth-feature-icon">{f.icon}</span>
-                  <span>
-                    <strong>{f.title}</strong>
-                    <small>{f.desc}</small>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <p className="auth-copyright">
-            © {new Date().getFullYear()} CloudVirt · QEMU / KVM 虚拟化管理平台
-          </p>
-        </div>
-      </aside>
-
-      <main className="auth-main">
-        <div className="auth-card">
           <h1>欢迎登录</h1>
           <p>虚拟机管理台，请使用平台账号登录。</p>
           <form onSubmit={submit}>
@@ -183,8 +173,10 @@ export function LoginPage({
               {busy ? "登录中…" : "登录"}
             </button>
           </form>
-          <p className="auth-footer">QEMU / KVM 虚拟化管理平台</p>
         </div>
+        <p className="auth-copyright">
+          © {new Date().getFullYear()} CloudVirt · QEMU / KVM 虚拟化管理平台
+        </p>
       </main>
     </div>
   );

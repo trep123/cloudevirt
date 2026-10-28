@@ -56,10 +56,15 @@
   --sidebar-text-muted: #6f7f99;
   --sidebar-border: #1f2e48;
 
-  /* Auth / login brand panel */
-  --auth-brand-from: #0b1640;
-  --auth-brand-via: #1a2f86;
-  --auth-brand-to: #3a2fa8;
+  /* Auth / login background */
+  --auth-bg-from: #060b26;
+  --auth-bg-mid: #0f1c5c;
+  --auth-bg-to: #2a1f7a;
+  --auth-bg-via: rgba(56, 92, 220, 0.35);
+  --auth-grid-line: rgba(140, 170, 255, 0.3);
+  --auth-orb-blue: rgba(79, 124, 255, 0.75);
+  --auth-orb-violet: rgba(139, 92, 246, 0.65);
+  --auth-orb-cyan: rgba(56, 189, 248, 0.9);
   --auth-brand-text: #eef2ff;
   --auth-brand-text-muted: #c3cdf2;
 
