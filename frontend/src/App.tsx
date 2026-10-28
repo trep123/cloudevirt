@@ -69,18 +69,23 @@ export default function App() {
   if (path === "/watch") return <PublicWatchPage />;
   if (!booted)
     return (
-      <div className="login" role="status">
-        正在连接 CloudVirt…
+      <div className="login-screen">
+        <div className="login" role="status">
+          <span className="auth-spinner auth-spinner-muted" aria-hidden="true" />
+          正在连接 CloudVirt…
+        </div>
       </div>
     );
   if (!user)
     return error ? (
-      <div className="login">
-        <h1>暂时无法连接服务</h1>
-        <p role="alert">{error}</p>
-        <button className="action" onClick={() => location.reload()}>
-          重新连接
-        </button>
+      <div className="login-screen">
+        <div className="login">
+          <h1>暂时无法连接服务</h1>
+          <p role="alert">{error}</p>
+          <button className="action" onClick={() => location.reload()}>
+            重新连接
+          </button>
+        </div>
       </div>
     ) : (
       <LoginPage onLogin={setUser} />

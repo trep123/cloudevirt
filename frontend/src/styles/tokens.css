@@ -1,25 +1,142 @@
+/*
+ * CloudVirt design tokens.
+ * One neutral gray ramp, one brand accent, four semantic tones.
+ * Legacy aliases (--primary, --border, --text-*) are kept so existing
+ * rules and components keep resolving.
+ */
 :root {
-  --app-bg: #f5f7fa;
-  --surface: #fff;
-  --sidebar-bg: #172338;
-  --primary: #2563eb;
+  /* Neutral ramp (slate) */
+  --gray-0: #ffffff;
+  --gray-25: #fbfcfe;
+  --gray-50: #f6f8fb;
+  --gray-100: #eef2f7;
+  --gray-200: #e3e8ef;
+  --gray-300: #cdd5e0;
+  --gray-400: #9aa6b8;
+  --gray-500: #6b778c;
+  --gray-600: #4b5568;
+  --gray-700: #344054;
+  --gray-800: #1f2937;
+  --gray-900: #111827;
+
+  /* Brand accent */
+  --brand-50: #eef4ff;
+  --brand-100: #dbe7ff;
+  --brand-200: #b9cffe;
+  --brand-500: #3b6ff5;
+  --brand-600: #2557e6;
+  --brand-700: #1d45bd;
+
+  /* Semantic tones: solid / soft background / text on soft / border */
   --success: #16a34a;
+  --success-soft: #e8f7ee;
+  --success-text: #166534;
+  --success-border: #b7e4c7;
   --warning: #d97706;
+  --warning-soft: #fff5e0;
+  --warning-text: #92400e;
+  --warning-border: #fcd99a;
   --danger: #dc2626;
-  --text-primary: #1f2937;
-  --text-secondary: #64748b;
-  --border: #e2e8f0;
-  --sidebar-width: 232px;
-  --sidebar-collapsed-width: 64px;
-  --header-height: 56px;
+  --danger-soft: #fdecec;
+  --danger-text: #b42318;
+  --danger-border: #f7c1c1;
+  --info: #0284c7;
+  --info-soft: #e8f4fd;
+  --info-text: #075985;
+  --info-border: #b6dcf5;
+
+  /* Surfaces */
+  --app-bg: var(--gray-50);
+  --surface: var(--gray-0);
+  --surface-muted: var(--gray-25);
+  --surface-sunken: var(--gray-100);
+  --sidebar-bg: #0f1a2e;
+  --sidebar-bg-hover: #1a2944;
+  --sidebar-text: #b4c0d3;
+  --sidebar-text-muted: #6f7f99;
+  --sidebar-border: #1f2e48;
+
+  /* Auth / login background */
+  --auth-bg-from: #060b26;
+  --auth-bg-mid: #0f1c5c;
+  --auth-bg-to: #2a1f7a;
+  --auth-bg-via: rgba(56, 92, 220, 0.35);
+  --auth-grid-line: rgba(140, 170, 255, 0.3);
+  --auth-orb-blue: rgba(79, 124, 255, 0.75);
+  --auth-orb-violet: rgba(139, 92, 246, 0.65);
+  --auth-orb-cyan: rgba(56, 189, 248, 0.9);
+  --auth-brand-text: #eef2ff;
+  --auth-brand-text-muted: #c3cdf2;
+
+  /* Legacy aliases */
+  --primary: var(--brand-600);
+  --primary-hover: var(--brand-700);
+  --primary-soft: var(--brand-50);
+  --text-primary: var(--gray-800);
+  --text-secondary: var(--gray-500);
+  --text-muted: var(--gray-400);
+  --border: var(--gray-200);
+  --border-strong: var(--gray-300);
+
+  /* Typography */
+  --font-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC",
+    "Source Han Sans SC", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 22px;
+  --text-3xl: 28px;
+  --leading-tight: 1.3;
+  --leading-normal: 1.55;
+  --leading-relaxed: 1.75;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* Spacing (4px grid) */
+  --space-0: 2px;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
+  --space-5: 20px;
   --space-6: 24px;
   --space-8: 32px;
-  --radius-sm: 4px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* Radius */
+  --radius-xs: 3px;
+  --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  /* Elevation */
+  --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-sm: 0 1px 3px rgba(16, 24, 40, 0.08), 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-md: 0 6px 16px -4px rgba(16, 24, 40, 0.1), 0 2px 6px -2px rgba(16, 24, 40, 0.05);
+  --shadow-lg: 0 20px 48px -12px rgba(16, 24, 40, 0.22);
+  --focus-ring: 0 0 0 3px rgba(37, 87, 230, 0.2);
+  --focus-ring-danger: 0 0 0 3px rgba(220, 38, 38, 0.18);
+
+  /* Controls */
+  --control-height: 34px;
+  --control-height-sm: 28px;
+  --control-height-lg: 40px;
+
+  /* Layout */
+  --sidebar-width: 232px;
+  --sidebar-collapsed-width: 64px;
+  --header-height: 56px;
   --content-max-width: 1920px;
+
+  /* Motion */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --duration: 160ms;
 }
