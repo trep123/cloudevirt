@@ -5,6 +5,7 @@ import App from "./App";
 import "./styles/tokens.css";
 import "./styles.css";
 import "./styles/console.css";
+import "./styles/app.css";
 
 const container = document.getElementById("root");
 if (!container) {

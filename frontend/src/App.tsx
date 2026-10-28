@@ -21,7 +21,7 @@ import { NetworksPage } from "./pages/NetworksPage";
 import { NodesPage } from "./pages/NodesPage";
 import { TasksPage } from "./pages/TasksPage";
 import { TemplatesPage } from "./pages/TemplatesPage";
-import { describeError } from "./components/ui";
+import { describeError, EmptyState } from "./components/ui";
 import type { CurrentUser } from "./types";
 export default function App() {
   const path = usePath(),
@@ -104,14 +104,17 @@ export default function App() {
   if (forbidden || path === "/403")
     content = (
       <div className="card">
-        <h2>403 · 无权访问</h2>
-        <p>当前账号没有此页面的访问权限。</p>
+        <EmptyState
+          icon="key"
+          title="403 · 无权访问"
+          description="当前账号没有此页面的访问权限。"
+        />
       </div>
     );
   else if (path === "/404" || !path.startsWith(prefix + "/"))
     content = (
       <div className="card">
-        <h2>404 · 页面不存在</h2>
+        <EmptyState icon="search" title="404 · 页面不存在" />
       </div>
     );
   else if (key === "dashboard") content = <DashboardPage admin={admin} />;
@@ -149,14 +152,19 @@ export default function App() {
   else
     content = (
       <div className="card">
-        <h2>404 · 页面未开放</h2>
-        <p>当前后端尚未提供此能力。</p>
-        <button
-          className="action"
-          onClick={() => navigate(prefix + "/dashboard")}
-        >
-          返回工作台
-        </button>
+        <EmptyState
+          icon="info"
+          title="404 · 页面未开放"
+          description="当前后端尚未提供此能力。"
+          action={
+            <button
+              className="action"
+              onClick={() => navigate(prefix + "/dashboard")}
+            >
+              返回工作台
+            </button>
+          }
+        />
       </div>
     );
   return (
