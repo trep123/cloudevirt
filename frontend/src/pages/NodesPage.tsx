@@ -16,6 +16,7 @@ import {
   formatBytes,
   formatRelative,
   formatTimeFixed,
+  RowMenu,
 } from "../components/ui";
 import { PageHeader, ResourceStatCard } from "../components/ConsoleUI";
 import { Icon } from "../components/icons";
@@ -531,11 +532,7 @@ export function NodesPage({ user }: { user: CurrentUser }) {
                               编辑
                             </button>
                           ) : null}
-                          <details className="row-menu">
-                            <summary>
-                              更多 <Icon name="chevronDown" size={13} />
-                            </summary>
-                            <div>
+                           <RowMenu>
                               <button onClick={() => navigate("/admin/nodes/" + node.id)}>
                                 查看详情
                               </button>
@@ -550,8 +547,7 @@ export function NodesPage({ user }: { user: CurrentUser }) {
                                   注销节点
                                 </button>
                               ) : null}
-                            </div>
-                          </details>
+                            </RowMenu>
                         </div>
                       </td>
                     </tr>
@@ -616,6 +612,7 @@ export function NodesPage({ user }: { user: CurrentUser }) {
               description="默认全部放行"
             />
           ) : (
+            <div className="table-scroll">
             <table className="data-table">
               <thead>
                 <tr>
@@ -656,6 +653,7 @@ export function NodesPage({ user }: { user: CurrentUser }) {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </Card>
       ) : null}

@@ -21,6 +21,7 @@ import {
   describeError,
   formatTime,
   formatTimeFixed,
+  RowMenu,
 } from "../../components/ui";
 import { Icon } from "../../components/icons";
 const VncConsole = lazy(() =>
@@ -173,11 +174,7 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
             正常关机
           </button>
         ) : null}
-        <details className="row-menu">
-          <summary>
-            更多 <Icon name="chevronDown" size={13} />
-          </summary>
-          <div>
+         <RowMenu>
             {running && can("instances.reboot_instance") ? (
               <button
                 disabled={active || busy}
@@ -207,8 +204,7 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
             <button onClick={() => navigate(prefix + "/tasks")}>
               查看任务
             </button>
-          </div>
-        </details>
+          </RowMenu>
       </div>
     );
   }

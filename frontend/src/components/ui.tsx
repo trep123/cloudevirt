@@ -1,4 +1,12 @@
-import type { ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { createPortal } from "react-dom";
 
 import { ApiError } from "../api";
 import { Icon } from "./icons";
@@ -459,6 +467,108 @@ export function Meter({
   return (
     <span className={`meter meter-${t}`} aria-hidden="true">
       <span style={{ width: pct + "%" }} />
+    </span>
+  );
+}
+
+/**
+ * 行内“更多”下拉菜单。菜单通过 portal 渲染到 body 并以 fixed 定位，
+ * 不会被表格容器的 overflow 裁剪；靠近视口底部时自动向上展开。
+ */
+export function RowMenu({
+  label = "更多",
+  children,
+  disabled,
+}: {
+  label?: ReactNode;
+  children: ReactNode;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{
+    top?: number;
+    bottom?: number;
+    right: number;
+  } | null>(null);
+  const btn = useRef<HTMLButtonElement>(null);
+  const pop = useRef<HTMLDivElement>(null);
+
+  const place = useCallback(() => {
+    const el = btn.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const h = pop.current?.offsetHeight ?? 0;
+    const vh = window.innerHeight;
+    const right = Math.max(8, window.innerWidth - r.right);
+    if (r.bottom + 4 + h > vh - 8 && r.top - 4 - h > 8)
+      setPos({ bottom: vh - r.top + 4, right });
+    else setPos({ top: r.bottom + 4, right });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (open) place();
+    else setPos(null);
+  }, [open, place]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: Event) => {
+      const t = e.target as Node;
+      if (btn.current?.contains(t) || pop.current?.contains(t)) return;
+      setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpen(false);
+        btn.current?.focus();
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open, place]);
+
+  return (
+    <span className={"row-menu" + (open ? " open" : "")}>
+      <button
+        ref={btn}
+        type="button"
+        className="row-menu-trigger"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {label} <Icon name="chevronDown" size={13} />
+      </button>
+      {open
+        ? createPortal(
+            <div
+              ref={pop}
+              role="menu"
+              className="row-menu-pop"
+              style={{
+                top: pos?.top,
+                bottom: pos?.bottom,
+                right: pos?.right ?? 0,
+                visibility: pos ? "visible" : "hidden",
+              }}
+              onClick={(e) => {
+                if ((e.target as HTMLElement).closest("button")) setOpen(false);
+              }}
+            >
+              {children}
+            </div>,
+            document.body,
+          )
+        : null}
     </span>
   );
 }

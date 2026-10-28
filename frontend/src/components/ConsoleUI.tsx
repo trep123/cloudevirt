@@ -118,10 +118,16 @@ export function Drawer({
   title,
   onClose,
   children,
+  footer,
+  wide,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  /** 固定在抽屉底部的操作区（右对齐），表单按钮可用 form 属性关联表单。 */
+  footer?: ReactNode;
+  /** 加宽抽屉，用于多步骤向导。 */
+  wide?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -130,7 +136,11 @@ export function Drawer({
     return () => element?.close();
   }, []);
   return (
-    <dialog ref={ref} className="console-drawer" onCancel={onClose}>
+    <dialog
+      ref={ref}
+      className={"console-drawer" + (wide ? " console-drawer-wide" : "")}
+      onCancel={onClose}
+    >
       <header>
         <h2>{title}</h2>
         <button
@@ -143,6 +153,7 @@ export function Drawer({
         </button>
       </header>
       <div className="console-drawer-body">{children}</div>
+      {footer ? <footer className="console-drawer-foot">{footer}</footer> : null}
     </dialog>
   );
 }
@@ -154,7 +165,10 @@ export function ConfirmOperationModal({
   error,
   onCancel,
   onConfirm,
+  children,
 }: {
+  /** 额外选项（如复选框），显示在目标信息下方。 */
+  children?: ReactNode;
   target: string;
   operation: string;
   description: string;
@@ -191,6 +205,7 @@ export function ConfirmOperationModal({
         <dt>目标操作</dt>
         <dd>{operation}</dd>
       </dl>
+      {children ? <div className="confirm-extra">{children}</div> : null}
       {error ? (
         <p role="alert" className="danger-text">
           {error}

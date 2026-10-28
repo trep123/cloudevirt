@@ -135,6 +135,7 @@ export function StoragePoolsPage() {
         {data ? (
           <>
             <p className="muted">成功采集时间：{formatTime(data.sampled_at)}</p>
+            <div className="table-scroll">
             <table>
               <thead>
                 <tr>
@@ -191,6 +192,7 @@ export function StoragePoolsPage() {
                 })}
               </tbody>
             </table>
+            </div>
             {!data.results.length ? (
               <p className="empty">此节点暂无 libvirt 存储池。</p>
             ) : null}
@@ -203,8 +205,29 @@ export function StoragePoolsPage() {
           onClose={() => {
             if (!busy) setCreate(false);
           }}
+          footer={
+            <>
+              <button
+                className="action"
+                type="button"
+                disabled={busy}
+                onClick={() => setCreate(false)}
+              >
+                取消
+              </button>
+              <button
+                className="action primary"
+                type="submit"
+                form="storage-pool-form"
+                disabled={busy}
+              >
+                {busy ? "提交中…" : "提交创建任务"}
+              </button>
+            </>
+          }
         >
           <form
+            id="storage-pool-form"
             className="infra-form"
             onSubmit={async (e) => {
               e.preventDefault();
@@ -236,13 +259,10 @@ export function StoragePoolsPage() {
                 onChange={(e) => setName(e.target.value)}
               />
             </label>
-            <p>
+            <div className="callout callout-muted">
               目录由节点 Agent 在受管磁盘根目录中创建。名称必须以 cv-
               开头，不接受任意宿主机路径、块设备或挂载命令。
-            </p>
-            <button className="action primary" disabled={busy}>
-              {busy ? "提交中…" : "提交创建任务"}
-            </button>
+            </div>
           </form>
         </Drawer>
       ) : null}

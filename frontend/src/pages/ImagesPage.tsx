@@ -14,8 +14,9 @@ import {
   ErrorBanner,
   StatusBadge,
   describeError,
+  RowMenu,
   formatBytes,
-  formatTime,
+  formatTimeFixed,
 } from "../components/ui";
 import { PageHeader } from "../components/ConsoleUI";
 import { can } from "../permissions";
@@ -281,124 +282,178 @@ export function ImagesPage({ user }: { user: CurrentUser }) {
       ) : null}
       <Card
         title={`共 ${images.length} 个镜像`}
-        extra={
-          canDelete ? (
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={purgeFile}
-                onChange={(e) => setPurgeFile(e.target.checked)}
-              />{" "}
-              删除时清理节点文件
-            </label>
-          ) : null
+        description={
+          canDelete
+            ? `删除时${purgeFile ? "将同时清理" : "默认保留"}节点文件，可在删除确认框中调整`
+            : undefined
         }
       >
         {images.length === 0 ? (
           <Empty text="暂无镜像" />
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>名称</th>
-                <th>所属节点</th>
-                <th>格式</th>
-                <th>状态</th>
-                <th>系统</th>
-                <th>文件大小</th>
-                <th>虚拟容量</th>
-                <th>路径</th>
-                <th>导入时间</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {images.map((image) => (
-                <tr key={image.id}>
-                  <td>
-                    <strong>{image.name}</strong>
-                  </td>
-                  <td>{image.node_name || "旧记录未绑定，请重新校验"}</td>
-                  <td>{image.format}</td>
-                  <td>
-                    <StatusBadge status={image.status} />
-                    {image.error_message ? (
-                      <div className="muted">
-                        {image.error_code}: {image.error_message}
-                      </div>
-                    ) : null}
-                  </td>
-                  <td>
-                    {[image.os_family, image.os_version]
-                      .filter(Boolean)
-                      .join(" ") || "-"}
-                  </td>
-                  <td>
-                    {image.size_bytes ? formatBytes(image.size_bytes) : "—"}
-                  </td>
-                  <td>{formatBytes(image.virtual_size_bytes)}</td>
-                  <td className="mono">{image.relative_path}</td>
-                  <td>{formatTime(image.created_at)}</td>
-                  <td className="actions">
-                    {canImport ? (
-                      <button
-                        className="action"
-                        disabled={busy}
-                        onClick={() => showEdit(image)}
-                      >
-                        编辑
-                      </button>
-                    ) : null}
-                    {canImport &&
-                    !["UPLOADING", "VERIFYING", "DELETING"].includes(
-                      image.status,
-                    ) ? (
-                      <button
-                        className="action"
-                        disabled={busy}
-                        onClick={() => {
-                          setError(null);
-                          setVerifyImage(image);
-                          setVerifyNode(image.node ? String(image.node) : "");
-                        }}
-                      >
-                        重新校验
-                      </button>
-                    ) : null}
-                    {canImport &&
-                    ["UPLOADING", "FAILED"].includes(image.status) &&
-                    image.upload_id ? (
-                      <button
-                        className="action danger"
-                        disabled={busy}
-                        onClick={() => {
-                          setError(null);
-                          setPendingCancel(image);
-                        }}
-                      >
-                        {image.status === "UPLOADING"
-                          ? "取消上传"
-                          : "清理未发布分片"}
-                      </button>
-                    ) : null}
-                    {canDelete &&
-                    !["UPLOADING", "VERIFYING"].includes(image.status) ? (
-                      <button
-                        className="action danger"
-                        disabled={busy}
-                        onClick={() => {
-                          setError(null);
-                          setPendingDelete({ image, purge: purgeFile });
-                        }}
-                      >
-                        删除
-                      </button>
-                    ) : null}
-                  </td>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>名称 / 系统</th>
+                  <th>所属节点</th>
+                  <th>状态</th>
+                  <th className="num">文件大小 / 虚拟容量</th>
+                  <th>路径</th>
+                  <th>导入时间</th>
+                  <th className="col-actions">操作</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {images.map((image) => (
+                  <tr key={image.id}>
+                    <td>
+                      <div className="cell-stack">
+                        <strong
+                          className="truncate cell-name"
+                          title={image.name}
+                        >
+                          {image.name}
+                        </strong>
+                        <small className="muted">
+                          {image.format.toUpperCase()} ·{" "}
+                          {[image.os_family, image.os_version]
+                            .filter(Boolean)
+                            .join(" ") || "未标注系统"}
+                        </small>
+                      </div>
+                    </td>
+                    <td>
+                      {image.node_name || (
+                        <span className="cell-wrap warn-text">
+                          旧记录未绑定，请重新校验
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      <StatusBadge status={image.status} />
+                      {image.error_message ? (
+                        <div
+                          className="muted truncate cell-error"
+                          title={`${image.error_code}: ${image.error_message}`}
+                        >
+                          {image.error_code}: {image.error_message}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td className="num">
+                      <div className="cell-stack">
+                        <span>
+                          {image.size_bytes
+                            ? formatBytes(image.size_bytes)
+                            : "—"}
+                        </span>
+                        <small className="muted">
+                          虚拟 {formatBytes(image.virtual_size_bytes)}
+                        </small>
+                      </div>
+                    </td>
+                    <td className="cell-path">
+                      <span
+                        className="mono truncate"
+                        title={image.relative_path}
+                      >
+                        {image.relative_path}
+                      </span>
+                    </td>
+                    <td>
+                      <div
+                        className="cell-stack time-text"
+                        title={formatTimeFixed(image.created_at)}
+                      >
+                        <span>
+                          {formatTimeFixed(image.created_at).slice(0, 10)}
+                        </span>
+                        <small className="muted">
+                          {formatTimeFixed(image.created_at).slice(11)}
+                        </small>
+                      </div>
+                    </td>
+                    <td className="col-actions">
+                      <div className="row-actions">
+                        {canImport ? (
+                          <button
+                            className="action sm"
+                            disabled={busy}
+                            onClick={() => showEdit(image)}
+                          >
+                            编辑
+                          </button>
+                        ) : null}
+                        {(canImport &&
+                          !["UPLOADING", "VERIFYING", "DELETING"].includes(
+                            image.status,
+                          )) ||
+                        (canImport &&
+                          ["UPLOADING", "FAILED"].includes(image.status) &&
+                          image.upload_id) ||
+                        (canDelete &&
+                          !["UPLOADING", "VERIFYING"].includes(
+                            image.status,
+                          )) ? (
+                          <RowMenu disabled={busy}>
+                            {canImport &&
+                            !["UPLOADING", "VERIFYING", "DELETING"].includes(
+                              image.status,
+                            ) ? (
+                              <button
+                                disabled={busy}
+                                onClick={() => {
+                                  setError(null);
+                                  setVerifyImage(image);
+                                  setVerifyNode(
+                                    image.node ? String(image.node) : "",
+                                  );
+                                }}
+                              >
+                                重新校验
+                              </button>
+                            ) : null}
+                            {canImport &&
+                            ["UPLOADING", "FAILED"].includes(image.status) &&
+                            image.upload_id ? (
+                              <button
+                                className="danger-text"
+                                disabled={busy}
+                                onClick={() => {
+                                  setError(null);
+                                  setPendingCancel(image);
+                                }}
+                              >
+                                {image.status === "UPLOADING"
+                                  ? "取消上传"
+                                  : "清理未发布分片"}
+                              </button>
+                            ) : null}
+                            {canDelete &&
+                            !["UPLOADING", "VERIFYING"].includes(
+                              image.status,
+                            ) ? (
+                              <button
+                                className="danger-text"
+                                disabled={busy}
+                                onClick={() => {
+                                  setError(null);
+                                  setPendingDelete({ image, purge: purgeFile });
+                                }}
+                              >
+                                删除
+                              </button>
+                            ) : null}
+                          </RowMenu>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
       {verifyImage ? (
@@ -407,8 +462,29 @@ export function ImagesPage({ user }: { user: CurrentUser }) {
           onClose={() => {
             if (!busy) setVerifyImage(null);
           }}
+          footer={
+            <>
+              <button
+                className="action"
+                type="button"
+                disabled={busy}
+                onClick={() => setVerifyImage(null)}
+              >
+                取消
+              </button>
+              <button
+                className="action primary"
+                type="submit"
+                form="image-verify-form"
+                disabled={busy || !verifyNode}
+              >
+                提交校验任务
+              </button>
+            </>
+          }
         >
           <form
+            id="image-verify-form"
             className="infra-form"
             onSubmit={async (e) => {
               e.preventDefault();
@@ -433,10 +509,11 @@ export function ImagesPage({ user }: { user: CurrentUser }) {
             }}
           >
             <ErrorBanner message={error} />
-            <p>
-              相对路径：{verifyImage.relative_path}
+            <div className="callout callout-muted">
+              相对路径：
+              <span className="mono">{verifyImage.relative_path}</span>
               。选择文件实际所在节点；已绑定的镜像不能改为其他节点。
-            </p>
+            </div>
             <label>
               所属节点
               <select
@@ -453,9 +530,6 @@ export function ImagesPage({ user }: { user: CurrentUser }) {
                 ))}
               </select>
             </label>
-            <button className="action primary" disabled={busy || !verifyNode}>
-              提交校验任务
-            </button>
           </form>
         </Drawer>
       ) : null}
@@ -472,7 +546,25 @@ export function ImagesPage({ user }: { user: CurrentUser }) {
           error={error}
           onCancel={() => setPendingDelete(null)}
           onConfirm={() => void remove()}
-        />
+        >
+          {canDelete ? (
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={pendingDelete.purge}
+                disabled={busy}
+                onChange={(e) => {
+                  setPurgeFile(e.target.checked);
+                  setPendingDelete({
+                    ...pendingDelete,
+                    purge: e.target.checked,
+                  });
+                }}
+              />
+              删除时清理节点文件
+            </label>
+          ) : null}
+        </ConfirmOperationModal>
       ) : null}
       {pendingCancel ? (
         <ConfirmOperationModal
