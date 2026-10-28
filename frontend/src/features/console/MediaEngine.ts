@@ -205,8 +205,7 @@ export class MediaEngine {
               seconds > 0 && data.framesDecoded !== undefined
                 ? (data.framesDecoded - lastFrames) / seconds
                 : null;
-            if (this.video.paused) this.state("paused");
-            else if (
+            if (
               !this.video.requestVideoFrameCallback &&
               fps &&
               this.video.readyState >= 2
@@ -237,7 +236,8 @@ export class MediaEngine {
             lastTime = data.timestamp;
             if (rendered && performance.now() - playingSince >= 30000)
               this.retries = 0;
-            if (
+            if (this.video.paused) this.state("paused");
+            else if (
               (loss !== null && loss > 5) ||
               (lastFrame && performance.now() - lastFrame > 8000)
             )

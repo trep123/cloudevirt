@@ -38,6 +38,7 @@ export function MediaPanel({ instanceId }: { instanceId: number }) {
   const [name, setName] = useState(""),
     [path, setPath] = useState("");
   const generation = useRef(0);
+  const [removing, setRemoving] = useState<number | null>(null);
   useEffect(() => {
     const current = ++generation.current;
     setLinks({});
@@ -182,7 +183,11 @@ export function MediaPanel({ instanceId }: { instanceId: number }) {
       {broadcasts.map((row) => (
         <article className="broadcast-card" key={row.id}>
           <strong>{row.name}</strong>{" "}
-            <span role="status">{row.state_fresh ? (labels[row.state] || row.state) : "发布状态已过期，请检查后台任务"}</span>
+          <span role="status">
+            {row.state_fresh
+              ? labels[row.state] || row.state
+              : "发布状态已过期，请检查后台任务"}
+          </span>
           {row.error ? <p>{row.error}</p> : null}
           <p>
             链接到期：
@@ -298,6 +303,60 @@ export function MediaPanel({ instanceId }: { instanceId: number }) {
             </button>
             <p>源地址和发布凭据仅在服务器配置。</p>
           </form>
+          <ul>
+            {sources.map((source) => (
+              <li key={source.id}>
+                {source.name}{" "}
+                <button
+                  className="action danger"
+                  disabled={busy}
+                  onClick={() => setRemoving(source.id)}
+                >
+                  停用视频源
+                </button>
+                {removing === source.id ? (
+                  <span>
+                    确认停用 {source.name} 并关闭关联观看会话？
+                    <button
+                      className="action danger"
+                      disabled={busy}
+                      onClick={async () => {
+                        const current = generation.current;
+                        setBusy(true);
+                        setError(null);
+                        try {
+                          await api.request(
+                            `/console/media-sources/${source.id}`,
+                            { method: "DELETE" },
+                          );
+                          if (current === generation.current) {
+                            setSources((old) =>
+                              old.filter((item) => item.id !== source.id),
+                            );
+                            setSelected("");
+                            setRemoving(null);
+                          }
+                        } catch (e) {
+                          if (current === generation.current)
+                            setError(describeError(e));
+                        } finally {
+                          if (current === generation.current) setBusy(false);
+                        }
+                      }}
+                    >
+                      确认停用
+                    </button>
+                    <button
+                      className="action"
+                      onClick={() => setRemoving(null)}
+                    >
+                      取消
+                    </button>
+                  </span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
         </details>
       ) : null}
     </section>
