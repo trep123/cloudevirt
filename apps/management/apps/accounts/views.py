@@ -76,6 +76,13 @@ class LogoutView(APIView):
         from apps.console.services import login_hash
 
         identity = login_hash(request)
+        from apps.console.models import Broadcast, TabShare
+
+        shares = TabShare.objects.filter(broadcast__owner=request.user, login_hash=identity)
+        shares.update(expires_at=timezone.now())
+        Broadcast.objects.filter(tabshare__in=shares, active=True).update(
+            active=False, public_token_hash='', state='STOPPING'
+        )
         from apps.console.models import WorkspaceControlSession
 
         WorkspaceControlSession.objects.filter(user=request.user, login_hash=identity).update(

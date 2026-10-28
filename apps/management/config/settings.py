@@ -88,6 +88,7 @@ MEDIA_API_BASE_URL = os.environ.get('MEDIA_API_BASE_URL', 'http://127.0.0.1:9997
 WORKBENCH_ENABLED = os.environ.get('WORKBENCH_ENABLED', 'false').lower() == 'true'
 WORKBENCH_AGENT_ENDPOINT = os.environ.get('WORKBENCH_AGENT_ENDPOINT', 'http://127.0.0.1:9100')
 WORKBENCH_MAX_SESSIONS = int(os.environ.get('WORKBENCH_MAX_SESSIONS', '2'))
+TAB_SHARE_MAX_PUBLISHERS = int(os.environ.get('TAB_SHARE_MAX_PUBLISHERS', '8'))
 BROADCAST_MAX_VIEWERS = max(1, min(256, int(os.environ.get('BROADCAST_MAX_VIEWERS', '16'))))
 MEDIA_STUN_URLS = read_list('MEDIA_STUN_URLS', [])
 MEDIA_TURN_URLS = read_list('MEDIA_TURN_URLS', [])

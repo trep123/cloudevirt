@@ -7,6 +7,7 @@ from .broadcast_views import (
     PublicWatchLeaseView,
 )
 from .media import MediaCreateView, MediaLeaseView, MediaSourceDetailView, MediaSourcesView
+from .tab_shares import TabShareLeaseView, TabSharesView
 from .views import DesktopAuthorizeView, DesktopCreateView, DesktopLeaseView
 from .workspaces import (
     MyWorkspaceView,
@@ -17,6 +18,8 @@ from .workspaces import (
 )
 
 urlpatterns = [
+    path('console/tab-shares', TabSharesView.as_view()),
+    path('console/tab-shares/requests/<uuid:request_id>', TabShareLeaseView.as_view()),
     path('console/workspaces/my', MyWorkspaceView.as_view()),
     path('console/workspaces/my/link', WorkspaceLinkView.as_view()),
     path('console/workspaces/<uuid:pk>/bootstrap', WorkspaceBootstrapView.as_view()),

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { navigate } from "../app/router";
 import { Icon } from "../components/icons";
 import { Avatar } from "../components/ui";
+import { TabShareControl } from "../features/console/TabShareControl";
 import type { CurrentUser } from "../types";
 
 type Item = {
@@ -328,7 +329,7 @@ export function AppLayout({
             {user.workbench_id ? (
               <span className="muted" title="此服务端工作台画面正在共享给持有观看链接的用户">共享工作台</span>
             ) : user.permissions.includes("console.use_workspace") ? (
-              <button className="action" onClick={() => go("workbench")}>共享工作台</button>
+              <TabShareControl />
             ) : null}
             <button
               type="button"

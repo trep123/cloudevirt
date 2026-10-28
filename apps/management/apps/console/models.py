@@ -69,7 +69,13 @@ class Broadcast(models.Model):
     source = models.OneToOneField(MediaSource, on_delete=models.PROTECT)
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     kind = models.CharField(
-        max_length=16, choices=[('desktop', '桌面'), ('source', '视频源'), ('page', '用户工作台')]
+        max_length=16,
+        choices=[
+            ('desktop', '桌面'),
+            ('source', '视频源'),
+            ('page', '用户工作台'),
+            ('tab', '当前页面'),
+        ],
     )
     active = models.BooleanField(default=False)
     stop_complete = models.BooleanField(default=True)
@@ -94,6 +100,7 @@ class Broadcast(models.Model):
             ),
             models.CheckConstraint(
                 condition=models.Q(kind='page', workspace__isnull=False, instance__isnull=True)
+                | models.Q(kind='tab', workspace__isnull=True, instance__isnull=True)
                 | models.Q(
                     kind__in=['desktop', 'source'], workspace__isnull=True, instance__isnull=False
                 ),
@@ -138,6 +145,19 @@ class WorkspaceControlSession(models.Model):
     login_hash = models.CharField(max_length=64)
     claimed = models.BooleanField(default=False)
     revoked = models.BooleanField(default=False)
+    expires_at = models.DateTimeField(db_index=True)
+
+    def __str__(self):
+        return str(self.pk)
+
+
+class TabShare(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    broadcast = models.OneToOneField(Broadcast, on_delete=models.PROTECT)
+    request_id = models.UUIDField(unique=True)
+    login_hash = models.CharField(max_length=64)
+    auth_hash = models.CharField(max_length=64)
+    upstream_resource = models.CharField(max_length=1024, blank=True, default='')
     expires_at = models.DateTimeField(db_index=True)
 
     def __str__(self):

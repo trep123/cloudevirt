@@ -60,6 +60,11 @@ def reconcile_one(pk, reset_connections=True):
             )
             if broadcast is None:
                 return
+            if broadcast.kind == 'tab':
+                from .tab_shares import reconcile_tab
+
+                reconcile_tab(broadcast)
+                return
             now = timezone.now()
             owner = broadcast.owner
             allowed = (
