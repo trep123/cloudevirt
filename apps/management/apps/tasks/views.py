@@ -84,6 +84,11 @@ class TaskRetryView(APIView):
                 ErrorCode.CONFLICT,
                 '请先查询实际快照状态，再在快照页面确认新的操作；不允许直接重放快照任务',
             )
+        if task.type == 'ACCOUNT_BATCH':
+            raise AppError(
+                ErrorCode.CONFLICT,
+                '请下载批次结果，修正失败记录后重新预校验；不允许直接重放账号批次',
+            )
         task.status = TaskStatus.PENDING
         task.attempt_count = 0
         task.next_retry_at = None

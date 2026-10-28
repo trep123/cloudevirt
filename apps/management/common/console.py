@@ -14,7 +14,6 @@ from apps.monitoring.serializers import AlertSerializer
 from apps.nodes.access import accessible_node_ids
 from apps.nodes.models import Node
 from apps.tasks.serializers import TaskSerializer
-from common.errors import AppError, ErrorCode
 from common.permissions import RequiresPasswordChange
 from common.scope import instances_for, tasks_for
 
@@ -87,31 +86,6 @@ class AuditListView(generics.ListAPIView):
         if search:
             queryset = queryset.filter(action__icontains=search)
         return queryset.order_by('-created_at', '-pk')
-
-
-class RoleListView(APIView):
-    permission_classes = [IsAuthenticated, RequiresPasswordChange]
-
-    def get(self, request):
-        if not is_admin(request.user):
-            raise AppError(ErrorCode.PERMISSION_DENIED)
-        from django.contrib.auth.models import Group
-
-        return Response(
-            {
-                'results': [
-                    {
-                        'id': group.pk,
-                        'name': group.name,
-                        'permissions': sorted(
-                            f'{permission.content_type.app_label}.{permission.codename}'
-                            for permission in group.permissions.select_related('content_type').all()
-                        ),
-                    }
-                    for group in Group.objects.prefetch_related('permissions').order_by('name')
-                ]
-            }
-        )
 
 
 class QuotaView(APIView):

@@ -129,7 +129,7 @@ export default function App() {
   else if (key === "images" && admin) content = <ImagesPage user={user} />;
   else if (key === "networks" && admin) content = <NetworksPage user={user} />;
   else if ((key === "users" || key === "roles") && admin)
-    content = <UsersAndRolesPage />;
+    content = <UsersAndRolesPage user={user} />;
   else if (key === "audit") content = <AuditPage />;
   else if (key === "tasks") content = <TasksPage user={user} />;
   else if (key === "templates" && admin)

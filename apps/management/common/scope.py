@@ -14,7 +14,12 @@ def instances_for(user):
     )
     if is_admin(user):
         return queryset
-    return queryset.filter(created_by=user, node_id__in=accessible_node_ids(user))
+    from apps.accounts.administration import limit_nodes
+
+    return queryset.filter(
+        created_by=user,
+        node_id__in=limit_nodes(user, accessible_node_ids(user), 'instances.view_instance'),
+    )
 
 
 def tasks_for(user):
@@ -48,8 +53,12 @@ class TaskScopeMixin:
 
 class NodeScopeMixin:
     def get_queryset(self):
+        from apps.accounts.administration import limit_nodes
         from apps.nodes.models import Node
 
         return Node.objects.filter(
-            is_deleted=False, pk__in=accessible_node_ids(self.request.user)
+            is_deleted=False,
+            pk__in=limit_nodes(
+                self.request.user, accessible_node_ids(self.request.user), 'nodes.view_node'
+            ),
         ).order_by('name')

@@ -1,15 +1,18 @@
 """镜像 API：列表、导入、详情、删除。"""
 
 from django.db import transaction
+from django.db.models import Q
 from rest_framework import generics
 from rest_framework.response import Response
 
+from apps.accounts.administration import limit_nodes
 from apps.audit.models import AuditAction
 from apps.audit.services import record_audit
 from apps.images.models import Image
 from apps.images.serializers import ImageImportSerializer, ImageSerializer, ImageUpdateSerializer
 from apps.images.services import delete_image
 from apps.images.uploads import accepted, check_node, register_image
+from apps.nodes.models import Node
 from common.permissions import CanDeleteImage, CanImportImage, CanViewImage, RequiresPasswordChange
 
 
@@ -18,6 +21,14 @@ class ImageListCreateView(generics.ListCreateAPIView):
 
     permission_classes = [RequiresPasswordChange]
     queryset = Image.objects.filter(is_deleted=False).select_related('node', 'upload')
+
+    def get_queryset(self):
+        nodes = limit_nodes(
+            self.request.user,
+            set(Node.objects.filter(is_deleted=False).values_list('pk', flat=True)),
+            'images.view_image',
+        )
+        return super().get_queryset().filter(Q(node_id__in=nodes) | Q(node__isnull=True))
 
     def get_permissions(self):
         """按动作选择权限类。"""
@@ -57,6 +68,17 @@ class ImageDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Image.objects.filter(is_deleted=False)
     serializer_class = ImageSerializer
 
+    def get_queryset(self):
+        permission = {'GET': 'images.view_image', 'DELETE': 'images.delete_image'}.get(
+            self.request.method, 'images.add_image'
+        )
+        nodes = limit_nodes(
+            self.request.user,
+            set(Node.objects.filter(is_deleted=False).values_list('pk', flat=True)),
+            permission,
+        )
+        return super().get_queryset().filter(Q(node_id__in=nodes) | Q(node__isnull=True))
+
     def get_serializer_class(self):
         """更新只接受元数据字段。"""
         if self.request.method in {'PATCH', 'PUT'}:
@@ -93,7 +115,7 @@ class ImageDetailView(generics.RetrieveUpdateDestroyAPIView):
         purge_file = purge_raw.strip().lower() not in {'0', 'false', 'no'}
         instance = Image.objects.select_for_update().get(pk=instance.pk)
         if purge_file and instance.node:
-            check_node(self.request.user, instance.node)
+            check_node(self.request.user, instance.node, 'images.delete_image')
         delete_image(instance, purge_file=purge_file)
         record_audit(
             action=AuditAction.IMAGE_DELETE,

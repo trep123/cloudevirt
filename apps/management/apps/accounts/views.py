@@ -4,6 +4,8 @@ import secrets
 import string
 
 from django.contrib.auth import get_user_model, login, logout, update_session_auth_hash
+from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -12,6 +14,11 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.accounts.administration import (
+    invalidate_user,
+    protect_administrator,
+    serialize_admin_changes,
+)
 from apps.accounts.models import UserProfile
 from apps.accounts.serializers import (
     ChangePasswordSerializer,
@@ -37,7 +44,13 @@ def generate_temporary_password(length: int = 16) -> str:
         随机口令字符串。
     """
     alphabet = string.ascii_letters + string.digits
-    return ''.join(secrets.choice(alphabet) for _ in range(length))
+    characters = [
+        secrets.choice(string.ascii_uppercase),
+        secrets.choice(string.ascii_lowercase),
+        secrets.choice(string.digits),
+    ] + [secrets.choice(alphabet) for _ in range(max(13, length - 3))]
+    secrets.SystemRandom().shuffle(characters)
+    return ''.join(characters)
 
 
 @method_decorator(ensure_csrf_cookie, name='dispatch')
@@ -56,6 +69,9 @@ class LoginView(APIView):
             serializer.validated_data['password'],
         )
         login(request, user)
+        request.session['_auth_epoch'] = getattr(
+            getattr(user, 'profile', None), 'session_version', 0
+        )
         return Response(UserSerializer(user).data)
 
 
@@ -123,14 +139,33 @@ class UserListCreateView(generics.ListCreateAPIView):
     permission_classes = [CanManageUser, RequiresPasswordChange]
     queryset = get_user_model().objects.all().order_by('id')
 
+    def get_queryset(self):
+        query = super().get_queryset().select_related('profile').prefetch_related('groups')
+        search = self.request.query_params.get('search', '').strip()
+        if search:
+            query = query.filter(
+                Q(username__icontains=search)
+                | Q(profile__display_name__icontains=search)
+                | Q(email__icontains=search)
+            )
+        role = self.request.query_params.get('role')
+        if role:
+            query = query.filter(groups__name=role)
+        active = self.request.query_params.get('active')
+        if active in {'true', 'false'}:
+            query = query.filter(is_active=active == 'true')
+        return query.distinct()
+
     def get_serializer_class(self):
         """写操作使用创建序列化器。"""
         if self.request.method == 'POST':
             return UserCreateSerializer
         return UserSerializer
 
+    @transaction.atomic
     def create(self, request, *args, **kwargs) -> Response:
         """创建用户并以输出序列化器回显真实角色。"""
+        serialize_admin_changes()
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = self.perform_create(serializer)
@@ -158,6 +193,22 @@ class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [CanManageUser, RequiresPasswordChange]
     queryset = get_user_model().objects.all()
 
+    @transaction.atomic
+    def update(self, request, *args, **kwargs):
+        serialize_admin_changes()
+        instance = self.get_object()
+        serializer = self.get_serializer(
+            instance, data=request.data, partial=kwargs.pop('partial', False)
+        )
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(UserSerializer(serializer.instance).data)
+
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        serialize_admin_changes()
+        return super().destroy(request, *args, **kwargs)
+
     def get_serializer_class(self):
         """写操作使用更新序列化器。"""
         if self.request.method == 'GET':
@@ -167,6 +218,7 @@ class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
     def perform_update(self, serializer) -> None:
         """保存变更并按启用/停用分别审计。"""
         before_active = serializer.instance.is_active
+        before_roles = sorted(serializer.instance.groups.values_list('name', flat=True))
         user = serializer.save()
         if before_active != user.is_active:
             action = AuditAction.USER_ENABLE if user.is_active else AuditAction.USER_DISABLE
@@ -177,13 +229,22 @@ class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
             actor=self.request.user,
             target_type='user',
             target_id=str(user.pk),
-            details={'username': user.get_username(), 'is_active': user.is_active},
+            details={
+                'username': user.get_username(),
+                'is_active': user.is_active,
+                'before_roles': before_roles,
+                'roles': sorted(user.groups.values_list('name', flat=True)),
+                'node_scope': getattr(getattr(user, 'profile', None), 'node_scope', None),
+                'quota_overrides': getattr(getattr(user, 'profile', None), 'quota_overrides', {}),
+            },
         )
 
     def perform_destroy(self, instance) -> None:
         """停用用户而不是物理删除。"""
+        protect_administrator(instance, active=False)
         instance.is_active = False
         instance.save(update_fields=['is_active'])
+        invalidate_user(instance)
         record_audit(
             action=AuditAction.USER_DISABLE,
             actor=self.request.user,
@@ -219,7 +280,10 @@ class UserResetPasswordView(APIView):
             target_id=str(user.pk),
             details={'username': user.get_username()},
         )
-        return Response({'username': user.get_username(), 'password': password})
+        invalidate_user(user)
+        response = Response({'username': user.get_username(), 'password': password})
+        response['Cache-Control'] = 'no-store'
+        return response
 
 
 class UserAuditView(APIView):

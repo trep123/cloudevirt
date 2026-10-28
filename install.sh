@@ -383,7 +383,7 @@ UMask=0007
 ReadWritePaths=
 ReadWritePaths=$DATA_DIR /var/log/cloudvirt
 ENV
-for job in collect_node_status reconcile cleanup_console_sessions; do
+for job in collect_node_status reconcile cleanup_console_sessions cleanup_account_batches; do
     interval=30
     [[ "$job" != reconcile ]] || interval=60
     cat > "/etc/systemd/system/cloudvirt-$job.service" <<ENV
@@ -535,6 +535,7 @@ if [[ "$ENABLE_OVS" == true ]]; then
     bash "$APP_DIR/scripts/install_ovs.sh" "$APP_DIR"
 fi
 systemctl enable --now cloudvirt-collect_node_status.timer cloudvirt-reconcile.timer cloudvirt-cleanup_console_sessions.timer
+systemctl enable --now cloudvirt-cleanup_account_batches.timer
 for service in cloudvirt-agent cloudvirt-management cloudvirt-worker nginx postgresql; do
     systemctl is-active --quiet "$service" || die "Service is not active: $service"
 done

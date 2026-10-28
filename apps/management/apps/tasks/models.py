@@ -28,6 +28,7 @@ class TaskType(models.TextChoices):
     """任务类型。"""
 
     NODE_REFRESH = 'NODE_REFRESH', '刷新节点资源'
+    ACCOUNT_BATCH = 'ACCOUNT_BATCH', '用户导入导出'
     INSTANCE_CREATE = 'INSTANCE_CREATE', '创建虚拟机'
     INSTANCE_START = 'INSTANCE_START', '启动虚拟机'
     INSTANCE_SHUTDOWN = 'INSTANCE_SHUTDOWN', '关闭虚拟机'

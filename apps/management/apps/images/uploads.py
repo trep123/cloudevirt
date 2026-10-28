@@ -27,11 +27,15 @@ from common.permissions import CanImportImage, RequiresPasswordChange
 CHUNK_BYTES = 8 * 1024 * 1024
 
 
-def check_node(user, node):
+def check_node(user, node, permission='images.add_image'):
+    from apps.accounts.administration import limit_nodes
+
     if not node or not node.is_schedulable:
         raise AppError(ErrorCode.NODE_OFFLINE, '节点不可用，请选择在线节点')
     if not user_can_access(user, node, NodePermission.OPERATE):
         raise AppError(ErrorCode.PERMISSION_DENIED, '没有此节点的操作权限')
+    if node.pk not in limit_nodes(user, {node.pk}, permission):
+        raise AppError(ErrorCode.PERMISSION_DENIED, '此操作超出角色或用户的节点授权范围')
 
 
 def image_task(image, user):

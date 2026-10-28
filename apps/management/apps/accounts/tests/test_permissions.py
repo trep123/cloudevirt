@@ -159,7 +159,7 @@ class PermissionBoundaryTests(TestCase):
         self.assertEqual(change.status_code, 200)
         self.assertEqual(self.client.get('/api/v1/users').status_code, 200)
 
-    def test_privilege_escalation_fields_are_ignored(self) -> None:
+    def test_privilege_escalation_fields_are_rejected(self) -> None:
         """客户端提交的 is_superuser / is_staff 不得生效。"""
         self.client.login(username='root-admin', password='Adm1nStr0ngPass')
 
@@ -175,7 +175,5 @@ class PermissionBoundaryTests(TestCase):
             content_type='application/json',
         )
 
-        self.assertEqual(response.status_code, 201)
-        created = get_user_model().objects.get(username='sneaky')
-        self.assertFalse(created.is_superuser)
-        self.assertFalse(created.is_staff)
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(get_user_model().objects.filter(username='sneaky').exists())

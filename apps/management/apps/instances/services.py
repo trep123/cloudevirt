@@ -157,6 +157,10 @@ def create_instance(
         AppError: 参数非法、节点不可调度、镜像不可用或资源不足。
     """
     validate_spec(name=name, vcpu=vcpu, memory_mib=memory_mib, disk_gib=disk_gib)
+    from apps.accounts.administration import limit_nodes
+
+    if node.pk not in limit_nodes(user, [node.pk], 'instances.add_instance'):
+        raise AppError(ErrorCode.PERMISSION_DENIED, '目标节点不在角色或用户的创建授权范围内')
     if not user_can_access(user, node, NodePermission.OPERATE):
         raise AppError(ErrorCode.PERMISSION_DENIED, '没有目标节点的操作权限')
     scoped_key = (
@@ -190,7 +194,7 @@ def create_instance(
     with transaction.atomic():
         locked_node = type(node).objects.select_for_update().get(pk=node.pk)
         # Also serialize cross-node requests and idempotency lookup for this account.
-        get_user_model().objects.select_for_update().get(pk=user.pk)
+        quota_user = get_user_model().objects.select_for_update().get(pk=user.pk)
         image = type(image).objects.select_for_update().get(pk=image.pk)
         if image.is_deleted or image.status != ImageStatus.READY:
             raise AppError(ErrorCode.CONFLICT, '镜像已删除或尚未校验完成')
@@ -216,7 +220,7 @@ def create_instance(
                 ) != (name, node.pk, image.pk, vcpu, memory_mib, disk_gib, network_name, autostart):
                     raise AppError(ErrorCode.CONFLICT, '幂等键已用于其他配置，请先核对原任务')
                 return instance, previous
-        enforce_quota(user, vcpu=vcpu, memory_mib=memory_mib, disk_gib=disk_gib)
+        enforce_quota(quota_user, vcpu=vcpu, memory_mib=memory_mib, disk_gib=disk_gib)
         if network is not None:
             network = (
                 Network.objects.select_for_update().filter(pk=network.pk, is_deleted=False).first()

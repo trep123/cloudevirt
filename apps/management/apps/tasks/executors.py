@@ -6,6 +6,7 @@
 
 import logging
 
+from apps.accounts.bulk import execute_account_batch
 from apps.images.uploads import execute_image_import
 from apps.infrastructure.executors import execute_infrastructure
 from apps.instances.executors import (
@@ -45,6 +46,7 @@ def execute_node_refresh(task: Task) -> dict:
 
 
 EXECUTORS = {
+    TaskType.ACCOUNT_BATCH: execute_account_batch,
     TaskType.IMAGE_IMPORT: execute_image_import,
     'STORAGE_POOL_CREATE': execute_infrastructure,
     'INSTANCE_SNAPSHOT': execute_infrastructure,

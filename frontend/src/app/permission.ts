@@ -15,7 +15,7 @@ export function canEnterRoute(user: CurrentUser, path: string): boolean {
     networks: "networks.view_network",
     tasks: "tasks.view_task",
     users: "accounts.manage_user",
-    roles: "accounts.manage_user",
+    roles: "accounts.manage_role",
     templates: "templates.view_template",
     monitoring: "monitoring.view_alert",
     storage: "instances.view_instance",

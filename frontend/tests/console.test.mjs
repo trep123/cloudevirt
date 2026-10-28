@@ -142,6 +142,44 @@ test("API errors retain server code and request id", async (t) => {
       e.requestId === "request-403",
   );
 });
+
+test("account import leaves multipart boundary to browser and preserves CSRF", async (t) => {
+  globalThis.document = { cookie: "csrftoken=account-csrf" };
+  const body = new FormData();
+  body.append(
+    "file",
+    new Blob(["username,display_name,role_codes\nnew,新用户,Viewer"]),
+    "users.csv",
+  );
+  t.mock.method(globalThis, "fetch", async (_url, init) => {
+    assert.equal(init.body, body);
+    assert.equal(init.headers.has("Content-Type"), false);
+    assert.equal(init.headers.get("X-CSRFToken"), "account-csrf");
+    assert.equal(init.credentials, "same-origin");
+    return new Response(JSON.stringify({ id: "batch", state: "DRAFT" }), {
+      status: 201,
+    });
+  });
+  assert.equal(
+    (await api.request("/users/batches", { method: "POST", body })).state,
+    "DRAFT",
+  );
+});
+
+test("role route requires separate role management permission", () => {
+  const user = {
+    console_scope: "admin",
+    permissions: ["accounts.manage_user"],
+  };
+  assert.equal(canEnterRoute(user, "/admin/roles"), false);
+  assert.equal(
+    canEnterRoute(
+      { ...user, permissions: ["accounts.manage_role"] },
+      "/admin/roles",
+    ),
+    true,
+  );
+});
 test("create requests preserve caller idempotency key and CSRF token", async (t) => {
   globalThis.document = { cookie: "csrftoken=csrf-value" };
   let sent;

@@ -34,6 +34,22 @@ def check_permission(
     if not user or not user.is_authenticated:
         raise AppError(ErrorCode.UNAUTHORIZED)
     if user.has_perm(codename):
+        if target_id and target_type in {'node', 'instance'}:
+            from apps.accounts.administration import limit_nodes
+
+            node_id = None
+            if target_type == 'node' and str(target_id).isdigit():
+                node_id = int(target_id)
+            elif target_type == 'instance':
+                from apps.instances.models import Instance
+
+                node_id = (
+                    Instance.objects.filter(pk=target_id).values_list('node_id', flat=True).first()
+                )
+            if node_id is not None and node_id not in limit_nodes(user, [node_id], codename):
+                raise AppError(
+                    ErrorCode.PERMISSION_DENIED, '此操作不在该角色或用户的节点授权范围内'
+                )
         return
     record_denied(
         action=action,
@@ -69,12 +85,16 @@ class RequiresPermission(BasePermission):
             request.user,
             self.codename,
             target_type=self.target_type,
+            target_id=str(view.kwargs.get('pk', ''))
+            if self.target_type in {'node', 'instance'}
+            else '',
             action=self.audit_action,
         )
         # Global operational data is restricted independently of menu visibility.
         from apps.accounts.roles import is_admin
 
         global_permissions = {
+            'accounts.manage_user',
             'monitoring.view_alert',
             'monitoring.run_reconciliation',
             'networks.manage_network',

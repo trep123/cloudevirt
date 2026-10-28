@@ -13,7 +13,18 @@ from apps.accounts.views import (
     UserResetPasswordView,
 )
 
+from .bulk import (
+    AccountBatchDetailView,
+    AccountBatchDownloadView,
+    AccountBatchView,
+    AccountTemplateView,
+)
+
 urlpatterns = [
+    path('users/batches', AccountBatchView.as_view()),
+    path('users/batches/<uuid:pk>', AccountBatchDetailView.as_view()),
+    path('users/batches/<uuid:pk>/download', AccountBatchDownloadView.as_view()),
+    path('users/import-template', AccountTemplateView.as_view()),
     path('auth/login', LoginView.as_view(), name='auth-login'),
     path('auth/logout', LogoutView.as_view(), name='auth-logout'),
     path('auth/me', MeView.as_view(), name='auth-me'),

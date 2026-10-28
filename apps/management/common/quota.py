@@ -16,7 +16,10 @@ def quota_for(user):
     )
     return {
         'enforced': not is_admin(user),
-        'limits': configuration()['quota'],
+        'limits': {
+            **configuration()['quota'],
+            **getattr(getattr(user, 'profile', None), 'quota_overrides', {}),
+        },
         'used': {
             'instances': queryset.count(),
             **{key: value or 0 for key, value in usage.items()},
