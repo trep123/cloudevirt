@@ -10,6 +10,7 @@ import time
 from django.conf import settings
 from django.utils import timezone
 
+from apps.instances.hardware import validate_creation_capabilities
 from apps.instances.models import (
     DiskStatus,
     Instance,
@@ -52,6 +53,18 @@ def execute_instance_create(task: Task) -> dict:
     )
     if instance is None:
         raise AppError(ErrorCode.NOT_FOUND, '实例不存在')
+    from django.contrib.auth import get_user_model
+
+    from apps.accounts.administration import limit_nodes
+
+    actor = get_user_model().objects.filter(pk=task.requested_by_id, is_active=True).first()
+    if (
+        actor is None
+        or not actor.has_perm('instances.add_instance')
+        or instance.created_by_id != actor.pk
+        or instance.node_id not in limit_nodes(actor, {instance.node_id}, 'instances.add_instance')
+    ):
+        raise AppError(ErrorCode.PERMISSION_DENIED, '创建任务的用户授权已失效，请重新提交')
 
     disk = instance.disks.filter(role='SYSTEM').first()
     if disk is None:
@@ -82,7 +95,35 @@ def execute_instance_create(task: Task) -> dict:
         'vnc_password': instance.vnc_password,
     }
     client = AgentClient(instance.node.endpoint)
+    creation_requested = False
     try:
+        config = instance.creation_config or {}
+        source = config.get('image') or {
+            'relative_path': instance.image.relative_path,
+            'format': instance.image.format,
+            'checksum': instance.image.checksum_sha256,
+        }
+        capabilities = client.get_json('/api/v1/node/capabilities')
+        validate_creation_capabilities(config, capabilities)
+        if not all(
+            capabilities.get(key) is True for key in ['image_clone', 'iso_install', 'start_control']
+        ):
+            raise AppError(ErrorCode.CONFLICT, '节点 Agent 需要升级后才能可靠创建镜像虚拟机')
+        payload.update(
+            hardware=config.get('hardware', {}),
+            initialization=config.get('initialization'),
+            data_disks=[
+                {'relative_path': d.relative_path, 'size_gib': d.size_gib}
+                for d in instance.disks.filter(role='DATA').order_by('target_dev')
+            ],
+            additional_networks=config.get('network_specs', []),
+            image_relative_path=source['relative_path'],
+            image_format=source['format'],
+            image_checksum=source['checksum'],
+            start_after_create=config.get('start_after_create', True),
+            autostart=instance.autostart,
+        )
+        creation_requested = True
         result = client.create_domain(payload)
     except AppError as exc:
         instance.operation_status = 'FAILED'
@@ -98,8 +139,15 @@ def execute_instance_create(task: Task) -> dict:
         )
         disk.status = DiskStatus.FAILED
         disk.save(update_fields=['status', 'updated_at'])
-        # Agent 明确失败时资源未创建，释放预留以便重试或他人使用
-        release_reservation(instance)
+        # A failed response can occur after disks/domain creation. Reconcile before releasing.
+        record_event(
+            task,
+            from_status=task.status,
+            to_status=task.status,
+            message='创建结果需核对，保留资源预留以避免重复分配',
+        )
+        if not creation_requested:
+            release_reservation(instance)
         logger.error(
             '实例创建失败',
             extra={'instance_id': instance.pk, 'error_code': exc.code},
@@ -107,6 +155,11 @@ def execute_instance_create(task: Task) -> dict:
         raise
 
     instance.mark_observed(normalize_state(str(result.get('state') or '')))
+    if config.get('initialization'):
+        instance.initialization_status = (
+            'DELIVERED' if result.get('initialization_delivered') else 'UNKNOWN'
+        )
+        instance.save(update_fields=['initialization_status'])
     instance.operation_status = 'SUCCEEDED'
     instance.last_error_code = ''
     instance.last_error_message = ''
@@ -122,6 +175,7 @@ def execute_instance_create(task: Task) -> dict:
         ]
     )
 
+    instance.disks.filter(role='DATA').update(status=DiskStatus.READY)
     disk.status = DiskStatus.READY
     disk.virtual_size_bytes = (
         result.get('disk_virtual_size_bytes') or disk.size_gib * 1024 * 1024 * 1024
@@ -269,9 +323,15 @@ def execute_instance_delete(task: Task) -> dict:
     disk_relative_path = payload.get('disk_relative_path') or (disk.relative_path if disk else '')
 
     client = AgentClient(instance.node.endpoint)
-    result = client.delete_domain(
-        instance.libvirt_domain_name, disk_relative_path if purge_disk else ''
-    )
+    if purge_disk and instance.disks.filter(role='DATA').exists():
+        result = client.delete_domain_disks(
+            instance.libvirt_domain_name,
+            list(instance.disks.values_list('relative_path', flat=True)),
+        )
+    else:
+        result = client.delete_domain(
+            instance.libvirt_domain_name, disk_relative_path if purge_disk else ''
+        )
 
     instance.is_deleted = True
     instance.disks_deleted = purge_disk
@@ -279,8 +339,9 @@ def execute_instance_delete(task: Task) -> dict:
     instance.save(update_fields=['is_deleted', 'disks_deleted', 'operation_status', 'updated_at'])
 
     for item in instance.disks.all():
-        item.status = DiskStatus.DELETED
-        item.save(update_fields=['status', 'updated_at'])
+        item.status = DiskStatus.DELETED if purge_disk else DiskStatus.READY
+        item.is_orphan = not purge_disk
+        item.save(update_fields=['status', 'is_orphan', 'updated_at'])
 
     # 删除后资源释放，预留从已分配转为已释放
     ResourceReservation.objects.filter(instance=instance).update(

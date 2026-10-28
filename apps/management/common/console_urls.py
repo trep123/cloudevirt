@@ -3,6 +3,7 @@
 from django.urls import path
 
 from apps.accounts.roles import is_admin
+from apps.instances.preflight import CreatePreflightView
 from apps.instances.views import (
     InstanceActionView,
     InstanceAddressesView,
@@ -26,6 +27,7 @@ class ConsoleBoundaryMixin:
 
 
 ROUTES = [
+    ('vms/preflight/', CreatePreflightView),
     ('dashboard/', DashboardView),
     ('vms/', InstanceListCreateView),
     ('vms/<int:pk>/', InstanceDetailView),

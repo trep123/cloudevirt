@@ -60,6 +60,13 @@ class InstanceListCreateView(InstanceScopeMixin, generics.ListCreateAPIView):
             disk_gib=data['disk_gib'],
             network_name=data.get('network_name', ''),
             autostart=data.get('autostart', False),
+            start_after_create=data.get('start_after_create', True),
+            template=data.get('template'),
+            template_version=data.get('template_version'),
+            data_disks=data.get('data_disks', []),
+            additional_networks=data.get('additional_networks', []),
+            hardware=data.get('hardware', {}),
+            initialization=data.get('initialization'),
             idempotency_key=request.headers.get('Idempotency-Key') or None,
         )
         record_audit(

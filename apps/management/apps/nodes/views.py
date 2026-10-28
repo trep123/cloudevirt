@@ -5,6 +5,7 @@ from rest_framework.response import Response
 
 from apps.audit.models import AuditAction
 from apps.audit.services import record_audit
+from apps.nodes.client import AgentClient
 from apps.nodes.models import Node, NodeAccess
 from apps.nodes.serializers import (
     NodeAccessSerializer,
@@ -21,6 +22,26 @@ from common.permissions import (
     RequiresPasswordChange,
 )
 from common.scope import NodeScopeMixin
+
+
+class NodeCapabilitiesView(NodeScopeMixin, generics.RetrieveAPIView):
+    permission_classes = [CanOperateNode, RequiresPasswordChange]
+
+    def get(self, request, *args, **kwargs):
+        node = self.get_object()
+        from apps.instances.services import limit
+
+        data = AgentClient(node.endpoint).get_json('/api/v1/node/capabilities')
+        data['policy'] = {
+            'vcpu': min(limit('INSTANCE_MAX_VCPU', 64), node.cpu_total or 64),
+            'memory_mib': min(
+                limit('INSTANCE_MAX_MEMORY_MIB', 131072), node.memory_total_mib or 131072
+            ),
+            'disk_gib': limit('INSTANCE_MAX_DISK_GIB', 2048),
+        }
+        response = Response(data)
+        response['Cache-Control'] = 'no-store'
+        return response
 
 
 class NodeListCreateView(NodeScopeMixin, generics.ListCreateAPIView):

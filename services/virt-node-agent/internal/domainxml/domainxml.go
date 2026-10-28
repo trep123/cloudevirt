@@ -29,28 +29,42 @@ var (
 
 // Spec 是创建域所需的全部输入。
 type Spec struct {
-	Name          string
-	UUID          string
-	VCPU          int
-	MemoryMiB     int
-	DiskPath      string
-	Network       string
-	NetworkType   string
-	NetworkBridge string
-	VLANID        int
-	VNCPassword   string
+	SeedPath            string
+	Hardware            Hardware
+	Name                string
+	UUID                string
+	VCPU                int
+	MemoryMiB           int
+	DiskPath            string
+	Network             string
+	NetworkType         string
+	NetworkBridge       string
+	VLANID              int
+	VNCPassword         string
+	ISOPath             string
+	AdditionalDiskPaths []string
+	AdditionalNetworks  []NetworkSpec
+}
+type NetworkSpec struct {
+	Network       string `json:"network"`
+	NetworkType   string `json:"network_type"`
+	NetworkBridge string `json:"network_bridge"`
+	VLANID        int    `json:"vlan_id"`
 }
 
 // domain 是 XML 结构，字段顺序即输出顺序。
 type domain struct {
-	XMLName xml.Name `xml:"domain"`
-	Type    string   `xml:"type,attr"`
-	Name    string   `xml:"name"`
-	UUID    string   `xml:"uuid"`
-	Memory  memory   `xml:"memory"`
-	VCPU    int      `xml:"vcpu"`
-	OS      osSpec   `xml:"os"`
-	Devices devices  `xml:"devices"`
+	XMLName  xml.Name      `xml:"domain"`
+	Type     string        `xml:"type,attr"`
+	Name     string        `xml:"name"`
+	UUID     string        `xml:"uuid"`
+	Memory   memory        `xml:"memory"`
+	VCPU     int           `xml:"vcpu"`
+	OS       osSpec        `xml:"os"`
+	CPU      *cpuSpec      `xml:"cpu,omitempty"`
+	CPUTune  *cpuTune      `xml:"cputune,omitempty"`
+	Features *featuresSpec `xml:"features,omitempty"`
+	Devices  devices       `xml:"devices"`
 }
 
 type memory struct {
@@ -59,7 +73,13 @@ type memory struct {
 }
 
 type osSpec struct {
-	Type osType `xml:"type"`
+	Firmware       string        `xml:"firmware,attr,omitempty"`
+	FirmwareConfig *firmwareSpec `xml:"firmware,omitempty"`
+	Type           osType        `xml:"type"`
+	Boot           []bootDevice  `xml:"boot,omitempty"`
+}
+type bootDevice struct {
+	Dev string `xml:"dev,attr"`
 }
 
 type osType struct {
@@ -69,18 +89,21 @@ type osType struct {
 }
 
 type devices struct {
-	Disks     []disk        `xml:"disk"`
-	Interface *iface        `xml:"interface,omitempty"`
-	Console   consoleSpec   `xml:"console"`
-	Graphics  *graphicsSpec `xml:"graphics,omitempty"`
+	TPM        *tpmSpec      `xml:"tpm,omitempty"`
+	Disks      []disk        `xml:"disk"`
+	Interfaces []*iface      `xml:"interface,omitempty"`
+	Console    consoleSpec   `xml:"console"`
+	Graphics   *graphicsSpec `xml:"graphics,omitempty"`
 }
 
 type disk struct {
-	Type   string    `xml:"type,attr"`
-	Device string    `xml:"device,attr"`
-	Driver diskDrive `xml:"driver"`
-	Source diskSrc   `xml:"source"`
-	Target diskTgt   `xml:"target"`
+	IOTune   *ioTune   `xml:"iotune,omitempty"`
+	Type     string    `xml:"type,attr"`
+	Device   string    `xml:"device,attr"`
+	Driver   diskDrive `xml:"driver"`
+	Source   diskSrc   `xml:"source"`
+	Target   diskTgt   `xml:"target"`
+	Readonly *struct{} `xml:"readonly,omitempty"`
 }
 
 type diskDrive struct {
@@ -98,11 +121,12 @@ type diskTgt struct {
 }
 
 type iface struct {
-	Type        string       `xml:"type,attr"`
-	Source      ifaceSrc     `xml:"source"`
-	VirtualPort *virtualPort `xml:"virtualport,omitempty"`
-	VLAN        *vlanSpec    `xml:"vlan,omitempty"`
-	Model       ifaceModel   `xml:"model"`
+	Bandwidth   *bandwidthSpec `xml:"bandwidth,omitempty"`
+	Type        string         `xml:"type,attr"`
+	Source      ifaceSrc       `xml:"source"`
+	VirtualPort *virtualPort   `xml:"virtualport,omitempty"`
+	VLAN        *vlanSpec      `xml:"vlan,omitempty"`
+	Model       ifaceModel     `xml:"model"`
 }
 
 type ifaceSrc struct {
@@ -191,6 +215,7 @@ func Build(spec Spec) (string, error) {
 		VCPU:   spec.VCPU,
 		OS:     osSpec{Type: osType{Arch: Architecture, Machine: MachineType, Value: "hvm"}},
 		Devices: devices{
+			Interfaces: []*iface{nil},
 			Disks: []disk{{
 				Type:   "file",
 				Device: "disk",
@@ -208,34 +233,50 @@ func Build(spec Spec) (string, error) {
 			},
 		},
 	}
+	if spec.SeedPath != "" {
+		payload.Devices.Disks = append(payload.Devices.Disks, disk{Type: "file", Device: "cdrom", Driver: diskDrive{Name: "qemu", Type: "raw"}, Source: diskSrc{File: spec.SeedPath}, Target: diskTgt{Dev: "sdb", Bus: "sata"}, Readonly: &struct{}{}})
+	}
+	if spec.ISOPath != "" {
+		payload.OS.Boot = []bootDevice{{Dev: "cdrom"}, {Dev: "hd"}}
+		payload.Devices.Disks = append(payload.Devices.Disks, disk{Type: "file", Device: "cdrom", Driver: diskDrive{Name: "qemu", Type: "raw"}, Source: diskSrc{File: spec.ISOPath}, Target: diskTgt{Dev: "sda", Bus: "sata"}, Readonly: &struct{}{}})
+	}
+	if len(spec.AdditionalDiskPaths) > 8 || len(spec.AdditionalNetworks) > 7 {
+		return "", apierr.New(apierr.CodeInvalidArgument, "设备数量超限", nil)
+	}
+	for index, path := range spec.AdditionalDiskPaths {
+		if strings.TrimSpace(path) == "" {
+			return "", apierr.New(apierr.CodeInvalidArgument, "数据盘路径为空", nil)
+		}
+		payload.Devices.Disks = append(payload.Devices.Disks, disk{Type: "file", Device: "disk", Driver: diskDrive{Name: "qemu", Type: DiskFormat}, Source: diskSrc{File: path}, Target: diskTgt{Dev: fmt.Sprintf("vd%c", 'b'+index), Bus: DiskBus}})
+	}
 	switch spec.NetworkType {
 	case "OVS":
 		bridge := strings.TrimSpace(spec.NetworkBridge)
-		payload.Devices.Interface = &iface{
+		payload.Devices.Interfaces[0] = &iface{
 			Type:        "bridge",
 			Source:      ifaceSrc{Bridge: bridge},
 			VirtualPort: &virtualPort{Type: "openvswitch"},
 			Model:       ifaceModel{Type: "virtio"},
 		}
 		if spec.VLANID > 0 {
-			payload.Devices.Interface.VLAN = &vlanSpec{Tag: vlanTag{ID: spec.VLANID}}
+			payload.Devices.Interfaces[0].VLAN = &vlanSpec{Tag: vlanTag{ID: spec.VLANID}}
 		}
 	case "BRIDGE":
 		bridge := strings.TrimSpace(spec.NetworkBridge)
 		if bridge == "" {
 			bridge = spec.Network
 		}
-		payload.Devices.Interface = &iface{
+		payload.Devices.Interfaces[0] = &iface{
 			Type:   "bridge",
 			Source: ifaceSrc{Bridge: bridge},
 			Model:  ifaceModel{Type: "virtio"},
 		}
 		if spec.VLANID > 0 {
-			payload.Devices.Interface.VLAN = &vlanSpec{Tag: vlanTag{ID: spec.VLANID}}
+			payload.Devices.Interfaces[0].VLAN = &vlanSpec{Tag: vlanTag{ID: spec.VLANID}}
 		}
 	default:
 		if spec.Network != "" {
-			payload.Devices.Interface = &iface{
+			payload.Devices.Interfaces[0] = &iface{
 				Type:   "network",
 				Source: ifaceSrc{Network: spec.Network},
 				Model:  ifaceModel{Type: "virtio"},
@@ -243,6 +284,30 @@ func Build(spec Spec) (string, error) {
 		}
 	}
 
+	for _, network := range spec.AdditionalNetworks {
+		child := spec
+		child.AdditionalNetworks = nil
+		child.AdditionalDiskPaths = nil
+		child.Network = network.Network
+		child.NetworkType = network.NetworkType
+		child.NetworkBridge = network.NetworkBridge
+		child.VLANID = network.VLANID
+		content, err := Build(child)
+		if err != nil {
+			return "", err
+		}
+		var parsed domain
+		if err := xml.Unmarshal([]byte(content), &parsed); err != nil {
+			return "", err
+		}
+		if len(parsed.Devices.Interfaces) != 1 || parsed.Devices.Interfaces[0] == nil {
+			return "", apierr.New(apierr.CodeInvalidArgument, "附加网络无效", nil)
+		}
+		payload.Devices.Interfaces = append(payload.Devices.Interfaces, parsed.Devices.Interfaces[0])
+	}
+	if err := ApplyHardware(&payload, spec); err != nil {
+		return "", err
+	}
 	encoded, err := xml.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		return "", apierr.New(apierr.CodeOperationFailed, "域 XML 生成失败", err)
@@ -318,8 +383,8 @@ func Parse(content string) (Spec, error) {
 	if len(parsed.Devices.Disks) > 0 {
 		spec.DiskPath = parsed.Devices.Disks[0].Source.File
 	}
-	if parsed.Devices.Interface != nil {
-		spec.Network = parsed.Devices.Interface.Source.Network
+	if len(parsed.Devices.Interfaces) > 0 && parsed.Devices.Interfaces[0] != nil {
+		spec.Network = parsed.Devices.Interfaces[0].Source.Network
 	}
 	return spec, nil
 }

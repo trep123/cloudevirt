@@ -29,6 +29,7 @@ class ImageSerializer(serializers.ModelSerializer):
             'status',
             'os_family',
             'os_version',
+            'supports_cloud_init',
             'error_code',
             'error_message',
             'is_ready',
@@ -53,7 +54,15 @@ class ImageUpdateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Image
-        fields = ('os_family', 'os_version')
+        fields = ('os_family', 'os_version', 'supports_cloud_init')
+
+    def validate_supports_cloud_init(self, value):
+        from apps.accounts.roles import is_admin
+
+        request = self.context.get('request')
+        if not request or not is_admin(request.user):
+            raise serializers.ValidationError('仅平台管理员可确认镜像初始化能力')
+        return value
 
 
 class ImageImportSerializer(serializers.ModelSerializer):

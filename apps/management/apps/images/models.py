@@ -50,6 +50,7 @@ class Image(models.Model):
     )
     os_family = models.CharField('系统系列', max_length=32, blank=True, default='')
     os_version = models.CharField('系统版本', max_length=32, blank=True, default='')
+    supports_cloud_init = models.BooleanField(default=False)
     error_code = models.CharField('错误码', max_length=64, blank=True, default='')
     error_message = models.TextField('错误信息', blank=True, default='')
     created_by = models.ForeignKey(

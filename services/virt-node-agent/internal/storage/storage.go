@@ -332,6 +332,9 @@ func ListDiskFiles(ctx context.Context, root string) ([]DiskFile, error) {
 
 	files := make([]DiskFile, 0, len(entries))
 	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
 		if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
 			continue
 		}

@@ -3,7 +3,7 @@
 from django.db.models import Sum
 
 from apps.accounts.roles import is_admin
-from apps.instances.models import Instance
+from apps.instances.models import Disk, Instance
 from common.errors import AppError, ErrorCode
 
 
@@ -14,6 +14,20 @@ def quota_for(user):
     usage = queryset.aggregate(
         vcpu=Sum('vcpu'), memory_mib=Sum('memory_mib'), disk_gib=Sum('disk_gib')
     )
+    extra = (
+        Disk.objects.filter(instance__in=queryset, role='DATA')
+        .exclude(status='DELETED')
+        .aggregate(total=Sum('size_gib'))['total']
+        or 0
+    )
+    usage['disk_gib'] = (usage['disk_gib'] or 0) + extra
+    retained = (
+        Disk.objects.filter(instance__created_by=user, instance__is_deleted=True)
+        .exclude(status='DELETED')
+        .aggregate(total=Sum('size_gib'))['total']
+        or 0
+    )
+    usage['disk_gib'] += retained
     return {
         'enforced': not is_admin(user),
         'limits': {

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/tl2004/cloude-virt/services/virt-node-agent/internal/apierr"
@@ -80,6 +81,21 @@ func deleteDomainHandler(deps Dependencies) http.HandlerFunc {
 			writeAPIError(writer, deps.Logger, err, requestID)
 			return
 		}
+		paths := request.URL.Query()["disk_relative_path"]
+		if len(paths) > 9 {
+			writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeInvalidArgument, "磁盘数量超限", nil), requestID)
+			return
+		}
+		for _, relative := range paths {
+			if !deps.AllowDestructive {
+				writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeConflict, "宿主机未开启破坏性操作开关", nil), requestID)
+				return
+			}
+			if _, err := storage.SafePathAllowMissing(deps.DiskDir, relative); err != nil {
+				writeAPIError(writer, deps.Logger, err, requestID)
+				return
+			}
+		}
 		// 运行中的域先强制关闭，避免 undefine 失败留下不可控状态
 		if state == "RUNNING" || state == "PAUSED" {
 			if err := deps.Virtualizer.DestroyDomain(ctx, name); err != nil {
@@ -87,13 +103,21 @@ func deleteDomainHandler(deps Dependencies) http.HandlerFunc {
 				return
 			}
 		}
-		if err := deps.Virtualizer.UndefineDomain(ctx, name); err != nil {
+		var undefineErr error
+		if operator, ok := deps.Virtualizer.(interface {
+			UndefineDomainState(context.Context, string, bool) error
+		}); ok {
+			undefineErr = operator.UndefineDomainState(ctx, name, len(paths) > 0)
+		} else {
+			undefineErr = deps.Virtualizer.UndefineDomain(ctx, name)
+		}
+		if err := undefineErr; err != nil {
 			writeAPIError(writer, deps.Logger, err, requestID)
 			return
 		}
 
 		diskRemoved := false
-		if relative := request.URL.Query().Get("disk_relative_path"); relative != "" {
+		for _, relative := range paths {
 			if !deps.AllowDestructive {
 				writeAPIError(writer, deps.Logger, apierr.New(
 					apierr.CodeConflict, "宿主机未开启破坏性操作开关", nil,

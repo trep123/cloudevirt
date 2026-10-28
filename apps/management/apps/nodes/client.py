@@ -98,9 +98,13 @@ class AgentClient:
         """读取资源采集结果。"""
         return self.get_json('/api/v1/node/resources')
 
-    def request_json(self, path: str, method: str, body: dict | None = None) -> Any:
+    def request_json(
+        self, path: str, method: str, body: dict | None = None, *, timeout: int | None = None
+    ) -> Any:
         """发送带 JSON 体的请求（用于写操作）。"""
-        payload = json.dumps(body or {}).encode('utf-8') if body is not None else None
+        payload = (
+            json.dumps(body or {}, ensure_ascii=False).encode('utf-8') if body is not None else None
+        )
         request = urllib.request.Request(
             f'{self.endpoint}{path}',
             data=payload,
@@ -111,7 +115,7 @@ class AgentClient:
             method=method,
         )
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+            with urllib.request.urlopen(request, timeout=timeout or self.timeout) as response:
                 raw = response.read().decode('utf-8')
         except urllib.error.HTTPError as exc:
             raise agent_http_error(exc) from exc
@@ -159,7 +163,7 @@ class AgentClient:
 
     def create_domain(self, payload: dict) -> dict:
         """请求 Agent 创建并启动域。"""
-        return self.request_json('/api/v1/domains', 'POST', payload)
+        return self.request_json('/api/v1/domains', 'POST', payload, timeout=590)
 
     def domain_addresses(self, name: str) -> dict:
         """读取域内网卡的 IPv4/IPv6 地址。"""
@@ -184,6 +188,14 @@ class AgentClient:
         # 同上：空目录时 Agent 可能返回 null
         disks = (payload.get('disks') or []) if isinstance(payload, dict) else []
         return [item for item in disks if isinstance(item, dict)]
+
+    def delete_domain_disks(self, name, paths):
+        from urllib.parse import urlencode
+
+        return self.request_json(
+            '/api/v1/domains/' + name + '?' + urlencode({'disk_relative_path': paths}, doseq=True),
+            'DELETE',
+        )
 
     def domains(self) -> list[dict]:
         """读取域列表。"""

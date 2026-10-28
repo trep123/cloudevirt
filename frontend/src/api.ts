@@ -72,10 +72,7 @@ function readCookie(name: string): string {
   return "";
 }
 
-async function request<T>(
-  path: string,
-  init: RequestInit = {},
-): Promise<T> {
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const method = (init.method || "GET").toUpperCase();
   const headers = new Headers(init.headers);
   if (init.body && !(init.body instanceof FormData)) {
@@ -123,6 +120,16 @@ async function request<T>(
     );
   }
   return payload as T;
+}
+
+export async function fetchAllOptions<T>(path:string):Promise<T[]> {
+  const result:T[]=[];
+  for(let page=1;page<=100;page++){
+    const data=await request<{results:T[];count?:number}>(`${path}${path.includes('?')?'&':'?'}page=${page}&page_size=100`);
+    result.push(...data.results);
+    if(data.count===undefined||result.length>=data.count||!data.results.length)return result;
+  }
+  throw Error('可选资源超过 10000 条，请缩小资源范围');
 }
 
 export function uploadImageChunk(
@@ -248,7 +255,11 @@ export const api = {
     }),
   updateImage: (
     id: number,
-    body: Partial<{ os_family: string; os_version: string }>,
+    body: Partial<{
+      os_family: string;
+      os_version: string;
+      supports_cloud_init: boolean;
+    }>,
   ) =>
     request<import("./types").Image>(`/images/${id}`, {
       method: "PATCH",
@@ -280,6 +291,17 @@ export const api = {
       disk_gib: number;
       network_name?: string;
       autostart?: boolean;
+      start_after_create?: boolean;
+      template?: number;
+      template_version?: number;
+      data_disks?: number[];
+      additional_networks?: string[];
+      hardware?: import("./features/vms/HardwareFields").HardwareConfig;
+      initialization?: {
+        hostname?: string;
+        username: string;
+        ssh_public_keys: string[];
+      };
     },
     idempotencyKey: string = crypto.randomUUID(),
   ) =>

@@ -16,11 +16,7 @@ export interface Paginated<T> {
 }
 
 export type NodeStatus =
-  | "UNKNOWN"
-  | "ONLINE"
-  | "DEGRADED"
-  | "OFFLINE"
-  | "MAINTENANCE";
+  "UNKNOWN" | "ONLINE" | "DEGRADED" | "OFFLINE" | "MAINTENANCE";
 
 export interface Node {
   id: number;
@@ -48,6 +44,7 @@ export interface Node {
 }
 
 export interface Image {
+  supports_cloud_init?: boolean;
   node: number | null;
   node_name: string;
   upload_id: string | null;

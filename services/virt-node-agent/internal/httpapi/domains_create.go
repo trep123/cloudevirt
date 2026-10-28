@@ -30,29 +30,42 @@ type DomainOperator interface {
 
 // createDomainRequest 是创建域请求体。
 type createDomainRequest struct {
-	Name             string `json:"name"`
-	UUID             string `json:"uuid"`
-	VCPU             int    `json:"vcpu"`
-	MemoryMiB        int    `json:"memory_mib"`
-	DiskRelativePath string `json:"disk_relative_path"`
-	DiskGiB          int    `json:"disk_gib"`
-	Network          string `json:"network"`
-	NetworkType      string `json:"network_type"`
-	NetworkBridge    string `json:"network_bridge"`
-	VLANID           int    `json:"vlan_id"`
-	VNCPassword      string `json:"vnc_password"`
+	Initialization *storage.CloudInit `json:"initialization"`
+	Hardware       domainxml.Hardware `json:"hardware"`
+	DataDisks      []struct {
+		RelativePath string `json:"relative_path"`
+		SizeGiB      int    `json:"size_gib"`
+	} `json:"data_disks"`
+	AdditionalNetworks []domainxml.NetworkSpec `json:"additional_networks"`
+	Name               string                  `json:"name"`
+	UUID               string                  `json:"uuid"`
+	VCPU               int                     `json:"vcpu"`
+	MemoryMiB          int                     `json:"memory_mib"`
+	DiskRelativePath   string                  `json:"disk_relative_path"`
+	DiskGiB            int                     `json:"disk_gib"`
+	Network            string                  `json:"network"`
+	NetworkType        string                  `json:"network_type"`
+	NetworkBridge      string                  `json:"network_bridge"`
+	VLANID             int                     `json:"vlan_id"`
+	VNCPassword        string                  `json:"vnc_password"`
+	ImageRelativePath  string                  `json:"image_relative_path"`
+	ImageFormat        string                  `json:"image_format"`
+	ImageChecksum      string                  `json:"image_checksum"`
+	StartAfterCreate   *bool                   `json:"start_after_create"`
+	Autostart          *bool                   `json:"autostart"`
 }
 
 // createDomainResponse 是创建域结果。
 type createDomainResponse struct {
-	UUID                 string `json:"uuid"`
-	Name                 string `json:"name"`
-	State                string `json:"state"`
-	VCPU                 int    `json:"vcpu"`
-	MemoryMiB            int    `json:"memory_mib"`
-	DiskPath             string `json:"disk_path"`
-	DiskVirtualSizeBytes int64  `json:"disk_virtual_size_bytes"`
-	Created              bool   `json:"created"`
+	InitializationDelivered bool   `json:"initialization_delivered"`
+	UUID                    string `json:"uuid"`
+	Name                    string `json:"name"`
+	State                   string `json:"state"`
+	VCPU                    int    `json:"vcpu"`
+	MemoryMiB               int    `json:"memory_mib"`
+	DiskPath                string `json:"disk_path"`
+	DiskVirtualSizeBytes    int64  `json:"disk_virtual_size_bytes"`
+	Created                 bool   `json:"created"`
 }
 
 // createDomainHandler 创建并启动域；同名域已存在时按幂等返回现状。
@@ -62,7 +75,9 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 		ctx := request.Context()
 
 		var payload createDomainRequest
-		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+		decoder := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 64*1024))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&payload); err != nil {
 			writeAPIError(writer, deps.Logger, apierr.New(
 				apierr.CodeInvalidArgument, "请求体解析失败", err,
 			), requestID)
@@ -76,22 +91,77 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		spec := domainxml.Spec{
-			Name:          payload.Name,
-			UUID:          payload.UUID,
-			VCPU:          payload.VCPU,
-			MemoryMiB:     payload.MemoryMiB,
-			DiskPath:      diskPath,
-			Network:       payload.Network,
-			NetworkType:   payload.NetworkType,
-			NetworkBridge: payload.NetworkBridge,
-			VLANID:        payload.VLANID,
-			VNCPassword:   payload.VNCPassword,
+			Hardware:           payload.Hardware,
+			AdditionalNetworks: payload.AdditionalNetworks,
+			Name:               payload.Name,
+			UUID:               payload.UUID,
+			VCPU:               payload.VCPU,
+			MemoryMiB:          payload.MemoryMiB,
+			DiskPath:           diskPath,
+			Network:            payload.Network,
+			NetworkType:        payload.NetworkType,
+			NetworkBridge:      payload.NetworkBridge,
+			VLANID:             payload.VLANID,
+			VNCPassword:        payload.VNCPassword,
+		}
+		if payload.Initialization != nil {
+			if payload.ImageFormat == "ISO" {
+				writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeInvalidArgument, "ISO 安装不支持 cloud-init 注入", nil), requestID)
+				return
+			}
+			if err := storage.ValidateCloudInit(*payload.Initialization); err != nil {
+				writeAPIError(writer, deps.Logger, err, requestID)
+				return
+			}
 		}
 		if err := domainxml.ValidateSpec(spec); err != nil {
 			writeAPIError(writer, deps.Logger, err, requestID)
 			return
 		}
+		if len(payload.DataDisks) > 8 || len(payload.AdditionalNetworks) > 7 {
+			writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeInvalidArgument, "设备数量超限", nil), requestID)
+			return
+		}
+		seen := map[string]bool{diskPath: true}
+		for _, dataDisk := range payload.DataDisks {
+			path, pathErr := storage.SafePathAllowMissing(deps.DiskDir, dataDisk.RelativePath)
+			if pathErr != nil {
+				writeAPIError(writer, deps.Logger, pathErr, requestID)
+				return
+			}
+			if seen[path] || dataDisk.SizeGiB < 1 || dataDisk.SizeGiB > 2048 {
+				writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeInvalidArgument, "数据盘路径重复或容量无效", nil), requestID)
+				return
+			}
+			seen[path] = true
+			spec.AdditionalDiskPaths = append(spec.AdditionalDiskPaths, path)
+		}
+		for _, network := range payload.AdditionalNetworks {
+			if network.NetworkType == "" || network.NetworkType == "LIBVIRT_NETWORK" {
+				if deps.Networks == nil {
+					writeAPIError(writer, deps.Logger, errNoDomainLister, requestID)
+					return
+				}
+				exists, err := deps.Networks.NetworkExists(ctx, network.Network)
+				if err != nil {
+					writeAPIError(writer, deps.Logger, err, requestID)
+					return
+				}
+				if !exists {
+					writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeInvalidArgument, "附加网络不存在", nil), requestID)
+					return
+				}
+			}
+		}
 
+		if err := checkHardwareCapabilities(deps, ctx, payload); err != nil {
+			writeAPIError(writer, deps.Logger, err, requestID)
+			return
+		}
+		if _, err := domainxml.Build(spec); err != nil {
+			writeAPIError(writer, deps.Logger, err, requestID)
+			return
+		}
 		// libvirt 网络需要确认存在；网桥/OVS 由 libvirt 在定义或启动时校验
 		if payload.Network != "" && (payload.NetworkType == "" || payload.NetworkType == "LIBVIRT_NETWORK") {
 			if deps.Networks == nil {
@@ -118,6 +188,12 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 			return
 		}
 
+		unlock := lockCreation(payload.UUID)
+		defer unlock()
+		if _, err := journalMatches(deps.DiskDir, payload); err != nil {
+			writeAPIError(writer, deps.Logger, err, requestID)
+			return
+		}
 		// 幂等：已存在同名域时直接返回现状，避免重复创建
 		exists, err := deps.Virtualizer.DomainExists(ctx, payload.Name)
 		if err != nil {
@@ -129,9 +205,56 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 			return
 		}
 
-		if err := storage.CreateDisk(ctx, diskPath, payload.DiskGiB); err != nil {
+		claimPaths := append([]string{diskPath}, spec.AdditionalDiskPaths...)
+		if payload.Initialization != nil {
+			seed, err := storage.SafePathAllowMissing(deps.DiskDir, ".init-"+payload.UUID+".iso")
+			if err != nil {
+				writeAPIError(writer, deps.Logger, err, requestID)
+				return
+			}
+			claimPaths = append(claimPaths, seed)
+		}
+		resume, claimErr := claimCreation(deps.DiskDir, payload, claimPaths)
+		if claimErr != nil {
+			writeAPIError(writer, deps.Logger, claimErr, requestID)
+			return
+		}
+		var diskErr error
+		diskReady := false
+		if resume {
+			format, size, err := storage.DiskInfo(ctx, diskPath)
+			diskReady = err == nil && format == "QCOW2" && size == int64(payload.DiskGiB)*1024*1024*1024
+		}
+		if payload.ImageRelativePath != "" {
+			if payload.ImageFormat == "ISO" {
+				info, inspectErr := storage.InspectContext(ctx, deps.ImageDir, payload.ImageRelativePath)
+				if inspectErr != nil {
+					writeAPIError(writer, deps.Logger, inspectErr, requestID)
+					return
+				}
+				if info.Format != "ISO" || len(payload.ImageChecksum) != 64 || !strings.EqualFold(info.ChecksumSHA256, payload.ImageChecksum) {
+					writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeConflict, "ISO 格式或摘要不匹配", nil), requestID)
+					return
+				}
+				spec.ISOPath, diskErr = storage.SafePath(deps.ImageDir, payload.ImageRelativePath)
+				if diskErr == nil {
+					diskErr = storage.CreateDisk(ctx, diskPath, payload.DiskGiB)
+				}
+			} else if !diskReady {
+				diskErr = storage.CloneImage(ctx, deps.ImageDir, payload.ImageRelativePath, payload.ImageChecksum, payload.ImageFormat, diskPath, payload.DiskGiB)
+			}
+		} else {
+			diskErr = storage.CreateDisk(ctx, diskPath, payload.DiskGiB)
+		}
+		if err := diskErr; err != nil {
 			writeAPIError(writer, deps.Logger, err, requestID)
 			return
+		}
+		for index, dataDisk := range payload.DataDisks {
+			if err := storage.CreateDisk(ctx, spec.AdditionalDiskPaths[index], dataDisk.SizeGiB); err != nil {
+				writeAPIError(writer, deps.Logger, err, requestID)
+				return
+			}
 		}
 		format, virtualSize, err := storage.DiskInfo(ctx, diskPath)
 		if err != nil {
@@ -145,6 +268,14 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 			return
 		}
 
+		if payload.Initialization != nil {
+			seed, err := storage.CloudInitISO(ctx, deps.DiskDir, payload.UUID, payload.Name, *payload.Initialization)
+			if err != nil {
+				writeAPIError(writer, deps.Logger, err, requestID)
+				return
+			}
+			spec.SeedPath = seed
+		}
 		content, err := domainxml.Build(spec)
 		if err != nil {
 			writeAPIError(writer, deps.Logger, err, requestID)
@@ -154,9 +285,24 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 			writeAPIError(writer, deps.Logger, err, requestID)
 			return
 		}
-		if err := deps.Virtualizer.StartDomain(ctx, payload.Name); err != nil {
-			writeAPIError(writer, deps.Logger, err, requestID)
-			return
+		if payload.Autostart != nil {
+			setter, ok := deps.Virtualizer.(interface {
+				SetDomainAutostart(context.Context, string, bool) error
+			})
+			if !ok {
+				writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeOperationFailed, "此 Agent 不支持自启控制", nil), requestID)
+				return
+			}
+			if err := setter.SetDomainAutostart(ctx, payload.Name, *payload.Autostart); err != nil {
+				writeAPIError(writer, deps.Logger, err, requestID)
+				return
+			}
+		}
+		if payload.StartAfterCreate == nil || *payload.StartAfterCreate {
+			if err := deps.Virtualizer.StartDomain(ctx, payload.Name); err != nil {
+				writeAPIError(writer, deps.Logger, err, requestID)
+				return
+			}
 		}
 
 		dump, err := deps.Virtualizer.DumpXML(ctx, payload.Name)
@@ -182,14 +328,15 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		writeJSON(writer, http.StatusCreated, createDomainResponse{
-			UUID:                 actual.UUID,
-			Name:                 actual.Name,
-			State:                state,
-			VCPU:                 actual.VCPU,
-			MemoryMiB:            actual.MemoryMiB,
-			DiskPath:             diskPath,
-			DiskVirtualSizeBytes: virtualSize,
-			Created:              true,
+			InitializationDelivered: payload.Initialization != nil,
+			UUID:                    actual.UUID,
+			Name:                    actual.Name,
+			State:                   state,
+			VCPU:                    actual.VCPU,
+			MemoryMiB:               actual.MemoryMiB,
+			DiskPath:                diskPath,
+			DiskVirtualSizeBytes:    virtualSize,
+			Created:                 true,
 		})
 	}
 }
@@ -222,13 +369,14 @@ func writeExistingDomain(writer http.ResponseWriter, deps Dependencies, ctx cont
 		virtualSize = size
 	}
 	writeJSON(writer, http.StatusOK, createDomainResponse{
-		UUID:                 actual.UUID,
-		Name:                 actual.Name,
-		State:                state,
-		VCPU:                 actual.VCPU,
-		MemoryMiB:            actual.MemoryMiB,
-		DiskPath:             actual.DiskPath,
-		DiskVirtualSizeBytes: virtualSize,
-		Created:              false,
+		InitializationDelivered: payload.Initialization != nil,
+		UUID:                    actual.UUID,
+		Name:                    actual.Name,
+		State:                   state,
+		VCPU:                    actual.VCPU,
+		MemoryMiB:               actual.MemoryMiB,
+		DiskPath:                actual.DiskPath,
+		DiskVirtualSizeBytes:    virtualSize,
+		Created:                 false,
 	})
 }

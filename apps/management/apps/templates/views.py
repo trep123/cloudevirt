@@ -1,7 +1,9 @@
 """模板 API。"""
 
+from django.db.models import Q
 from rest_framework import generics
 
+from apps.accounts.roles import is_admin
 from apps.audit.models import AuditAction
 from apps.audit.services import record_audit
 from apps.templates.models import Template
@@ -15,6 +17,14 @@ class TemplateListCreateView(generics.ListCreateAPIView):
     permission_classes = [RequiresPasswordChange]
     queryset = Template.objects.filter(is_deleted=False)
     serializer_class = TemplateSerializer
+
+    def get_queryset(self):
+        query = super().get_queryset()
+        return (
+            query
+            if is_admin(self.request.user)
+            else query.filter(Q(is_public=True) | Q(created_by=self.request.user))
+        )
 
     def get_permissions(self):
         """按动作选择权限。"""

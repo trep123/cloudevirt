@@ -174,37 +174,35 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
             正常关机
           </button>
         ) : null}
-         <RowMenu>
-            {running && can("instances.reboot_instance") ? (
-              <button
-                disabled={active || busy}
-                onClick={() => setPending({ vm, action: "reboot" })}
-              >
-                重启
-              </button>
-            ) : null}
-            {running && can("instances.force_stop_instance") ? (
-              <button
-                className="danger-text"
-                disabled={active || busy}
-                onClick={() => setPending({ vm, action: "force-stop" })}
-              >
-                强制关机
-              </button>
-            ) : null}
-            {stopped && can("instances.delete_instance") ? (
-              <button
-                className="danger-text"
-                disabled={active || busy}
-                onClick={() => setPending({ vm, action: "delete" })}
-              >
-                删除（保留磁盘）
-              </button>
-            ) : null}
-            <button onClick={() => navigate(prefix + "/tasks")}>
-              查看任务
+        <RowMenu>
+          {running && can("instances.reboot_instance") ? (
+            <button
+              disabled={active || busy}
+              onClick={() => setPending({ vm, action: "reboot" })}
+            >
+              重启
             </button>
-          </RowMenu>
+          ) : null}
+          {running && can("instances.force_stop_instance") ? (
+            <button
+              className="danger-text"
+              disabled={active || busy}
+              onClick={() => setPending({ vm, action: "force-stop" })}
+            >
+              强制关机
+            </button>
+          ) : null}
+          {stopped && can("instances.delete_instance") ? (
+            <button
+              className="danger-text"
+              disabled={active || busy}
+              onClick={() => setPending({ vm, action: "delete" })}
+            >
+              删除（保留磁盘）
+            </button>
+          ) : null}
+          <button onClick={() => navigate(prefix + "/tasks")}>查看任务</button>
+        </RowMenu>
       </div>
     );
   }
@@ -218,6 +216,7 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
   if (rawId === "create")
     return can("instances.add_instance") ? (
       <VmWizard
+        isAdmin={user.console_scope === "admin"}
         onCreated={(id) => {
           setTaskId(id);
           navigate(prefix + "/vms");
@@ -243,7 +242,10 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
       {id ? (
         <>
           <PageHeader
-            back={{ label: "虚拟机列表", onClick: () => navigate(prefix + "/vms") }}
+            back={{
+              label: "虚拟机列表",
+              onClick: () => navigate(prefix + "/vms"),
+            }}
             title={detail?.name || "虚拟机详情"}
             meta={
               detail ? (
@@ -315,14 +317,28 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
                       items={[
                         ["名称", detail.name],
                         ["UUID", <span className="mono">{detail.uuid}</span>],
-                        ["Libvirt 域名", <span className="mono">{detail.libvirt_domain_name}</span>],
+                        [
+                          "Libvirt 域名",
+                          <span className="mono">
+                            {detail.libvirt_domain_name}
+                          </span>,
+                        ],
                         ["所属节点", detail.node_name],
                         ["镜像", detail.image_name],
                         ["网络", detail.network_name || "未接入"],
-                        ["期望状态", <StatusBadge status={detail.desired_state} />],
-                        ["观测状态", <StatusBadge status={detail.observed_state} />],
+                        [
+                          "期望状态",
+                          <StatusBadge status={detail.desired_state} />,
+                        ],
+                        [
+                          "观测状态",
+                          <StatusBadge status={detail.observed_state} />,
+                        ],
                         ["开机自启", detail.autostart ? "是" : "否"],
-                        ["最近观测", formatTime(detail.observed_state_updated_at)],
+                        [
+                          "最近观测",
+                          formatTime(detail.observed_state_updated_at),
+                        ],
                         ["创建时间", formatTime(detail.created_at)],
                         ["更新时间", formatTime(detail.updated_at)],
                       ]}
@@ -422,7 +438,9 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
                     </button>
                   }
                 >
-                  <Suspense fallback={<LoadingState text="正在加载远程控制台…" />}>
+                  <Suspense
+                    fallback={<LoadingState text="正在加载远程控制台…" />}
+                  >
                     <VncConsole
                       instanceId={detail.id}
                       desktopAvailable={detail.observed_state === "RUNNING"}

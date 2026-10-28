@@ -45,6 +45,7 @@ export function ImagesPage({ user }: { user: CurrentUser }) {
   const [editImage, setEditImage] = useState<Image | null>(null);
   const [editFamily, setEditFamily] = useState("");
   const [editVersion, setEditVersion] = useState("");
+  const [editCloudInit,setEditCloudInit]=useState(false);
 
   const canImport = can(user, "images.add_image");
   const canDelete = can(user, "images.delete_image");
@@ -134,6 +135,7 @@ export function ImagesPage({ user }: { user: CurrentUser }) {
     setEditImage(image);
     setEditFamily(image.os_family || "");
     setEditVersion(image.os_version || "");
+    setEditCloudInit(image.supports_cloud_init||false);
   }
 
   async function saveEdit(event: React.FormEvent) {
@@ -146,6 +148,7 @@ export function ImagesPage({ user }: { user: CurrentUser }) {
       await api.updateImage(editImage.id, {
         os_family: editFamily,
         os_version: editVersion,
+        ...(user.console_scope==='admin'?{supports_cloud_init:editCloudInit}:{}),
       });
       setNotice(`镜像 ${editImage.name} 元数据已更新`);
       setEditImage(null);
@@ -267,6 +270,7 @@ export function ImagesPage({ user }: { user: CurrentUser }) {
                 placeholder="24.04"
               />
             </label>
+            {user.console_scope==='admin'&&<label className="check"><input type="checkbox" checked={editCloudInit} onChange={e=>setEditCloudInit(e.target.checked)}/>已确认镜像支持 cloud-init</label>}
             <button className="action primary" type="submit" disabled={busy}>
               {busy ? "保存中…" : "保存"}
             </button>

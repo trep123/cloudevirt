@@ -391,9 +391,29 @@ func (c *Client) DestroyDomain(ctx context.Context, name string) error {
 	return err
 }
 
+// SetDomainAutostart configures host restart behavior separately from immediate start.
+func (c *Client) SetDomainAutostart(ctx context.Context, name string, enabled bool) error {
+	args := []string{"autostart", name}
+	if !enabled {
+		args = append(args, "--disable")
+	}
+	_, err := c.run(ctx, args...)
+	return err
+}
+
 // UndefineDomain 删除域定义。
 func (c *Client) UndefineDomain(ctx context.Context, name string) error {
 	_, err := c.run(ctx, "undefine", name)
+	return err
+}
+
+// Preserve firmware/TPM state when disks are intentionally retained.
+func (c *Client) UndefineDomainState(ctx context.Context, name string, purge bool) error {
+	args := []string{"undefine", name, "--keep-nvram", "--keep-tpm"}
+	if purge {
+		args = []string{"undefine", name, "--nvram", "--tpm"}
+	}
+	_, err := c.run(ctx, args...)
 	return err
 }
 

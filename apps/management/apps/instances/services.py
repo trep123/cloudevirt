@@ -70,13 +70,14 @@ def available_resources(node) -> dict[str, int]:
     )
     used_vcpu = 0
     used_memory = 0
-    for instance in Instance.objects.filter(node=node, is_deleted=False).exclude(
-        observed_state='SHUTOFF'
-    ):
+    allocated = Instance.objects.filter(node=node, is_deleted=False).exclude(
+        reservations__status__in=[ReservationStatus.HELD, ReservationStatus.RELEASED]
+    )
+    for instance in allocated:
         used_vcpu += instance.vcpu
         used_memory += instance.memory_mib
     used_disk = 0
-    for disk in Disk.objects.filter(instance__node=node, instance__is_deleted=False):
+    for disk in Disk.objects.filter(instance__in=allocated):
         used_disk += (disk.size_gib or 0) * GIB
 
     return {
@@ -104,12 +105,18 @@ def validate_spec(*, name: str, vcpu: int, memory_mib: int, disk_gib: int) -> No
             '实例名称格式非法',
             details={'name': ['3-64 位字母、数字或连字符，且不能以连字符开头结尾']},
         )
+    if type(memory_mib) is int and memory_mib < 128:
+        raise AppError(
+            ErrorCode.VALIDATION_ERROR,
+            '内存至少为 128 MiB',
+            details={'memory_mib': ['不能低于 128 MiB']},
+        )
     for field_name, value, maximum in (
         ('vcpu', vcpu, limit('INSTANCE_MAX_VCPU', 64)),
         ('memory_mib', memory_mib, limit('INSTANCE_MAX_MEMORY_MIB', 131072)),
         ('disk_gib', disk_gib, limit('INSTANCE_MAX_DISK_GIB', 2048)),
     ):
-        if not isinstance(value, int) or value <= 0:
+        if type(value) is not int or value <= 0:
             raise AppError(
                 ErrorCode.VALIDATION_ERROR,
                 '规格必须为正整数',
@@ -134,6 +141,13 @@ def create_instance(
     disk_gib: int,
     network_name: str = '',
     autostart: bool = False,
+    start_after_create: bool = True,
+    template: int | None = None,
+    template_version: int | None = None,
+    data_disks: list[int] | None = None,
+    additional_networks: list[str] | None = None,
+    hardware: dict | None = None,
+    initialization: dict | None = None,
     idempotency_key: str | None = None,
 ) -> tuple[Instance, object]:
     """创建实例记录、磁盘、任务与资源预留。
@@ -157,6 +171,29 @@ def create_instance(
         AppError: 参数非法、节点不可调度、镜像不可用或资源不足。
     """
     validate_spec(name=name, vcpu=vcpu, memory_mib=memory_mib, disk_gib=disk_gib)
+    data_disks = data_disks or []
+    additional_networks = additional_networks or []
+    if len(data_disks) > 8 or any(
+        type(size) is not int or not 1 <= size <= 2048 for size in data_disks
+    ):
+        raise AppError(ErrorCode.INVALID_ARGUMENT, '数据盘配置无效')
+    extra_networks = [validate_network_for_instance(name) for name in additional_networks]
+    if len(extra_networks) > 7 or any(n is None for n in extra_networks):
+        raise AppError(ErrorCode.INVALID_ARGUMENT, '附加网络无效')
+    total_disk_gib = disk_gib + sum(data_disks)
+    hardware = hardware or {}
+    from apps.instances.hardware import validate_hardware_policy
+
+    validate_hardware_policy(
+        {
+            'hardware': hardware,
+            'initialization': initialization,
+            'vcpu': vcpu,
+            'image': image,
+            'template_version': template_version,
+        },
+        user,
+    )
     from apps.accounts.administration import limit_nodes
 
     if node.pk not in limit_nodes(user, [node.pk], 'instances.add_instance'):
@@ -186,7 +223,7 @@ def create_instance(
             details={'node': [f'当前状态为 {node.status}']},
         )
 
-    disk_bytes = disk_gib * GIB
+    disk_bytes = total_disk_gib * GIB
     instance_uuid = uuid_module.uuid4()
     domain_name = domain_name_for(instance_uuid)
     disk_name = f'{instance_uuid}-system.qcow2'
@@ -208,19 +245,41 @@ def create_instance(
                 instance = Instance.objects.filter(
                     pk=previous.resource_id, created_by=user, is_deleted=False
                 ).first()
-                if instance is None or (
-                    instance.name,
-                    instance.node_id,
-                    instance.image_id,
-                    instance.vcpu,
-                    instance.memory_mib,
-                    instance.disk_gib,
-                    instance.network_name,
-                    instance.autostart,
-                ) != (name, node.pk, image.pk, vcpu, memory_mib, disk_gib, network_name, autostart):
+                if (
+                    instance is None
+                    or (
+                        instance.name,
+                        instance.node_id,
+                        instance.image_id,
+                        instance.vcpu,
+                        instance.memory_mib,
+                        instance.disk_gib,
+                        instance.network_name,
+                        instance.autostart,
+                    )
+                    != (
+                        name,
+                        node.pk,
+                        image.pk,
+                        vcpu,
+                        memory_mib,
+                        disk_gib,
+                        network_name,
+                        autostart,
+                    )
+                    or instance.creation_config.get('start_after_create', True)
+                    != start_after_create
+                    or instance.creation_config.get('template') != template
+                    or instance.creation_config.get('hardware', {}) != hardware
+                    or instance.creation_config.get('initialization') != initialization
+                    or instance.creation_config.get('template_version') != template_version
+                    or instance.creation_config.get('data_disks', []) != data_disks
+                    or instance.creation_config.get('additional_networks', [])
+                    != additional_networks
+                ):
                     raise AppError(ErrorCode.CONFLICT, '幂等键已用于其他配置，请先核对原任务')
                 return instance, previous
-        enforce_quota(quota_user, vcpu=vcpu, memory_mib=memory_mib, disk_gib=disk_gib)
+        enforce_quota(quota_user, vcpu=vcpu, memory_mib=memory_mib, disk_gib=total_disk_gib)
         if network is not None:
             network = (
                 Network.objects.select_for_update().filter(pk=network.pk, is_deleted=False).first()
@@ -263,6 +322,38 @@ def create_instance(
             memory_mib=memory_mib,
             disk_gib=disk_gib,
             autostart=autostart,
+            desired_state='RUNNING' if start_after_create else 'SHUTOFF',
+            initialization_status='PENDING' if initialization else 'NOT_CONFIGURED',
+            creation_config={
+                'schema_version': 1,
+                'hardware': hardware,
+                'initialization': initialization,
+                'data_disks': data_disks,
+                'additional_networks': additional_networks,
+                'network_specs': [
+                    {
+                        'network': n.name,
+                        'network_type': n.type,
+                        'network_bridge': n.bridge,
+                        'vlan_id': n.vlan_id or 0,
+                    }
+                    for n in extra_networks
+                ],
+                'start_after_create': start_after_create,
+                'autostart': autostart,
+                'template': template,
+                'template_version': template_version,
+                'vcpu': vcpu,
+                'memory_mib': memory_mib,
+                'disk_gib': disk_gib,
+                'network_name': network_name,
+                'image': {
+                    'id': image.pk,
+                    'relative_path': image.relative_path,
+                    'format': image.format,
+                    'checksum': image.checksum_sha256,
+                },
+            },
             vnc_password=secrets.token_hex(4),
             created_by=user,
         )
@@ -274,6 +365,17 @@ def create_instance(
             size_gib=disk_gib,
             status=DiskStatus.CREATING,
         )
+        for index, size in enumerate(data_disks, 1):
+            filename = f'{instance_uuid}-data-{index}.qcow2'
+            Disk.objects.create(
+                instance=instance,
+                role=DiskRole.DATA,
+                name=filename,
+                relative_path=filename,
+                size_gib=size,
+                target_dev='vd' + chr(ord('a') + index),
+                status=DiskStatus.CREATING,
+            )
         task = enqueue(
             task_type=TaskType.INSTANCE_CREATE,
             resource_type='instance',
@@ -281,6 +383,10 @@ def create_instance(
             requested_by=user,
             payload={
                 'instance_uuid': str(instance_uuid),
+                'creation_config': {
+                    **instance.creation_config,
+                    'template_version': template_version,
+                },
                 'domain_name': domain_name,
                 'vcpu': vcpu,
                 'memory_mib': memory_mib,

@@ -73,6 +73,8 @@ class Instance(models.Model):
     memory_mib = models.PositiveIntegerField('内存(MiB)')
     disk_gib = models.PositiveIntegerField('系统盘(GiB)')
     autostart = models.BooleanField('开机自启', default=False)
+    creation_config = models.JSONField(default=dict, blank=True)
+    initialization_status = models.CharField(max_length=20, default='NOT_CONFIGURED')
 
     desired_state = models.CharField(
         '期望状态', max_length=16, choices=DesiredState.choices, default=DesiredState.RUNNING

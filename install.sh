@@ -115,7 +115,7 @@ add-apt-repository -y universe
 apt-get update
 apt-get install -y python3 python3-venv python3-dev build-essential libpq-dev \
     postgresql postgresql-client nginx golang-go qemu-system-x86 qemu-utils \
-    libvirt-daemon-system libvirt-clients libvirt-daemon-config-network acl
+    libvirt-daemon-system libvirt-clients libvirt-daemon-config-network acl genisoimage ovmf swtpm
 [[ -x /usr/bin/qemu-system-x86_64 ]] || die "qemu-system-x86 did not provide /usr/bin/qemu-system-x86_64"
 python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3,14) else 1)' || die "Python >=3.14 is required by the pinned Django requirements"
 TMP_DIR=$(mktemp -d /var/tmp/cloudvirt-install.XXXXXX)
@@ -314,7 +314,7 @@ CLOUDVIRT_AGENT_LISTEN=127.0.0.1:9100
 CLOUDVIRT_AGENT_TOKEN=$AGENT_TOKEN
 CLOUDVIRT_IMAGE_DIR=$DATA_DIR/images
 CLOUDVIRT_DISK_DIR=$DATA_DIR/disks
-CLOUDVIRT_MAX_REQUEST_SECONDS=120
+CLOUDVIRT_MAX_REQUEST_SECONDS=600
 CLOUDVIRT_ALLOW_DESTRUCTIVE=$ALLOW_DESTRUCTIVE
 CLOUDVIRT_DHCP_LEASE_FILE=/var/lib/misc/dnsmasq.ovs.leases
 ENV

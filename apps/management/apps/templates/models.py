@@ -38,3 +38,21 @@ class Template(models.Model):
     def __str__(self) -> str:
         """返回可读标识。"""
         return f'{self.name} ({self.vcpu}C{self.memory_mib}M{self.disk_gib}G)'
+
+
+class TemplateVersion(models.Model):
+    template = models.ForeignKey(Template, on_delete=models.PROTECT, related_name='versions')
+    version = models.PositiveIntegerField()
+    configuration = models.JSONField(default=dict)
+    constraints = models.JSONField(default=dict)
+    published = models.BooleanField(default=False)
+    image_checksum = models.CharField(max_length=64, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['template', 'version'], name='unique_template_version')
+        ]
+
+    def __str__(self):
+        return f'{self.template_id}@{self.version}'

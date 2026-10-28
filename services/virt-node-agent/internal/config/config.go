@@ -17,7 +17,7 @@ const (
 	defaultImageDir          = "/var/lib/cloudvirt/images"
 	defaultDiskDir           = "/var/lib/cloudvirt/disks"
 	defaultDHCPLeaseFile     = "/var/lib/misc/dnsmasq.ovs.leases"
-	defaultMaxRequestSeconds = 120
+	defaultMaxRequestSeconds = 600
 
 	// MinTokenLength 是 Agent 共享令牌的最小长度，过短视为配置错误。
 	MinTokenLength = 32
