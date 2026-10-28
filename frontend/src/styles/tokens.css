@@ -56,6 +56,13 @@
   --sidebar-text-muted: #6f7f99;
   --sidebar-border: #1f2e48;
 
+  /* Auth / login brand panel */
+  --auth-brand-from: #0b1640;
+  --auth-brand-via: #1a2f86;
+  --auth-brand-to: #3a2fa8;
+  --auth-brand-text: #eef2ff;
+  --auth-brand-text-muted: #c3cdf2;
+
   /* Legacy aliases */
   --primary: var(--brand-600);
   --primary-hover: var(--brand-700);

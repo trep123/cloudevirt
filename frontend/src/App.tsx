@@ -71,6 +71,7 @@ export default function App() {
     return (
       <div className="login-screen">
         <div className="login" role="status">
+          <span className="auth-spinner auth-spinner-muted" aria-hidden="true" />
           正在连接 CloudVirt…
         </div>
       </div>
