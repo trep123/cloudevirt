@@ -241,6 +241,11 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
               返回列表
             </button>
             {detail ? actions(detail) : null}
+            {detail ? (
+              <button className="action" onClick={() => setConsoleOpen(true)}>
+                桌面与视频
+              </button>
+            ) : null}
           </PageHeader>
           {detail && !loading ? (
             <>
@@ -350,7 +355,7 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
                   </div>
                 )}
               </Card>
-              {consoleOpen && detail.observed_state === "RUNNING" ? (
+              {consoleOpen ? (
                 <Card title="远程控制台">
                   <button
                     className="action"
@@ -359,7 +364,10 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
                     关闭控制台
                   </button>
                   <Suspense fallback={<p role="status">正在加载远程控制台…</p>}>
-                    <VncConsole instanceId={detail.id} />
+                    <VncConsole
+                      instanceId={detail.id}
+                      desktopAvailable={detail.observed_state === "RUNNING"}
+                    />
                   </Suspense>
                 </Card>
               ) : null}

@@ -1,258 +1,237 @@
 import { useEffect, useRef, useState } from "react";
+import {
+  DesktopEngine,
+  type DesktopState,
+  type DesktopMetrics,
+} from "../features/console/DesktopEngine";
+import { MediaPanel } from "../features/console/MediaPanel";
+import { ErrorBanner } from "./ui";
 
-import RFB from "@novnc/novnc";
-
-import { api } from "../api";
-import { describeError } from "./ui";
-
-type Status = "connecting" | "connected" | "disconnected" | "error";
-
-const STATUS_LABEL: Record<Status, string> = {
-  connecting: "连接中…",
-  connected: "已连接",
-  disconnected: "连接已断开",
-  error: "连接失败",
+const labels: Record<DesktopState, string> = {
+  idle: "未连接",
+  authorizing: "正在授权",
+  connecting: "协议连接中",
+  connected: "握手完成，等待画面",
+  rendering: "已显示画面",
+  reconnecting: "正在重连",
+  paused: "已暂停",
+  failed: "连接失败",
+  closed: "已关闭",
 };
-
-/** 复制文本；非 HTTPS 环境回退到 execCommand。 */
-async function copyText(text: string): Promise<boolean> {
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch {
-    // 回退到 execCommand
-  }
-  const area = document.createElement("textarea");
-  area.value = text;
-  area.style.position = "fixed";
-  area.style.opacity = "0";
-  document.body.appendChild(area);
-  area.select();
-  const ok = document.execCommand("copy");
-  document.body.removeChild(area);
-  return ok;
-}
-
-export function VncConsole({ instanceId }: { instanceId: number }) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const clientRef = useRef<RFB | null>(null);
-  const [status, setStatus] = useState<Status>("connecting");
-  const [captured, setCaptured] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [guestClipboard, setGuestClipboard] = useState("");
-  const [pasteText, setPasteText] = useState("");
-  const [attempt, setAttempt] = useState(0);
-
+export function VncConsole({
+  instanceId,
+  desktopAvailable = true,
+}: {
+  instanceId: number;
+  desktopAvailable?: boolean;
+}) {
+  const target = useRef<HTMLDivElement>(null),
+    engine = useRef<DesktopEngine | null>(null);
+  const [state, setState] = useState<DesktopState>("idle"),
+    [message, setMessage] = useState<string | null>(null);
+  const [metrics, setMetrics] = useState<DesktopMetrics | null>(null),
+    [clipboard, setClipboard] = useState(""),
+    [paste, setPaste] = useState("");
+  const [captured, setCaptured] = useState(false),
+    [profile, setProfile] = useState("balanced"),
+    [scale, setScale] = useState(true),
+    [viewOnly, setViewOnly] = useState(false);
+  const [layout, setLayout] = useState("split");
   useEffect(() => {
-    let cancelled = false;
-    let client: RFB | null = null;
-    let cleanupListeners: (() => void) | null = null;
-    const container = containerRef.current;
-
-    setStatus("connecting");
-    setCaptured(false);
-    setMessage(null);
-    setNotice(null);
-
-    api.instanceConsole(instanceId)
-      .then((info) => {
-        if (cancelled || !container) return;
-        const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-        const url = `${protocol}://${window.location.host}${info.path}`;
-        client = new RFB(container, url, {
-          credentials: { password: info.password },
-          shared: true,
-        });
-        clientRef.current = client;
-        client.scaleViewport = true;
-        client.viewOnly = false;
-        client.background = "#000";
-
-        client.addEventListener("connect", () => {
-          setStatus("connected");
-          setMessage(null);
-          setNotice("点击画面捕获键盘鼠标，按 Ctrl+Alt 释放");
-        });
-        client.addEventListener("disconnect", () => {
-          setStatus("disconnected");
-          setCaptured(false);
-        });
-        client.addEventListener("securityfailure", () => {
-          setStatus("error");
-          setMessage("VNC 认证失败，请重新打开控制台。");
-        });
-        client.addEventListener("clipboard", (event) => {
-          const text = (event as CustomEvent<{ text: string }>).detail?.text ?? "";
-          if (!text) return;
-          setGuestClipboard(text);
-          void copyText(text);
-          setNotice("已接收虚拟机剪贴板内容");
-        });
-
-        const focusConsole = () => {
-          if (!client) return;
-          client.focus({ preventScroll: true });
-          setCaptured(true);
-          setNotice("键盘鼠标已捕获，按 Ctrl+Alt 释放");
-        };
-
-        const releaseConsole = () => {
-          if (!client) return;
-          client.blur();
-          setCaptured(false);
-          setNotice("已释放键盘鼠标，点击画面可重新捕获");
-        };
-
-        const handlePaste = (event: ClipboardEvent) => {
-          if (!client || !container.contains(document.activeElement)) return;
-          const text = event.clipboardData?.getData("text/plain") ?? "";
-          if (!text) return;
-          event.preventDefault();
-          client.clipboardPasteFrom(text);
-          setNotice("已将剪贴板内容发送到虚拟机");
-        };
-
-        const handleShortcut = (event: KeyboardEvent) => {
-          if (!container.contains(document.activeElement)) return;
-          if (event.ctrlKey && event.altKey && !event.repeat) {
-            event.preventDefault();
-            event.stopPropagation();
-            releaseConsole();
-          }
-        };
-
-        const handleFocusOut = () => {
-          window.setTimeout(() => {
-            if (!container.contains(document.activeElement)) {
-              setCaptured(false);
-            }
-          }, 0);
-        };
-
-        container.addEventListener("mousedown", focusConsole);
-        container.addEventListener("paste", handlePaste);
-        container.addEventListener("focusout", handleFocusOut);
-        window.addEventListener("keydown", handleShortcut, true);
-
-        cleanupListeners = () => {
-          container.removeEventListener("mousedown", focusConsole);
-          container.removeEventListener("paste", handlePaste);
-          container.removeEventListener("focusout", handleFocusOut);
-          window.removeEventListener("keydown", handleShortcut, true);
-        };
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setStatus("error");
-        setMessage(describeError(err));
-      });
-
-    return () => {
-      cancelled = true;
-      cleanupListeners?.();
-      if (client) {
-        client.disconnect();
-      }
-      clientRef.current = null;
-      if (container) {
-        container.innerHTML = "";
+    if (!target.current || !desktopAvailable) return;
+    const current = new DesktopEngine(
+      target.current,
+      instanceId,
+      (value, detail) => {
+        setState(value);
+        setMessage(detail || null);
+        if (!["rendering", "connected"].includes(value)) setCaptured(false);
+      },
+      setMetrics,
+      setClipboard,
+    );
+    engine.current = current;
+    current.start();
+    const container = target.current;
+    const focus = () => {
+      current.focus();
+      setCaptured(true);
+    };
+    const shortcut = (event: KeyboardEvent) => {
+      if (
+        container.contains(document.activeElement) &&
+        event.ctrlKey &&
+        event.altKey
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        current.blur();
+        setCaptured(false);
       }
     };
-  }, [instanceId, attempt]);
-
-  function sendClipboard() {
-    const client = clientRef.current;
-    if (!client || !pasteText) return;
-    client.clipboardPasteFrom(pasteText);
-    setNotice("已将文本发送到虚拟机");
-  }
-
-  async function readLocalClipboard() {
-    try {
-      const text = await navigator.clipboard.readText();
-      setPasteText(text);
-      setNotice("已读取本机剪贴板");
-    } catch {
-      setNotice("浏览器未授权读取剪贴板，请手动粘贴到文本框中");
-    }
-  }
-
-  async function copyGuestClipboard() {
-    if (await copyText(guestClipboard)) {
-      setNotice("已复制到本机剪贴板");
-    } else {
-      setNotice("复制失败，请手动选择文本复制");
-    }
-  }
-
-  function captureMouseKeyboard() {
-    const client = clientRef.current;
-    if (!client) return;
-    client.focus({ preventScroll: true });
-    setCaptured(true);
-    setNotice("键盘鼠标已捕获，按 Ctrl+Alt 释放");
-  }
-
-  function releaseMouseKeyboard() {
-    const client = clientRef.current;
-    if (!client) return;
-    client.blur();
-    setCaptured(false);
-    setNotice("已释放键盘鼠标，点击画面可重新捕获");
-  }
-
-  function sendCtrlAltDel() {
-    const client = clientRef.current;
-    if (!client) return;
-    client.sendCtrlAltDel();
-    setNotice("已发送 Ctrl+Alt+Del");
-  }
-
+    const blur = () => setCaptured(false);
+    container.addEventListener("mousedown", focus);
+    window.addEventListener("keydown", shortcut, true);
+    window.addEventListener("blur", blur);
+    return () => {
+      container.removeEventListener("mousedown", focus);
+      window.removeEventListener("keydown", shortcut, true);
+      window.removeEventListener("blur", blur);
+      current.dispose();
+      engine.current = null;
+    };
+  }, [instanceId, desktopAvailable]);
+  useEffect(() => {
+    const values =
+      profile === "bandwidth" ? [3, 6] : profile === "text" ? [9, 2] : [6, 2];
+    engine.current?.configure({
+      quality: values[0],
+      compression: values[1],
+      scale,
+      viewOnly,
+    });
+  }, [profile, scale, viewOnly, desktopAvailable]);
+  const value = (number: number | null | undefined, suffix: string) =>
+    number == null ? "—" : number.toFixed(1) + suffix;
   return (
-    <div className="vnc-panel">
-      <div className="vnc-toolbar">
-        <span className={`vnc-status vnc-${status}`}>{STATUS_LABEL[status]}</span>
-        <span className={`vnc-capture ${captured ? "on" : "off"}`}>
-          {captured ? "键鼠已捕获" : "键鼠未捕获"}
-        </span>
-        <div className="vnc-actions">
-          <button className="action" type="button" onClick={captureMouseKeyboard}>捕获键鼠</button>
-          <button className="action" type="button" onClick={releaseMouseKeyboard}>Ctrl+Alt 释放</button>
-          <button className="action" type="button" onClick={sendCtrlAltDel}>Ctrl+Alt+Del</button>
-          <button className="action" type="button" onClick={() => setAttempt((value) => value + 1)}>重新连接</button>
-        </div>
+    <div className={"console-workspace layout-" + layout}>
+      <div className="vnc-toolbar workspace-toolbar">
+        <strong>桌面与视频工作区</strong>
+        <label>
+          布局{" "}
+          <select value={layout} onChange={(e) => setLayout(e.target.value)}>
+            <option value="split">左右分屏</option>
+            <option value="stack">上下排列</option>
+          </select>
+        </label>
       </div>
-      {notice ? <div className="banner banner-info">{notice}</div> : null}
-      <div className="vnc-screen" ref={containerRef} tabIndex={0} />
-      {message ? <div className="banner banner-error">{message}</div> : null}
-      <div className="vnc-clipboard">
-        <div className="vnc-clipboard-title">剪贴板</div>
-        <textarea
-          value={pasteText}
-          onChange={(event) => setPasteText(event.target.value)}
-          placeholder="在本机复制后粘贴到这里，再发送到虚拟机"
-          rows={2}
-        />
-        <div className="vnc-actions">
-          <button className="action primary" type="button" disabled={!pasteText} onClick={sendClipboard}>
-            发送到虚拟机
-          </button>
-          <button className="action" type="button" onClick={() => void readLocalClipboard()}>
-            读取本机剪贴板
-          </button>
-        </div>
-        {guestClipboard ? (
-          <div className="vnc-clipboard-guest">
-            <span>虚拟机剪贴板：</span>
-            <code>{guestClipboard}</code>
-            <button className="action" type="button" onClick={() => void copyGuestClipboard()}>复制</button>
-            <button className="action" type="button" onClick={() => setPasteText(guestClipboard)}>填入输入框</button>
+      <div className="console-panes">
+        <section className="vnc-panel" aria-label="远程桌面">
+          <div className="vnc-toolbar">
+            <span role="status">
+              {desktopAvailable ? labels[state] : "虚拟机未运行，桌面不可连接"}
+            </span>
+            <span>{captured ? "键鼠已捕获" : "键鼠未捕获"}</span>
+            <button
+              className="action"
+              disabled={!desktopAvailable}
+              onClick={() => engine.current?.start()}
+            >
+              重新授权连接
+            </button>
+            <button
+              className="action"
+              onClick={() => {
+                engine.current?.stop();
+                setCaptured(false);
+              }}
+            >
+              断开桌面
+            </button>
+            <button
+              className="action"
+              onClick={() => {
+                engine.current?.blur();
+                setCaptured(false);
+              }}
+            >
+              Ctrl+Alt 释放
+            </button>
+            <button
+              className="action"
+              disabled={!["connected", "rendering"].includes(state)}
+              onClick={() => engine.current?.ctrlAltDel()}
+            >
+              Ctrl+Alt+Del
+            </button>
+            <button
+              className="action"
+              onClick={() =>
+                void target.current
+                  ?.requestFullscreen()
+                  .catch(() => setMessage("浏览器拒绝全屏请求"))
+              }
+            >
+              桌面全屏
+            </button>
           </div>
-        ) : null}
-        <p className="muted">捕获键鼠后，Ctrl+V 会直接粘贴到虚拟机；Ctrl+Alt 释放回本机。</p>
+          <div className="vnc-toolbar">
+            <label>
+              画质{" "}
+              <select
+                value={profile}
+                onChange={(e) => setProfile(e.target.value)}
+              >
+                <option value="balanced">平衡</option>
+                <option value="bandwidth">低带宽</option>
+                <option value="text">文字清晰</option>
+              </select>
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={scale}
+                onChange={(e) => setScale(e.target.checked)}
+              />
+              适应窗口
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={viewOnly}
+                onChange={(e) => setViewOnly(e.target.checked)}
+              />
+              本地只读模式
+            </label>
+          </div>
+          <ErrorBanner message={message} />
+          <div ref={target} className="vnc-screen" tabIndex={0} />
+          <div className="console-metrics">
+            <span>握手 {value(metrics?.handshakeMs, " ms")}</span>
+            <span>首次 Canvas 绘制 {value(metrics?.firstDrawMs, " ms")}</span>
+            <span>画面更新 {value(metrics?.updatesPerSecond, "/s")}</span>
+            <span>平均绘制调用 {value(metrics?.drawMs, " ms")}</span>
+          </div>
+          <p className="muted">
+            点击桌面捕获键鼠，Ctrl+Alt 释放。后台 30
+            秒后暂停桌面。更新次数不是视频 FPS，绘制耗时不是端到端延迟。
+          </p>
+          <details>
+            <summary>剪贴板（仅手动发送 / 复制）</summary>
+            <textarea
+              aria-label="发送到虚拟机的文本"
+              maxLength={65536}
+              value={paste}
+              onChange={(e) => setPaste(e.target.value)}
+              rows={2}
+            />
+            <button
+              className="action"
+              disabled={!paste || viewOnly}
+              onClick={() => engine.current?.paste(paste)}
+            >
+              发送文本
+            </button>
+            <textarea
+              aria-label="虚拟机剪贴板"
+              value={clipboard}
+              readOnly
+              rows={2}
+            />
+            <button
+              className="action"
+              disabled={!clipboard}
+              onClick={() =>
+                void navigator.clipboard
+                  ?.writeText(clipboard)
+                  .catch(() => setMessage("复制失败，请手动选择文本"))
+              }
+            >
+              复制到本机
+            </button>
+          </details>
+        </section>
+        <MediaPanel instanceId={instanceId} />
       </div>
     </div>
   );

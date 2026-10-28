@@ -303,7 +303,7 @@ export const api = {
       path: string;
       password: string;
       expires_at: number;
-    }>(`/instances/${id}/console`),
+    }>(`/console/instances/${id}/sessions`, { method: "POST" }),
   instanceAction: (id: number, action: string) =>
     request<{ task: import("./types").TaskReference | null }>(
       `/instances/${id}/${action}`,

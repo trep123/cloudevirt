@@ -1,11 +1,5 @@
 """实例 API：列表、创建（异步）、详情。"""
 
-import hashlib
-import hmac
-import time
-from urllib.parse import quote
-
-from django.conf import settings
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -211,27 +205,14 @@ class InstanceConsoleView(APIView):
         instance = instances_for(request.user).filter(pk=pk).first()
         if instance is None:
             raise AppError(ErrorCode.NOT_FOUND)
-        if not instance.vnc_password:
-            raise AppError(ErrorCode.CONFLICT, '实例未启用图形控制台')
-        secret = getattr(settings, 'AGENT_SHARED_TOKEN', '')
-        if not secret:
-            raise AppError(ErrorCode.OPERATION_FAILED, '未配置 Agent 共享令牌')
-
-        expires_at = int(time.time()) + 300
-        message = f'{instance.libvirt_domain_name}|{expires_at}'
-        signature = hmac.new(
-            secret.encode('utf-8'), message.encode('utf-8'), hashlib.sha256
-        ).hexdigest()
         return Response(
             {
-                'type': 'vnc',
-                'path': (
-                    f'/vnc?domain={quote(instance.libvirt_domain_name)}'
-                    f'&exp={expires_at}&sig={signature}'
-                ),
-                'password': instance.vnc_password,
-                'expires_at': expires_at,
-            }
+                'error': {
+                    'code': 'CONFLICT',
+                    'message': '控制台接口已升级，请刷新页面并使用会话授权接口',
+                }
+            },
+            status=410,
         )
 
 

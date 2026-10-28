@@ -72,6 +72,16 @@ class LogoutView(APIView):
             target_type='user',
             target_id=str(request.user.pk),
         )
+        from apps.console.models import ConsoleSession, MediaSession
+        from apps.console.services import login_hash
+
+        identity = login_hash(request)
+        ConsoleSession.objects.filter(user=request.user, login_hash=identity, revoked=False).update(
+            expires_at=timezone.now()
+        )
+        MediaSession.objects.filter(user=request.user, login_hash=identity, closed=False).update(
+            expires_at=timezone.now()
+        )
         logout(request)
         return Response({'ok': True})
 

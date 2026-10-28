@@ -2,41 +2,22 @@ package httpapi
 
 import (
 	"bufio"
-	"crypto/hmac"
 	"crypto/sha1"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
-	"strconv"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/tl2004/cloude-virt/services/virt-node-agent/internal/apierr"
-	"github.com/tl2004/cloude-virt/services/virt-node-agent/internal/domainxml"
 )
 
 const websocketGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
-
-// validConsoleSignature 校验管理后端签发的短期控制台凭证。
-func validConsoleSignature(secret, domain string, expiresAt int64, signature string) bool {
-	if secret == "" || domain == "" || signature == "" {
-		return false
-	}
-	now := time.Now().Unix()
-	if expiresAt < now-30 || expiresAt > now+900 {
-		return false
-	}
-	mac := hmac.New(sha256.New, []byte(secret))
-	fmt.Fprintf(mac, "%s|%d", domain, expiresAt)
-	expected := hex.EncodeToString(mac.Sum(nil))
-	return hmac.Equal([]byte(expected), []byte(signature))
-}
 
 // websocketAccept 计算 Sec-WebSocket-Accept。
 func websocketAccept(key string) string {
@@ -48,17 +29,15 @@ func websocketAccept(key string) string {
 func vncProxyHandler(deps Dependencies) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		requestID := RequestIDFromContext(request.Context())
-		query := request.URL.Query()
-		domain := query.Get("domain")
-		signature := query.Get("sig")
-		expiresAt, err := strconv.ParseInt(query.Get("exp"), 10, 64)
-		if !domainxml.ValidName(domain) || err != nil {
+		ticket, valid := parseConsoleTicket(deps.Token, request.Header.Get("X-Console-Ticket"))
+		origin, originError := url.Parse(request.Header.Get("Origin"))
+		if !valid || originError != nil || origin.Host != request.Host || (origin.Scheme != "http" && origin.Scheme != "https") || request.URL.RawQuery != "" {
 			writeAPIError(writer, deps.Logger, apierr.New(
 				apierr.CodeUnauthorized, "控制台凭证无效", nil,
 			), requestID)
 			return
 		}
-		if !validConsoleSignature(deps.Token, domain, expiresAt, signature) {
+		if !consumeConsoleTicket(ticket) {
 			writeAPIError(writer, deps.Logger, apierr.New(
 				apierr.CodeUnauthorized, "控制台凭证无效或已过期", nil,
 			), requestID)
@@ -70,10 +49,16 @@ func vncProxyHandler(deps Dependencies) http.HandlerFunc {
 			), requestID)
 			return
 		}
+		key, keyError := base64.StdEncoding.DecodeString(request.Header.Get("Sec-WebSocket-Key"))
+		if request.Header.Get("Sec-WebSocket-Version") != "13" || keyError != nil || len(key) != 16 {
+			writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeInvalidArgument, "WebSocket 握手无效", nil), requestID)
+			return
+		}
 		if deps.Virtualizer == nil {
 			writeAPIError(writer, deps.Logger, errNoVirtualizer, requestID)
 			return
 		}
+		domain := ticket.Domain
 		port, err := deps.Virtualizer.DomainVNCPort(request.Context(), domain)
 		if err != nil {
 			writeAPIError(writer, deps.Logger, err, requestID)
@@ -104,6 +89,10 @@ func vncProxyHandler(deps Dependencies) http.HandlerFunc {
 		}
 		defer connection.Close()
 		_ = connection.SetDeadline(time.Time{})
+		if !trackConsole(ticket.SID, connection, target) {
+			return
+		}
+		defer untrackConsole(ticket.SID)
 
 		accept := websocketAccept(request.Header.Get("Sec-WebSocket-Key"))
 		if _, err := fmt.Fprintf(
@@ -141,7 +130,7 @@ func proxyWebSocketToVNC(reader *bufio.Reader, target net.Conn, connection net.C
 			continue
 		case 0x0:
 			if messageOpcode == 0 {
-				continue
+				return
 			}
 			fragments = append(fragments, payload...)
 			if len(fragments) > 4<<20 {
@@ -152,7 +141,10 @@ func proxyWebSocketToVNC(reader *bufio.Reader, target net.Conn, connection net.C
 				fragments = nil
 				messageOpcode = 0
 			}
-		case 0x1, 0x2:
+		case 0x2:
+			if messageOpcode != 0 {
+				return
+			}
 			if final {
 				_, _ = target.Write(payload)
 				continue
@@ -187,6 +179,9 @@ func readClientFrame(reader *bufio.Reader) (byte, bool, []byte, error) {
 	}
 	final := header[0]&0x80 != 0
 	opcode := header[0] & 0x0F
+	if header[0]&0x70 != 0 || (opcode != 0 && opcode != 2 && opcode != 8 && opcode != 9 && opcode != 10) {
+		return 0, false, nil, fmt.Errorf("不支持的 WebSocket 帧")
+	}
 	masked := header[1]&0x80 != 0
 	length := int64(header[1] & 0x7F)
 	switch length {
@@ -209,6 +204,9 @@ func readClientFrame(reader *bufio.Reader) (byte, bool, []byte, error) {
 	}
 	if !masked {
 		return 0, false, nil, fmt.Errorf("客户端帧必须带掩码")
+	}
+	if opcode >= 8 && (!final || length > 125) {
+		return 0, false, nil, fmt.Errorf("控制帧无效")
 	}
 	mask := make([]byte, 4)
 	if _, err := io.ReadFull(reader, mask); err != nil {

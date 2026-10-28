@@ -15,6 +15,7 @@ DOMAIN="${CLOUDVIRT_DOMAIN:-}"
 PORT="${CLOUDVIRT_PORT:-443}"
 HTTPS=true
 ENABLE_OVS=false
+ENABLE_MEDIA=false
 ALLOW_DESTRUCTIVE=false
 TMP_DIR=""
 STEP=preflight
@@ -29,6 +30,7 @@ CloudVirt / Ubuntu 26.x amd64
   --port PORT           HTTPS listen port; default 443.
   --http                Use HTTP instead of self-signed HTTPS (default port 80).
   --enable-ovs          Configure a dedicated OVS bridge, DHCP and NAT.
+  --enable-media        Install a loopback-only MediaMTX gateway and LAN ICE listener.
   --allow-destructive   Allow Agent force-stop and deletion operations.
   --help                Show this help without changing the system.
 
@@ -64,6 +66,7 @@ while (($#)); do
             shift 2;;
         --http) HTTPS=false; [[ "$PORT" != 443 ]] || PORT=80; shift;;
         --enable-ovs) ENABLE_OVS=true; shift;;
+        --enable-media) ENABLE_MEDIA=true; shift;;
         --allow-destructive) ALLOW_DESTRUCTIVE=true; shift;;
         --help|-h) usage; exit 0;;
         *) die "Unknown option: $1";;
@@ -137,8 +140,8 @@ if [[ -e "$APP_DIR/apps/management/manage.py" && "$SOURCE_DIR" != "$APP_DIR" ]];
 fi
 if [[ -f "$CONFIG_DIR/install-secrets.env" ]]; then
     log "Stopping application jobs while deploying (running guests are not stopped)"
-    systemctl stop cloudvirt-collect_node_status.timer cloudvirt-reconcile.timer 2>/dev/null || true
-    systemctl stop cloudvirt-collect_node_status.service cloudvirt-reconcile.service 2>/dev/null || true
+    systemctl stop cloudvirt-collect_node_status.timer cloudvirt-reconcile.timer cloudvirt-cleanup_console_sessions.timer 2>/dev/null || true
+    systemctl stop cloudvirt-collect_node_status.service cloudvirt-reconcile.service cloudvirt-cleanup_console_sessions.service 2>/dev/null || true
     systemctl stop cloudvirt-worker cloudvirt-management cloudvirt-agent 2>/dev/null || true
 fi
 install -d -m 0755 "$APP_DIR" "$WEB_ROOT"
@@ -376,7 +379,7 @@ UMask=0007
 ReadWritePaths=
 ReadWritePaths=$DATA_DIR /var/log/cloudvirt
 ENV
-for job in collect_node_status reconcile; do
+for job in collect_node_status reconcile cleanup_console_sessions; do
     interval=30
     [[ "$job" != reconcile ]] || interval=60
     cat > "/etc/systemd/system/cloudvirt-$job.service" <<ENV
@@ -411,6 +414,18 @@ systemctl enable cloudvirt-management cloudvirt-agent cloudvirt-worker
 systemctl restart cloudvirt-agent cloudvirt-management cloudvirt-worker
 
 STEP=nginx
+install -d -m 0755 /etc/nginx/snippets
+CLOUDVIRT_CONSOLE_GATEWAY_KEY=$(manage console_gateway_key)
+export CLOUDVIRT_CONSOLE_GATEWAY_KEY
+"$APP_DIR/.venv/bin/python" - "$APP_DIR/deploy/nginx/console-gateway.conf" <<'PY'
+import os
+import sys
+from pathlib import Path
+target = Path('/etc/nginx/snippets/cloudvirt-console.conf')
+target.write_text(Path(sys.argv[1]).read_text().replace('__CONSOLE_GATEWAY_KEY__', os.environ['CLOUDVIRT_CONSOLE_GATEWAY_KEY']))
+target.chmod(0o640)
+PY
+unset CLOUDVIRT_CONSOLE_GATEWAY_KEY
 TLS_LINES=""
 if [[ "$HTTPS" == true ]]; then
     install -d -m 0700 "$CONFIG_DIR/tls"
@@ -453,15 +468,7 @@ server {
         proxy_send_timeout 180s;
         proxy_read_timeout 180s;
     }
-    location = /vnc {
-        proxy_pass http://127.0.0.1:9100;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_read_timeout 3600s;
-        proxy_buffering off;
-        access_log off;
-    }
+    include /etc/nginx/snippets/cloudvirt-console.conf;
 }
 NGINX
 ln -sfn /etc/nginx/sites-available/cloudvirt /etc/nginx/sites-enabled/cloudvirt
@@ -473,6 +480,9 @@ if command -v ufw >/dev/null && ufw status | grep -q '^Status: active'; then
 fi
 
 STEP=health
+if [[ "$ENABLE_MEDIA" == true ]]; then
+    bash "$APP_DIR/scripts/install_media.sh" --host "${CLOUDVIRT_MEDIA_HOST:-$DOMAIN}"
+fi
 wait_url() {
     local url=$1 attempts=0
     shift
@@ -523,7 +533,7 @@ if [[ "$ENABLE_OVS" == true ]]; then
     # Optional network provisioning is isolated in an audited helper.
     bash "$APP_DIR/scripts/install_ovs.sh" "$APP_DIR"
 fi
-systemctl enable --now cloudvirt-collect_node_status.timer cloudvirt-reconcile.timer
+systemctl enable --now cloudvirt-collect_node_status.timer cloudvirt-reconcile.timer cloudvirt-cleanup_console_sessions.timer
 for service in cloudvirt-agent cloudvirt-management cloudvirt-worker nginx postgresql; do
     systemctl is-active --quiet "$service" || die "Service is not active: $service"
 done

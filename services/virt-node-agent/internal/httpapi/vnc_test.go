@@ -3,12 +3,7 @@ package httpapi
 import (
 	"bufio"
 	"bytes"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
-	"fmt"
 	"testing"
-	"time"
 )
 
 // TestWebSocketAccept 校验 RFC 6455 握手示例。
@@ -17,26 +12,6 @@ func TestWebSocketAccept(t *testing.T) {
 	want := "s3pPLMBiTxaQ9kYGzzhZRbK+xOo="
 	if got != want {
 		t.Fatalf("accept 错误: got=%s want=%s", got, want)
-	}
-}
-
-// TestConsoleSignature 校验签名与过期时间。
-func TestConsoleSignature(t *testing.T) {
-	secret := "shared-secret"
-	domain := "cv-test"
-	expiresAt := time.Now().Add(60 * time.Second).Unix()
-	mac := hmac.New(sha256.New, []byte(secret))
-	fmt.Fprintf(mac, "%s|%d", domain, expiresAt)
-	signature := hex.EncodeToString(mac.Sum(nil))
-
-	if !validConsoleSignature(secret, domain, expiresAt, signature) {
-		t.Fatal("有效签名被拒绝")
-	}
-	if validConsoleSignature(secret, domain, expiresAt, "bad") {
-		t.Fatal("错误签名被接受")
-	}
-	if validConsoleSignature(secret, domain, time.Now().Add(-120*time.Second).Unix(), signature) {
-		t.Fatal("过期签名被接受")
 	}
 }
 
@@ -58,5 +33,21 @@ func TestReadClientFrame(t *testing.T) {
 	}
 	if opcode != 0x2 || !final || string(decoded) != "hello" {
 		t.Fatalf("帧内容错误: opcode=%d final=%v payload=%q", opcode, final, decoded)
+	}
+}
+
+func TestReadClientFrameRejectsInvalidControlAndUnmaskedData(t *testing.T) {
+	for name, raw := range map[string][]byte{
+		"unmasked":           {0x82, 0},
+		"reserved-bit":       {0xc2, 0x80, 0, 0, 0, 0},
+		"text":               {0x81, 0x80, 0, 0, 0, 0},
+		"fragmented-control": {0x09, 0x80, 0, 0, 0, 0},
+		"oversized-control":  {0x89, 0xfe, 0, 126, 0, 0, 0, 0},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, _, _, err := readClientFrame(bufio.NewReader(bytes.NewReader(raw))); err == nil {
+				t.Fatal("invalid frame accepted")
+			}
+		})
 	}
 }

@@ -573,3 +573,49 @@ dialog::backdrop {
   align-items: center;
   padding: 8px 0;
 }
+:root {
+  --console-pane-min-height: 320px;
+}
+.console-workspace {
+  min-width: 0;
+}
+.console-panes {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+.console-workspace.layout-stack .console-panes {
+  grid-template-columns: minmax(0, 1fr);
+}
+.console-panes > section {
+  min-width: 0;
+  border: 1px solid var(--border);
+  padding: 8px;
+  border-radius: var(--radius-md);
+}
+.console-panes .vnc-screen {
+  min-height: var(--console-pane-min-height);
+  height: 480px;
+}
+.media-panel video {
+  width: 100%;
+  height: 480px;
+  background: #000;
+  object-fit: contain;
+}
+.console-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 8px 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.workspace-toolbar {
+  margin-bottom: 16px;
+}
+@media (max-width: 1400px) {
+  .console-panes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

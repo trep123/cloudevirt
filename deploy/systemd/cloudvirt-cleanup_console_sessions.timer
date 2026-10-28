@@ -1,0 +1,10 @@
+[Unit]
+Description=CloudVirt session cleanup schedule
+
+[Timer]
+OnBootSec=45s
+OnUnitInactiveSec=30s
+Unit=cloudvirt-cleanup_console_sessions.service
+
+[Install]
+WantedBy=timers.target

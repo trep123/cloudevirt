@@ -126,12 +126,12 @@ class Task(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=['resource_type', 'resource_id'],
-                condition=models.Q(status__in=list(ACTIVE_STATUSES)),
+                condition=models.Q(status__in=sorted(ACTIVE_STATUSES)),
                 name='uniq_active_task_per_resource',
             ),
             models.UniqueConstraint(
                 fields=['idempotency_key'],
-                condition=models.Q(status__in=list(ACTIVE_STATUSES))
+                condition=models.Q(status__in=sorted(ACTIVE_STATUSES))
                 & ~models.Q(idempotency_key=''),
                 name='uniq_active_idempotency_key',
             ),

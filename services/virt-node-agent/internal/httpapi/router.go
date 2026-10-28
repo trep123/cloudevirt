@@ -60,6 +60,8 @@ func NewRouter(deps Dependencies) http.Handler {
 	})
 
 	api := http.NewServeMux()
+	api.HandleFunc("POST /api/v1/console-sessions/{id}/lease", consoleLeaseHandler(deps))
+	api.HandleFunc("DELETE /api/v1/console-sessions/{id}", consoleLeaseHandler(deps))
 	api.HandleFunc("GET /api/v1/images/uploads/{id}", imageUploadHandler(deps))
 	api.HandleFunc("PUT /api/v1/images/uploads/{id}", imageUploadHandler(deps))
 	api.HandleFunc("POST /api/v1/images/uploads/{id}/complete", imageUploadHandler(deps))

@@ -13,6 +13,9 @@ declare module "@novnc/novnc" {
     resizeSession: boolean;
     viewOnly: boolean;
     background: string;
+    qualityLevel: number;
+    compressionLevel: number;
+    sendCredentials(credentials: { password: string }): void;
     focus(options?: FocusOptions): void;
     blur(): void;
     disconnect(): void;

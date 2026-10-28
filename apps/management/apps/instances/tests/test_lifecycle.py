@@ -216,8 +216,14 @@ class LifecycleApiTests(TestCase):
         self.assertEqual(response.status_code, 409)
 
     def test_general_user_can_start(self) -> None:
-        """一般用户可以启动实例。"""
+        """一般用户可以启动自己的实例，不能操作他人实例。"""
         self.client.login(username='life-viewer', password='Str0ngPassw0rd')
+        foreign = self.client.post(f'/api/v1/instances/{self.instance.pk}/start')
+        self.assertEqual(foreign.status_code, 404)
+        from django.contrib.auth import get_user_model
+
+        self.instance.created_by = get_user_model().objects.get(username='life-viewer')
+        self.instance.save(update_fields=['created_by'])
 
         response = self.client.post(f'/api/v1/instances/{self.instance.pk}/start')
 
@@ -295,40 +301,24 @@ class LifecycleApiTests(TestCase):
         self.assertEqual(body[0]['mac'], '52:54:00:aa:bb:cc')
         interfaces.assert_called_once_with(self.instance.libvirt_domain_name)
 
-    @override_settings(AGENT_SHARED_TOKEN='shared-secret')
-    def test_instance_console_returns_signed_path(self) -> None:
-        """控制台接口返回带签名的 WebSocket 路径与口令。"""
-        import hashlib
-        import hmac
-        from urllib.parse import parse_qs, urlparse
-
+    @override_settings(AGENT_SHARED_TOKEN='shared-secret', CONSOLE_REQUIRE_TLS=False)
+    def test_instance_console_returns_opaque_session_path(self) -> None:
+        self.instance.observed_state = 'RUNNING'
+        self.instance.save(update_fields=['observed_state'])
         self.client.login(username='api-life', password='Str0ngPassw0rd')
-
-        response = self.client.get(f'/api/v1/instances/{self.instance.pk}/console')
-
-        self.assertEqual(response.status_code, 200)
+        response = self.client.post(f'/api/v1/console/instances/{self.instance.pk}/sessions')
+        self.assertEqual(response.status_code, 201)
         body = response.json()
         self.assertEqual(body['type'], 'vnc')
         self.assertEqual(body['password'], self.instance.vnc_password)
-        parsed = urlparse(body['path'])
-        params = parse_qs(parsed.query)
-        self.assertEqual(params['domain'][0], self.instance.libvirt_domain_name)
-        expected = hmac.new(
-            b'shared-secret',
-            f'{self.instance.libvirt_domain_name}|{params["exp"][0]}'.encode(),
-            hashlib.sha256,
-        ).hexdigest()
-        self.assertEqual(params['sig'][0], expected)
+        self.assertTrue(body['path'].startswith('/console-ws/'))
+        self.assertNotIn('sig=', body['path'])
 
-    def test_instance_console_requires_vnc_password(self) -> None:
-        """未启用 VNC 的实例不能获取控制台。"""
-        self.instance.vnc_password = ''
-        self.instance.save(update_fields=['vnc_password'])
+    def test_old_console_endpoint_does_not_issue_credentials(self) -> None:
         self.client.login(username='api-life', password='Str0ngPassw0rd')
-
         response = self.client.get(f'/api/v1/instances/{self.instance.pk}/console')
-
-        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.status_code, 410)
+        self.assertNotIn('password', response.json())
 
     def test_operator_can_delete_without_purge(self) -> None:
         """Operator 可删除实例但保留磁盘。"""

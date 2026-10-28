@@ -10,6 +10,7 @@
 | 文档 | 作用 | 主要读者 |
 | --- | --- | --- |
 | README.md（本文件） | 文档导航、术语、维护约定 | 全体 |
+| [console-media-workspace.md](./console-media-workspace.md) | 桌面与独立视频工作区、短期会话、多节点路由、媒体接入与真实联调记录 | 开发、运维、验收人员 |
 | [IMPLEMENTATION_TASKBOOK.md](./IMPLEMENTATION_TASKBOOK.md) | **主执行文档**：基线审计结论 + 模块 A~P 逐模块任务卡 | 开发 Agent、开发/测试人员 |
 | [ROADMAP.md](./ROADMAP.md) | 阶段 0~6 开发路线、里程碑、关键路径、门禁、风险登记 | 项目负责人、开发团队 |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | 架构边界、目录结构、数据模型、状态机、API/错误码契约、ADR | 后端、Agent、前端开发 |
