@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { api } from "../api";
 import { Card, Empty, ErrorBanner, StatusBadge, describeError, formatTime } from "../components/ui";
+import { PageHeader } from "../components/ConsoleUI";
 import { can } from "../permissions";
 import type { CurrentUser, Overview, ReconciliationRun } from "../types";
 
@@ -59,14 +60,16 @@ export function MonitoringPage({ user }: { user: CurrentUser }) {
 
   return (
     <>
-      <div className="page-head">
-        <h2>监控与对账</h2>
+      <PageHeader
+        title="监控与对账"
+        description="资源状态汇总、活跃告警与数据库 / 节点实际状态对账记录"
+      >
         {canReconcile ? (
-          <button className="action" disabled={busy} onClick={() => void reconcile()}>
+          <button className="action primary" disabled={busy} onClick={() => void reconcile()}>
             {busy ? "对账中…" : "立即对账"}
           </button>
         ) : null}
-      </div>
+      </PageHeader>
       <ErrorBanner message={error} />
       {notice ? <div className="banner banner-info">{notice}</div> : null}
       <Card title="概览">

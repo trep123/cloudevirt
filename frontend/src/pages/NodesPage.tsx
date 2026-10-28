@@ -3,14 +3,22 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import { navigate } from "../app/router";
 import {
+  Avatar,
   Card,
-  Empty,
+  EmptyState,
   ErrorBanner,
+  Field,
+  LoadingState,
+  Meter,
   StatusBadge,
+  Tag,
   describeError,
   formatBytes,
-  formatTime,
+  formatRelative,
+  formatTimeFixed,
 } from "../components/ui";
+import { PageHeader, ResourceStatCard } from "../components/ConsoleUI";
+import { Icon } from "../components/icons";
 import { can } from "../permissions";
 import type { CurrentUser, Node, NodeAccess, User } from "../types";
 
@@ -196,255 +204,383 @@ export function NodesPage({ user }: { user: CurrentUser }) {
     }
   }
 
+  const [showRegister, setShowRegister] = useState(false);
+  const counts = {
+    online: nodes.filter((n) => n.status === "ONLINE").length,
+    degraded: nodes.filter((n) => n.status === "DEGRADED").length,
+    offline: nodes.filter((n) => n.status === "OFFLINE" || n.status === "UNKNOWN").length,
+    maintenance: nodes.filter((n) => n.status === "MAINTENANCE").length,
+  };
+  const memPct = (n: Node) =>
+    n.memory_total_mib && n.memory_available_mib != null
+      ? Math.round(((n.memory_total_mib - n.memory_available_mib) / n.memory_total_mib) * 100)
+      : null;
+  const diskPct = (n: Node) =>
+    n.storage_total_bytes && n.storage_free_bytes != null
+      ? Math.round(((n.storage_total_bytes - n.storage_free_bytes) / n.storage_total_bytes) * 100)
+      : null;
+  const gb = (mib: number | null) => (mib == null ? "—" : `${Math.round(mib / 1024)} GB`);
+
   return (
     <>
-      <div className="page-head">
-        <h2>节点</h2>
+      <PageHeader
+        title="物理节点"
+        description="登记 KVM 宿主机 Agent，查看资源采样、调度状态与访问授权"
+      >
         <button className="action" onClick={() => void reload()}>
+          <Icon name="refresh" size={15} />
           刷新列表
         </button>
-      </div>
+        {canRegister ? (
+          <button
+            className="action primary"
+            onClick={() => setShowRegister(!showRegister)}
+            aria-expanded={showRegister}
+          >
+            <Icon name={showRegister ? "close" : "plus"} size={15} />
+            {showRegister ? "收起" : "注册节点"}
+          </button>
+        ) : null}
+      </PageHeader>
       <ErrorBanner message={error} />
       {notice ? <div className="banner banner-info">{notice}</div> : null}
-      {canRegister ? (
-        <Card title="注册节点">
+      <div className="resource-stats">
+        <ResourceStatCard
+          label="节点总数"
+          icon="server"
+          value={nodes.length}
+          note={`${nodes.filter((n) => n.is_schedulable).length} 个可调度`}
+        />
+        <ResourceStatCard
+          label="在线"
+          icon="check"
+          tone="ok"
+          value={counts.online}
+          note="心跳正常的节点"
+        />
+        <ResourceStatCard
+          label="降级 / 维护"
+          icon="alert"
+          tone="warn"
+          value={counts.degraded + counts.maintenance}
+          note={`${counts.degraded} 降级 · ${counts.maintenance} 维护中`}
+        />
+        <ResourceStatCard
+          label="离线 / 未知"
+          icon="power"
+          tone={counts.offline ? "bad" : "brand"}
+          value={counts.offline}
+          note="超过离线阈值未上报"
+        />
+      </div>
+      {canRegister && showRegister ? (
+        <Card
+          title="注册节点"
+          description="在宿主机部署 cv-agent 后，填写 Agent 访问地址完成登记"
+        >
           <form
-            className="inline"
             onSubmit={(e) => {
               e.preventDefault();
               void createNode(e);
             }}
           >
-            <label>
-              名称
-              <input
-                value={createName}
-                onChange={(e) => setCreateName(e.target.value)}
-                placeholder="node-01"
-                required
-              />
-            </label>
-            <label>
-              Agent 地址
-              <input
-                value={createEndpoint}
-                onChange={(e) => setCreateEndpoint(e.target.value)}
-                placeholder="http://10.0.0.11:9100"
-                required
-              />
-            </label>
-            <button className="action primary" type="submit" disabled={busy}>
-              {busy ? "提交中…" : "注册"}
-            </button>
+            <div className="form-grid">
+              <Field label="名称" hint="建议使用主机名，如 kvm-node-01">
+                <input
+                  value={createName}
+                  onChange={(e) => setCreateName(e.target.value)}
+                  placeholder="node-01"
+                  required
+                />
+              </Field>
+              <Field label="Agent 地址" hint="管理服务可访问的 HTTP 地址">
+                <input
+                  value={createEndpoint}
+                  onChange={(e) => setCreateEndpoint(e.target.value)}
+                  placeholder="http://10.0.0.11:9100"
+                  required
+                />
+              </Field>
+            </div>
+            <div className="form-actions">
+              <button
+                className="action"
+                type="button"
+                onClick={() => setShowRegister(false)}
+              >
+                取消
+              </button>
+              <button className="action primary" type="submit" disabled={busy}>
+                {busy ? "提交中…" : "注册"}
+              </button>
+            </div>
           </form>
         </Card>
       ) : null}
       {editing && editForm ? (
-        <Card title={`编辑节点：${editing.name}`}>
+        <Card
+          title={`编辑节点：${editing.name}`}
+          description="修改连接信息、调度状态与采集参数"
+        >
           <form
-            className="inline"
             onSubmit={(e) => {
               e.preventDefault();
               void saveEdit(e);
             }}
           >
-            <label>
-              名称
-              <input
-                value={editForm.name}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, name: e.target.value })
-                }
-                required
-              />
-            </label>
-            <label>
-              Agent 地址
-              <input
-                value={editForm.endpoint}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, endpoint: e.target.value })
-                }
-                required
-              />
-            </label>
-            <label>
-              状态
-              <select
-                value={editForm.status}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, status: e.target.value })
-                }
+            <div className="form-grid">
+              <Field label="名称">
+                <input
+                  value={editForm.name}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, name: e.target.value })
+                  }
+                  required
+                />
+              </Field>
+              <Field label="Agent 地址">
+                <input
+                  value={editForm.endpoint}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, endpoint: e.target.value })
+                  }
+                  required
+                />
+              </Field>
+              <Field label="状态">
+                <select
+                  value={editForm.status}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, status: e.target.value })
+                  }
+                >
+                  {NODE_STATUSES.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="采集周期(秒)" hint="5–3600">
+                <input
+                  type="number"
+                  min={5}
+                  max={3600}
+                  value={editForm.heartbeat_interval_seconds}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      heartbeat_interval_seconds: Number(e.target.value),
+                    })
+                  }
+                />
+              </Field>
+              <Field label="离线阈值(秒)" hint="10–7200">
+                <input
+                  type="number"
+                  min={10}
+                  max={7200}
+                  value={editForm.offline_after_seconds}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      offline_after_seconds: Number(e.target.value),
+                    })
+                  }
+                />
+              </Field>
+              <Field label="维护说明">
+                <input
+                  value={editForm.maintenance_note}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, maintenance_note: e.target.value })
+                  }
+                  placeholder="可选"
+                />
+              </Field>
+            </div>
+            <div className="form-actions">
+              <button
+                className="action"
+                type="button"
+                onClick={() => {
+                  setEditing(null);
+                  setEditForm(null);
+                }}
               >
-                {NODE_STATUSES.map((status) => (
-                  <option key={status} value={status}>
-                    {status}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              采集周期(秒)
-              <input
-                type="number"
-                min={5}
-                max={3600}
-                value={editForm.heartbeat_interval_seconds}
-                onChange={(e) =>
-                  setEditForm({
-                    ...editForm,
-                    heartbeat_interval_seconds: Number(e.target.value),
-                  })
-                }
-              />
-            </label>
-            <label>
-              离线阈值(秒)
-              <input
-                type="number"
-                min={10}
-                max={7200}
-                value={editForm.offline_after_seconds}
-                onChange={(e) =>
-                  setEditForm({
-                    ...editForm,
-                    offline_after_seconds: Number(e.target.value),
-                  })
-                }
-              />
-            </label>
-            <label>
-              维护说明
-              <input
-                value={editForm.maintenance_note}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, maintenance_note: e.target.value })
-                }
-                placeholder="可选"
-              />
-            </label>
-            <button className="action primary" type="submit" disabled={busy}>
-              {busy ? "保存中…" : "保存"}
-            </button>
-            <button
-              className="action"
-              type="button"
-              onClick={() => {
-                setEditing(null);
-                setEditForm(null);
-              }}
-            >
-              取消
-            </button>
+                取消
+              </button>
+              <button className="action primary" type="submit" disabled={busy}>
+                {busy ? "保存中…" : "保存"}
+              </button>
+            </div>
           </form>
         </Card>
       ) : null}
-      <Card title={`共 ${nodes.length} 个节点`}>
-        {loading ? (
-          <Empty text="加载中…" />
+      <Card flush title="节点列表" description={`共 ${nodes.length} 个节点`}>
+        {loading && !nodes.length ? (
+          <LoadingState text="加载中…" />
         ) : nodes.length === 0 ? (
-          <Empty text="尚未注册节点，请先部署 Agent 并登记地址。" />
+          <EmptyState
+            icon="server"
+            title="尚未注册节点"
+            description="请先在宿主机部署 Agent 并登记地址。"
+          />
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>名称</th>
-                <th>状态</th>
-                <th>CPU</th>
-                <th>内存</th>
-                <th>存储可用</th>
-                <th>采样时间</th>
-                <th>Agent</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {nodes.map((node) => (
-                <tr key={node.id}>
-                  <td>
-                    <button
-                      className="text-link"
-                      onClick={() => navigate("/admin/nodes/" + node.id)}
-                    >
-                      {node.name}
-                    </button>
-                    <div className="mono muted">{node.endpoint}</div>
-                    {node.maintenance_note ? (
-                      <div className="muted">维护：{node.maintenance_note}</div>
-                    ) : null}
-                  </td>
-                  <td>
-                    <StatusBadge status={node.status} />
-                    {node.resource_is_stale ? (
-                      <div className="muted">数据已过期</div>
-                    ) : null}
-                  </td>
-                  <td>{node.cpu_total ?? "-"}</td>
-                  <td>
-                    {node.memory_available_mib ?? "-"} /{" "}
-                    {node.memory_total_mib ?? "-"} MiB
-                  </td>
-                  <td>{formatBytes(node.storage_free_bytes)}</td>
-                  <td>{formatTime(node.resource_sampled_at)}</td>
-                  <td>
-                    {node.agent_version || "-"}
-                    {node.last_error_message ? (
-                      <div className="muted">{node.last_error_code}</div>
-                    ) : null}
-                  </td>
-                  <td className="actions">
-                    {canRefresh ? (
-                      <button
-                        className="action"
-                        onClick={() => void refresh(node)}
-                      >
-                        刷新资源
-                      </button>
-                    ) : null}
-                    {canRegister ? (
-                      <button
-                        className="action"
-                        onClick={() => startEdit(node)}
-                      >
-                        编辑
-                      </button>
-                    ) : null}
-                    <button
-                      className="action"
-                      onClick={() => void loadAccess(node)}
-                    >
-                      授权
-                    </button>
-                    {canRegister ? (
-                      <button
-                        className="action danger"
-                        onClick={() => void removeNode(node)}
-                      >
-                        注销
-                      </button>
-                    ) : null}
-                  </td>
+          <div className="table-scroll">
+            <table className="data-table node-table">
+              <thead>
+                <tr>
+                  <th>名称</th>
+                  <th>状态</th>
+                  <th className="num">CPU</th>
+                  <th>内存使用</th>
+                  <th>存储使用</th>
+                  <th>采样时间</th>
+                  <th>Agent</th>
+                  <th className="col-actions">操作</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {nodes.map((node) => {
+                  const mp = memPct(node),
+                    dp = diskPct(node);
+                  return (
+                    <tr key={node.id}>
+                      <td>
+                        <div className="cell-stack">
+                          <button
+                            className="text-link"
+                            onClick={() => navigate("/admin/nodes/" + node.id)}
+                          >
+                            {node.name}
+                          </button>
+                          <small className="mono muted">{node.endpoint}</small>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="cell-stack">
+                          <span>
+                            <StatusBadge status={node.status} />
+                          </span>
+                          {node.resource_is_stale ? (
+                            <small className="stale-label">数据已过期</small>
+                          ) : node.maintenance_note ? (
+                            <small className="muted truncate" title={node.maintenance_note}>
+                              {node.maintenance_note}
+                            </small>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="num spec-text">
+                        {node.cpu_total ?? "—"} 核
+                      </td>
+                      <td>
+                        <div className="usage-cell">
+                          <Meter value={mp} />
+                          <small>
+                            {mp == null ? "—" : `${mp}%`} ·{" "}
+                            {gb(node.memory_available_mib)} 可用 / {gb(node.memory_total_mib)}
+                          </small>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="usage-cell">
+                          <Meter value={dp} />
+                          <small>
+                            {dp == null ? "—" : `${dp}%`} ·{" "}
+                            {formatBytes(node.storage_free_bytes)} 可用
+                          </small>
+                        </div>
+                      </td>
+                      <td>
+                        <span
+                          className="time-text"
+                          title={formatTimeFixed(node.resource_sampled_at)}
+                        >
+                          {formatRelative(node.resource_sampled_at) || "—"}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="cell-stack">
+                          <span className="mono">{node.agent_version || "—"}</span>
+                          {node.last_error_message ? (
+                            <small className="danger-text" title={node.last_error_message}>
+                              {node.last_error_code}
+                            </small>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="col-actions">
+                        <div className="row-actions">
+                          {canRefresh ? (
+                            <button
+                              className="action sm"
+                              title="刷新资源"
+                              onClick={() => void refresh(node)}
+                            >
+                              <Icon name="refresh" size={14} />
+                              刷新
+                            </button>
+                          ) : null}
+                          {canRegister ? (
+                            <button
+                              className="action sm"
+                              onClick={() => startEdit(node)}
+                            >
+                              编辑
+                            </button>
+                          ) : null}
+                          <details className="row-menu">
+                            <summary>
+                              更多 <Icon name="chevronDown" size={13} />
+                            </summary>
+                            <div>
+                              <button onClick={() => navigate("/admin/nodes/" + node.id)}>
+                                查看详情
+                              </button>
+                              <button onClick={() => void loadAccess(node)}>
+                                访问授权
+                              </button>
+                              {canRegister ? (
+                                <button
+                                  className="danger-text"
+                                  onClick={() => void removeNode(node)}
+                                >
+                                  注销节点
+                                </button>
+                              ) : null}
+                            </div>
+                          </details>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
       {accessNode ? (
-        <Card title={`节点授权：${accessNode.name}`}>
-          <p className="muted">
-            无授权记录时全部放行；存在记录后非管理员只能访问被授权节点。
-          </p>
+        <Card
+          title={`节点授权：${accessNode.name}`}
+          description="无授权记录时全部放行；存在记录后非管理员只能访问被授权节点。"
+          extra={
+            <button className="action sm" onClick={() => setAccessNode(null)}>
+              关闭
+            </button>
+          }
+        >
           {canGrant ? (
             <form
-              className="inline"
+              className="access-form"
               onSubmit={(e) => {
                 e.preventDefault();
                 void grantAccess();
               }}
             >
-              <label>
-                用户
+              <Field label="用户">
                 <select
                   value={accessUser}
                   onChange={(e) => setAccessUser(e.target.value)}
@@ -458,9 +594,8 @@ export function NodesPage({ user }: { user: CurrentUser }) {
                     </option>
                   ))}
                 </select>
-              </label>
-              <label>
-                权限
+              </Field>
+              <Field label="权限">
                 <select
                   value={accessPermission}
                   onChange={(e) => setAccessPermission(e.target.value)}
@@ -468,45 +603,47 @@ export function NodesPage({ user }: { user: CurrentUser }) {
                   <option value="OPERATE">操作</option>
                   <option value="VIEW">查看</option>
                 </select>
-              </label>
+              </Field>
               <button className="action primary" type="submit">
                 授权
               </button>
-              <button
-                className="action"
-                type="button"
-                onClick={() => setAccessNode(null)}
-              >
-                关闭
-              </button>
             </form>
-          ) : (
-            <button className="action" onClick={() => setAccessNode(null)}>
-              关闭
-            </button>
-          )}
+          ) : null}
           {accessRules.length === 0 ? (
-            <Empty text="无授权记录（默认全部放行）" />
+            <EmptyState
+              icon="key"
+              title="无授权记录"
+              description="默认全部放行"
+            />
           ) : (
-            <table>
+            <table className="data-table">
               <thead>
                 <tr>
                   <th>用户/组</th>
                   <th>权限</th>
                   <th>创建时间</th>
-                  <th>操作</th>
+                  <th className="col-actions">操作</th>
                 </tr>
               </thead>
               <tbody>
                 {accessRules.map((rule) => (
                   <tr key={rule.id}>
-                    <td>{rule.username || rule.group_name || "-"}</td>
-                    <td className="mono">{rule.permission}</td>
-                    <td>{formatTime(rule.created_at)}</td>
                     <td>
+                      <span className="actor">
+                        <Avatar name={rule.username || rule.group_name || "-"} />
+                        {rule.username || rule.group_name || "-"}
+                      </span>
+                    </td>
+                    <td>
+                      <Tag tone={rule.permission === "OPERATE" ? "brand" : "neutral"}>
+                        {rule.permission === "OPERATE" ? "操作" : rule.permission === "VIEW" ? "查看" : rule.permission}
+                      </Tag>
+                    </td>
+                    <td className="mono time-text">{formatTimeFixed(rule.created_at)}</td>
+                    <td className="col-actions">
                       {canGrant ? (
                         <button
-                          className="action danger"
+                          className="action sm danger"
                           onClick={() => void revokeAccess(rule)}
                         >
                           撤销

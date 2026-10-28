@@ -8,11 +8,21 @@ import {
 } from "../../components/ConsoleUI";
 import {
   Card,
-  StatusBadge,
+  DescList,
+  EmptyState,
   ErrorBanner,
+  LoadingState,
+  Pagination,
+  SearchInput,
+  Segmented,
+  StatusBadge,
+  Tabs,
+  Toolbar,
   describeError,
   formatTime,
+  formatTimeFixed,
 } from "../../components/ui";
+import { Icon } from "../../components/icons";
 const VncConsole = lazy(() =>
   import("../../components/VncConsole").then((module) => ({
     default: module.VncConsole,
@@ -133,9 +143,9 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
       running = vm.observed_state === "RUNNING",
       stopped = vm.observed_state === "SHUTOFF";
     return (
-      <div className="actions">
+      <div className="row-actions">
         <button
-          className="action"
+          className="action sm"
           disabled={!running || active}
           title={!running ? "运行后可打开控制台" : ""}
           onClick={() => {
@@ -147,7 +157,7 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
         </button>
         {stopped && can("instances.start_instance") ? (
           <button
-            className="action"
+            className="action sm"
             disabled={active || busy}
             onClick={() => setPending({ vm, action: "start" })}
           >
@@ -156,7 +166,7 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
         ) : null}
         {running && can("instances.shutdown_instance") ? (
           <button
-            className="action"
+            className="action sm"
             disabled={active || busy}
             onClick={() => setPending({ vm, action: "shutdown" })}
           >
@@ -164,7 +174,9 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
           </button>
         ) : null}
         <details className="row-menu">
-          <summary>更多 ▾</summary>
+          <summary>
+            更多 <Icon name="chevronDown" size={13} />
+          </summary>
           <div>
             {running && can("instances.reboot_instance") ? (
               <button
@@ -221,40 +233,71 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
         <p>没有创建虚拟机权限。</p>
       </Card>
     );
+  const memGb = (mib: number) =>
+    mib % 1024 === 0 ? `${mib / 1024} GB` : `${(mib / 1024).toFixed(1)} GB`;
+  const STATUS_FILTERS = [
+    { value: "", label: "全部" },
+    { value: "RUNNING", label: "运行中" },
+    { value: "SHUTOFF", label: "已关闭" },
+    { value: "PAUSED", label: "已暂停" },
+    { value: "CRASHED", label: "异常" },
+  ];
   return (
     <>
-      <ErrorBanner message={error} />
       {id ? (
         <>
           <PageHeader
+            back={{ label: "虚拟机列表", onClick: () => navigate(prefix + "/vms") }}
             title={detail?.name || "虚拟机详情"}
+            meta={
+              detail ? (
+                <StatusBadge
+                  status={
+                    ACTIVE.includes(detail.operation_status)
+                      ? detail.operation_status
+                      : detail.observed_state
+                  }
+                />
+              ) : null
+            }
             description={
-              detail
-                ? `UUID：${detail.uuid} · 所属节点：${detail.node_name}`
-                : "正在读取资源"
+              detail ? (
+                <>
+                  <span className="mono">{detail.uuid}</span> · 所属节点{" "}
+                  {detail.node_name}
+                </>
+              ) : (
+                "正在读取资源"
+              )
             }
           >
-            <button
-              className="action"
-              onClick={() => navigate(prefix + "/vms")}
-            >
-              返回列表
-            </button>
-            {detail ? actions(detail) : null}
             {detail ? (
               <button className="action" onClick={() => setConsoleOpen(true)}>
+                <Icon name="console" size={15} />
                 桌面与视频
               </button>
             ) : null}
+            {detail ? actions(detail) : null}
           </PageHeader>
+          <ErrorBanner message={error} />
           {detail && !loading ? (
             <>
-              <div className="detail-summary">
-                <StatusBadge status={detail.observed_state} />
-                <span>QEMU / KVM</span>
-                <span>{detail.vcpu} vCPU</span>
-                <span>{detail.memory_mib / 1024} GB 内存</span>
-                <span>{detail.disk_gib} GB 磁盘</span>
+              <div className="summary-strip">
+                {[
+                  ["cpu", "vCPU", `${detail.vcpu} 核`],
+                  ["memory", "内存", memGb(detail.memory_mib)],
+                  ["disk", "系统盘", `${detail.disk_gib} GB`],
+                  ["server", "节点", detail.node_name],
+                  ["image", "镜像", detail.image_name],
+                ].map(([icon, label, value]) => (
+                  <div className="summary-item" key={label}>
+                    <Icon name={icon} size={18} />
+                    <div>
+                      <span>{label}</span>
+                      <strong title={value}>{value}</strong>
+                    </div>
+                  </div>
+                ))}
               </div>
               {detail.observed_state_is_stale ? (
                 <div className="banner banner-info">
@@ -262,108 +305,128 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
                   {formatTime(detail.observed_state_updated_at)}
                 </div>
               ) : null}
-              <nav className="detail-tabs" aria-label="虚拟机详情">
-                {TABS.filter((t) => admin || t !== "权限").map((t) => (
-                  <button
-                    key={t}
-                    className={t === tab ? "active" : ""}
-                    onClick={() => setTab(t)}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </nav>
-              <Card title={tab}>
+              <Tabs
+                label="虚拟机详情"
+                tabs={TABS.filter((t) => admin || t !== "权限")}
+                value={tab}
+                onChange={setTab}
+              />
+              <Card title={tab} flush={tab === "磁盘"}>
                 {tab === "概览" ? (
                   <>
-                    <dl className="info-grid">
-                      <dt>名称</dt>
-                      <dd>{detail.name}</dd>
-                      <dt>节点</dt>
-                      <dd>{detail.node_name}</dd>
-                      <dt>镜像</dt>
-                      <dd>{detail.image_name}</dd>
-                      <dt>网络</dt>
-                      <dd>{detail.network_name || "未接入"}</dd>
-                      <dt>期望状态</dt>
-                      <dd>{detail.desired_state}</dd>
-                      <dt>最近观测</dt>
-                      <dd>{formatTime(detail.observed_state_updated_at)}</dd>
-                      <dt>创建时间</dt>
-                      <dd>{formatTime(detail.created_at)}</dd>
-                    </dl>
+                    <DescList
+                      columns={3}
+                      items={[
+                        ["名称", detail.name],
+                        ["UUID", <span className="mono">{detail.uuid}</span>],
+                        ["Libvirt 域名", <span className="mono">{detail.libvirt_domain_name}</span>],
+                        ["所属节点", detail.node_name],
+                        ["镜像", detail.image_name],
+                        ["网络", detail.network_name || "未接入"],
+                        ["期望状态", <StatusBadge status={detail.desired_state} />],
+                        ["观测状态", <StatusBadge status={detail.observed_state} />],
+                        ["开机自启", detail.autostart ? "是" : "否"],
+                        ["最近观测", formatTime(detail.observed_state_updated_at)],
+                        ["创建时间", formatTime(detail.created_at)],
+                        ["更新时间", formatTime(detail.updated_at)],
+                      ]}
+                    />
                     {detail.last_error_message ? (
-                      <p role="alert">
+                      <p role="alert" className="inline-alert">
+                        <Icon name="alert" size={15} />
                         {detail.last_error_code}：{detail.last_error_message}
                       </p>
                     ) : null}
                   </>
                 ) : tab === "硬件" ? (
-                  <dl className="info-grid">
-                    <dt>处理器</dt>
-                    <dd>{detail.vcpu} 核</dd>
-                    <dt>内存</dt>
-                    <dd>{detail.memory_mib / 1024} GB</dd>
-                    <dt>系统盘</dt>
-                    <dd>{detail.disk_gib} GB · qcow2</dd>
-                    <dt>硬件编辑</dt>
-                    <dd>当前后端尚未提供硬件变更 API</dd>
-                  </dl>
+                  <DescList
+                    columns={2}
+                    items={[
+                      ["处理器", `${detail.vcpu} 核`],
+                      ["内存", memGb(detail.memory_mib)],
+                      ["系统盘", `${detail.disk_gib} GB · qcow2`],
+                      ["硬件编辑", "当前后端尚未提供硬件变更 API"],
+                    ]}
+                  />
                 ) : tab === "磁盘" ? (
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>名称</th>
-                        <th>容量</th>
-                        <th>状态</th>
-                        <th>设备</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {detail.disks.map((d) => (
-                        <tr key={d.id}>
-                          <td>{d.name}</td>
-                          <td>{d.size_gib} GB</td>
-                          <td>
-                            <StatusBadge status={d.status} />
-                          </td>
-                          <td>{d.target_dev}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  detail.disks.length ? (
+                    <div className="table-scroll">
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            <th>名称</th>
+                            <th>角色</th>
+                            <th className="num">容量</th>
+                            <th>状态</th>
+                            <th>设备</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {detail.disks.map((d) => (
+                            <tr key={d.id}>
+                              <td className="strong">{d.name}</td>
+                              <td className="muted">{d.role}</td>
+                              <td className="num">{d.size_gib} GB</td>
+                              <td>
+                                <StatusBadge status={d.status} />
+                              </td>
+                              <td className="mono">{d.target_dev}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <EmptyState title="暂无磁盘" icon="disk" />
+                  )
                 ) : tab === "网络" ? (
-                  <p>
-                    已登记网络：{detail.network_name || "未接入"}
-                    。实际网卡连接可在网络拓扑中查看。
-                  </p>
+                  <DescList
+                    columns={2}
+                    items={[
+                      ["已登记网络", detail.network_name || "未接入"],
+                      ["说明", "实际网卡连接可在网络拓扑中查看。"],
+                    ]}
+                  />
                 ) : tab === "快照" ? (
                   <SnapshotsPage
                     admin={user.console_scope === "admin"}
                     instance={detail}
                   />
                 ) : tab === "任务日志" ? (
-                  <button
-                    className="action"
-                    onClick={() => navigate(prefix + "/tasks")}
-                  >
-                    打开授权任务中心
-                  </button>
+                  <EmptyState
+                    icon="task"
+                    title="任务日志在任务中心统一查看"
+                    description="包含该虚拟机的创建、启停、删除等异步任务及事件。"
+                    action={
+                      <button
+                        className="action"
+                        onClick={() => navigate(prefix + "/tasks")}
+                      >
+                        打开授权任务中心
+                      </button>
+                    }
+                  />
                 ) : (
-                  <div className="chart-empty">
-                    暂无{tab}数据<p>当前后端尚未提供此能力。</p>
-                  </div>
+                  <EmptyState
+                    icon={tab === "监控" ? "trend" : "info"}
+                    title={`暂无${tab}数据`}
+                    description="当前后端尚未提供此能力。"
+                  />
                 )}
               </Card>
               {consoleOpen ? (
-                <Card title="远程控制台">
-                  <button
-                    className="action"
-                    onClick={() => setConsoleOpen(false)}
-                  >
-                    关闭控制台
-                  </button>
-                  <Suspense fallback={<p role="status">正在加载远程控制台…</p>}>
+                <Card
+                  title="远程控制台"
+                  extra={
+                    <button
+                      className="action sm"
+                      onClick={() => setConsoleOpen(false)}
+                    >
+                      关闭控制台
+                    </button>
+                  }
+                >
+                  <Suspense fallback={<LoadingState text="正在加载远程控制台…" />}>
                     <VncConsole
                       instanceId={detail.id}
                       desktopAvailable={detail.observed_state === "RUNNING"}
@@ -373,13 +436,15 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
               ) : null}
             </>
           ) : (
-            <p role="status">
-              {loading
-                ? "正在读取虚拟机…"
-                : error
-                  ? "无法读取该资源"
-                  : "资源不存在或无权访问"}
-            </p>
+            <div className="card">
+              {loading ? (
+                <LoadingState text="正在读取虚拟机…" />
+              ) : (
+                <EmptyState
+                  title={error ? "无法读取该资源" : "资源不存在或无权访问"}
+                />
+              )}
+            </div>
           )}
         </>
       ) : (
@@ -389,6 +454,7 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
             description="管理授权范围内的实例，资源状态以服务端观测结果为准"
           >
             <button className="action" onClick={() => setRefresh((v) => v + 1)}>
+              <Icon name="refresh" size={15} />
               刷新
             </button>
             {can("instances.add_instance") ? (
@@ -396,140 +462,156 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
                 className="action primary"
                 onClick={() => navigate(prefix + "/vms/create")}
               >
-                ＋ 创建虚拟机
+                <Icon name="plus" size={15} />
+                创建虚拟机
               </button>
             ) : null}
           </PageHeader>
-          <div className="filter-bar">
-            <label>
-              搜索名称
-              <input
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                placeholder="名称或 UUID"
-              />
-            </label>
-            <label>
-              运行状态
-              <select
-                value={status}
-                onChange={(e) => {
-                  setStatus(e.target.value);
-                  setPage(1);
-                }}
-              >
-                <option value="">全部状态</option>
-                {["RUNNING", "SHUTOFF", "PAUSED", "CRASHED", "UNKNOWN"].map(
-                  (s) => (
-                    <option key={s}>{s}</option>
-                  ),
-                )}
-              </select>
-            </label>
-            <label>
-              节点 ID
-              <input
-                value={node}
-                onChange={(e) => {
-                  setNode(e.target.value);
-                  setPage(1);
-                }}
-                placeholder="全部节点"
-                inputMode="numeric"
-              />
-            </label>
-            <button
-              className="action"
-              onClick={() => {
-                setSearch("");
-                setStatus("");
-                setNode("");
+          <ErrorBanner message={error} />
+          <Toolbar
+            extra={
+              search || status || node ? (
+                <button
+                  className="action ghost"
+                  onClick={() => {
+                    setSearch("");
+                    setStatus("");
+                    setNode("");
+                    setPage(1);
+                  }}
+                >
+                  重置
+                </button>
+              ) : null
+            }
+          >
+            <SearchInput
+              label="搜索名称"
+              value={search}
+              onChange={(v) => {
+                setSearch(v);
                 setPage(1);
               }}
-            >
-              重置
-            </button>
-          </div>
-          <Card title={`虚拟机列表 · ${total} 台`}>
-            {loading ? <p role="status">正在读取虚拟机…</p> : null}
-            <div className="table-scroll">
-              <table className="vm-table">
+              placeholder="名称或 UUID"
+              width={260}
+            />
+            <Segmented
+              label="运行状态"
+              value={status}
+              options={STATUS_FILTERS}
+              onChange={(v) => {
+                setStatus(v);
+                setPage(1);
+              }}
+            />
+            <input
+              aria-label="节点 ID"
+              className="input-narrow"
+              value={node}
+              onChange={(e) => {
+                setNode(e.target.value);
+                setPage(1);
+              }}
+              placeholder="节点 ID（全部）"
+              inputMode="numeric"
+            />
+          </Toolbar>
+          <Card
+            flush
+            title="虚拟机列表"
+            description={`共 ${total} 台实例`}
+            footer={
+              <Pagination
+                page={page}
+                pageSize={20}
+                total={total}
+                unit="台"
+                onChange={setPage}
+              />
+            }
+          >
+            <div className="table-scroll table-scroll-menus">
+              <table className="data-table vm-table">
                 <thead>
                   <tr>
                     <th>名称</th>
                     <th>状态</th>
                     <th>节点</th>
-                    <th>vCPU</th>
-                    <th>内存</th>
+                    <th>规格</th>
+                    <th className="col-image">镜像</th>
                     <th>IP 地址</th>
                     <th>创建时间</th>
-                    <th>操作</th>
+                    <th className="col-actions">操作</th>
                   </tr>
                 </thead>
                 <tbody>
                   {items.map((vm) => (
                     <tr key={vm.id}>
                       <td>
-                        <button
-                          className="text-link"
-                          onClick={() => {
-                            setConsoleOpen(false);
-                            navigate(prefix + "/vms/" + vm.id);
-                          }}
-                        >
-                          {vm.name}
-                        </button>
-                        <div className="mono muted">{vm.uuid.slice(0, 8)}</div>
+                        <div className="cell-stack">
+                          <button
+                            className="text-link"
+                            onClick={() => {
+                              setConsoleOpen(false);
+                              navigate(prefix + "/vms/" + vm.id);
+                            }}
+                          >
+                            {vm.name}
+                          </button>
+                          <small className="mono muted">
+                            {vm.uuid.slice(0, 8)}
+                          </small>
+                        </div>
                       </td>
                       <td>
-                        <StatusBadge
-                          status={
-                            ACTIVE.includes(vm.operation_status)
-                              ? vm.operation_status
-                              : vm.observed_state
-                          }
-                        />
-                        {vm.observed_state_is_stale ? (
-                          <small className="stale-label">数据已过期</small>
-                        ) : null}
+                        <div className="cell-stack">
+                          <span>
+                            <StatusBadge
+                              status={
+                                ACTIVE.includes(vm.operation_status)
+                                  ? vm.operation_status
+                                  : vm.observed_state
+                              }
+                            />
+                          </span>
+                          {vm.observed_state_is_stale ? (
+                            <small className="stale-label">数据已过期</small>
+                          ) : null}
+                        </div>
                       </td>
                       <td>{vm.node_name}</td>
-                      <td>{vm.vcpu} 核</td>
-                      <td>{vm.memory_mib / 1024} GB</td>
-                      <td title="IP 地址尚未缓存">—</td>
-                      <td>{formatTime(vm.created_at)}</td>
-                      <td>{actions(vm)}</td>
+                      <td className="spec-text">
+                        {vm.vcpu} vCPU · {memGb(vm.memory_mib)}
+                      </td>
+                      <td className="col-image">
+                        <span className="truncate muted" title={vm.image_name}>
+                          {vm.image_name}
+                        </span>
+                      </td>
+                      <td className="muted" title="IP 地址尚未缓存">
+                        —
+                      </td>
+                      <td>
+                        <span className="mono time-text">
+                          {formatTimeFixed(vm.created_at)}
+                        </span>
+                      </td>
+                      <td className="col-actions">{actions(vm)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            {!loading && !items.length ? (
-              <p className="empty">暂无符合条件的虚拟机</p>
+            {loading && !items.length ? (
+              <LoadingState text="正在读取虚拟机…" />
             ) : null}
-            <footer className="pagination">
-              <span>共 {total} 台 · 每页 20 台</span>
-              <button
-                className="action"
-                disabled={page <= 1}
-                onClick={() => setPage(page - 1)}
-              >
-                上一页
-              </button>
-              <span>
-                {page} / {Math.max(1, Math.ceil(total / 20))}
-              </span>
-              <button
-                className="action"
-                disabled={page * 20 >= total}
-                onClick={() => setPage(page + 1)}
-              >
-                下一页
-              </button>
-            </footer>
+            {!loading && !items.length ? (
+              <EmptyState
+                icon="vm"
+                title="暂无符合条件的虚拟机"
+                description="调整筛选条件，或创建一台新的虚拟机。"
+              />
+            ) : null}
           </Card>
         </>
       )}
