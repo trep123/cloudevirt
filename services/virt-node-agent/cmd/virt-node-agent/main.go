@@ -35,7 +35,10 @@ func main() {
 
 	client := libvirt.NewClient(time.Duration(cfg.MaxRequestSeconds) * time.Second)
 	client.LeaseFile = cfg.DHCPLeaseFile
+	publisher := httpapi.NewDesktopPublisher()
+	defer publisher.Close()
 	handler := httpapi.NewRouter(httpapi.Dependencies{
+		Publisher:        publisher,
 		Version:          cfg.Version,
 		Token:            cfg.Token,
 		StoragePaths:     []string{cfg.ImageDir, cfg.DiskDir},

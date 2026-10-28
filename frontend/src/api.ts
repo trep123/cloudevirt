@@ -72,23 +72,27 @@ function readCookie(name: string): string {
   return "";
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function request<T>(
+  path: string,
+  init: RequestInit & { anonymous?: boolean } = {},
+): Promise<T> {
+  const { anonymous, ...fetchInit } = init;
   const method = (init.method || "GET").toUpperCase();
   const headers = new Headers(init.headers);
   if (init.body) {
     headers.set("Content-Type", "application/json");
   }
-  if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
+  if (!anonymous && !["GET", "HEAD", "OPTIONS"].includes(method)) {
     const token = readCookie("csrftoken");
     if (token) {
       headers.set("X-CSRFToken", token);
     }
   }
   const response = await fetch(`${BASE}${scopedPath(path)}`, {
-    ...init,
+    ...fetchInit,
     method,
     headers,
-    credentials: "same-origin",
+    credentials: anonymous ? "omit" : init.credentials || "same-origin",
     signal: init.signal || AbortSignal.timeout(30000),
   });
   if (response.status === 204) {
@@ -109,6 +113,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!response.ok) {
     if (
       response.status === 401 &&
+      !anonymous &&
       typeof window !== "undefined" &&
       path !== "/auth/login"
     ) {

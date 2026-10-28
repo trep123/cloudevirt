@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { PublicWatchPage } from "./features/console/PublicWatchPage";
 import { api, ApiError } from "./api";
 import { usePath, navigate } from "./app/router";
 import { canEnterRoute } from "./app/permission";
@@ -28,6 +29,10 @@ export default function App() {
     [booted, setBooted] = useState(false),
     [error, setError] = useState<string | null>(null);
   useEffect(() => {
+    if (location.pathname === "/watch") {
+      setBooted(true);
+      return;
+    }
     api
       .me()
       .then(setUser)
@@ -44,6 +49,7 @@ export default function App() {
   }, [user, path, prefix]);
   useEffect(() => {
     const expired = () => {
+      if (location.pathname === "/watch") return;
       setUser(null);
       navigate("/login");
     };
@@ -60,6 +66,7 @@ export default function App() {
       setError(describeError(e));
     }
   }
+  if (path === "/watch") return <PublicWatchPage />;
   if (!booted)
     return (
       <div className="login" role="status">

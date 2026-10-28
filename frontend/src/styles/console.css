@@ -619,3 +619,8 @@ dialog::backdrop {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+.broadcast-card { margin-top: 16px; padding: 16px; border: 1px solid var(--border); border-radius: 8px; }
+.broadcast-card input { width: 100%; margin: 8px 0; }
+.public-watch { min-height: 100vh; padding: 24px; background: var(--app-bg); }
+.public-watch > .card { max-width: 1280px; margin: 0 auto; }
+.public-watch video { width: 100%; height: min(70vh, 720px); background: #000; object-fit: contain; }

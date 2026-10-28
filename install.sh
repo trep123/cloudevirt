@@ -140,8 +140,8 @@ if [[ -e "$APP_DIR/apps/management/manage.py" && "$SOURCE_DIR" != "$APP_DIR" ]];
 fi
 if [[ -f "$CONFIG_DIR/install-secrets.env" ]]; then
     log "Stopping application jobs while deploying (running guests are not stopped)"
-    systemctl stop cloudvirt-collect_node_status.timer cloudvirt-reconcile.timer cloudvirt-cleanup_console_sessions.timer 2>/dev/null || true
-    systemctl stop cloudvirt-collect_node_status.service cloudvirt-reconcile.service cloudvirt-cleanup_console_sessions.service 2>/dev/null || true
+    systemctl stop cloudvirt-collect_node_status.timer cloudvirt-reconcile.timer cloudvirt-cleanup_console_sessions.timer cloudvirt-reconcile_broadcasts.timer 2>/dev/null || true
+    systemctl stop cloudvirt-collect_node_status.service cloudvirt-reconcile.service cloudvirt-cleanup_console_sessions.service cloudvirt-reconcile_broadcasts.service 2>/dev/null || true
     systemctl stop cloudvirt-worker cloudvirt-management cloudvirt-agent 2>/dev/null || true
 fi
 install -d -m 0755 "$APP_DIR" "$WEB_ROOT"
@@ -379,9 +379,10 @@ UMask=0007
 ReadWritePaths=
 ReadWritePaths=$DATA_DIR /var/log/cloudvirt
 ENV
-for job in collect_node_status reconcile cleanup_console_sessions; do
+for job in collect_node_status reconcile cleanup_console_sessions reconcile_broadcasts; do
     interval=30
     [[ "$job" != reconcile ]] || interval=60
+    [[ "$job" != reconcile_broadcasts ]] || interval=15
     cat > "/etc/systemd/system/cloudvirt-$job.service" <<ENV
 [Unit]
 Description=CloudVirt $job
@@ -533,7 +534,7 @@ if [[ "$ENABLE_OVS" == true ]]; then
     # Optional network provisioning is isolated in an audited helper.
     bash "$APP_DIR/scripts/install_ovs.sh" "$APP_DIR"
 fi
-systemctl enable --now cloudvirt-collect_node_status.timer cloudvirt-reconcile.timer cloudvirt-cleanup_console_sessions.timer
+systemctl enable --now cloudvirt-collect_node_status.timer cloudvirt-reconcile.timer cloudvirt-cleanup_console_sessions.timer cloudvirt-reconcile_broadcasts.timer
 for service in cloudvirt-agent cloudvirt-management cloudvirt-worker nginx postgresql; do
     systemctl is-active --quiet "$service" || die "Service is not active: $service"
 done

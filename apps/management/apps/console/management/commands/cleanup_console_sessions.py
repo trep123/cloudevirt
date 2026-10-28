@@ -1,4 +1,5 @@
 from django.core.management.base import BaseCommand
+from django.db.models import F, Q
 from django.utils import timezone
 
 from apps.console.media import close_media
@@ -17,9 +18,14 @@ class Command(BaseCommand):
         ).select_related('instance__node')[:100]:
             close_desktop(session)
             desktop += 1
-        for session in MediaSession.objects.filter(closed=False, expires_at__lte=timezone.now())[
-            :100
-        ]:
+        invalid_public = Q(broadcast__isnull=False) & (
+            Q(broadcast__active=False)
+            | Q(broadcast__link_expires_at__lte=timezone.now())
+            | ~Q(access_version=F('broadcast__access_version'))
+        )
+        for session in MediaSession.objects.filter(
+            Q(expires_at__lte=timezone.now()) | invalid_public, closed=False
+        )[:100]:
             try:
                 close_media(session)
                 media += 1

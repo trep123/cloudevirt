@@ -26,6 +26,9 @@ print(ipaddress.ip_network(sys.argv[1],strict=False))
 PY
 )
 task_media_tmp=$(mktemp -d /var/tmp/cloudvirt-media.XXXXXX)
+DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    python3-gi python3-gst-1.0 gir1.2-gstreamer-1.0 gstreamer1.0-tools \
+    gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-rtsp
 trap 'rm -rf -- "$task_media_tmp"' EXIT
 asset="mediamtx_${VERSION}_linux_amd64.tar.gz"
 base="https://github.com/bluenviron/mediamtx/releases/download/$VERSION"

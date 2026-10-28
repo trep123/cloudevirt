@@ -121,9 +121,9 @@ class MediaSourcesView(APIView):
         return Response(
             {
                 'results': list(
-                    MediaSource.objects.filter(instance_id=pk, enabled=True).values(
-                        'id', 'name', 'stream_path'
-                    )
+                    MediaSource.objects.filter(
+                        instance_id=pk, enabled=True, is_desktop=False
+                    ).values('id', 'name', 'stream_path')
                 ),
                 'can_manage': is_admin(request.user),
                 'ice_servers': ice_servers(request.user),

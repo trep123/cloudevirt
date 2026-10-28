@@ -5,6 +5,7 @@
 - 当前阶段：单节点业务模块与控制台 UI 已实现；真实 KVM 全链路与生产验收仍以验收记录为准
 - 文档入口：[docs/README.md](./docs/README.md)
 - 桌面与独立视频：[实现、部署与验证记录](./docs/console-media-workspace.md)
+- 当前串流模式：[服务端发布与匿名链接观看](./docs/shared-webrtc-streams.md)
 - 状态说明：功能是否验证通过以 docs 中的验收记录为准，未验证项一律标记 NOT VERIFIED
 
 ## 1. 组件

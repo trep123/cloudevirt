@@ -4,6 +4,7 @@ export type MediaState =
   | "authorizing"
   | "connecting"
   | "playing"
+  | "paused"
   | "degraded"
   | "reconnecting"
   | "failed"
@@ -18,6 +19,7 @@ export type MediaMetrics = {
 export class MediaEngine {
   private peer: RTCPeerConnection | null = null;
   private session: string | null = null;
+  private leaseToken = "";
   private generation = 0;
   private stopped = false;
   private timer: ReturnType<typeof setInterval> | undefined;
@@ -34,6 +36,12 @@ export class MediaEngine {
     private state: (state: MediaState, message?: string) => void,
     private metrics: (value: MediaMetrics) => void,
     private freshIce?: () => Promise<RTCIceServer[]>,
+    private access: {
+      createPath?: string;
+      leasePrefix?: string;
+      anonymous?: boolean;
+      headers?: Record<string, string>;
+    } = {},
   ) {}
   start() {
     this.stopped = false;
@@ -138,18 +146,26 @@ export class MediaEngine {
         };
       });
       if (!current()) return;
-      const result = await api.request<{ session_id: string; sdp: string }>(
-        `/console/media-sources/${this.source}/sessions`,
+      const result = await api.request<{
+        session_id: string;
+        sdp: string;
+        lease_token?: string;
+      }>(
+        this.access.createPath ||
+          `/console/media-sources/${this.source}/sessions`,
         {
+          anonymous: this.access.anonymous,
+          headers: this.access.headers,
           method: "POST",
           body: JSON.stringify({ sdp: peer.localDescription?.sdp }),
         },
       );
       if (!current()) {
-        void this.closeSession(result.session_id);
+        void this.closeSession(result.session_id, result.lease_token);
         return;
       }
       this.session = result.session_id;
+      this.leaseToken = result.lease_token || "";
       await peer.setRemoteDescription({ type: "answer", sdp: result.sdp });
       let renewing = false,
         sampling = false;
@@ -157,9 +173,17 @@ export class MediaEngine {
         if (!current() || renewing) return;
         renewing = true;
         try {
-          await api.request(`/console/media-sessions/${result.session_id}`, {
-            method: "POST",
-          });
+          await api.request(
+            (this.access.leasePrefix || "/console/media-sessions/") +
+              result.session_id,
+            {
+              anonymous: this.access.anonymous,
+              headers: this.leaseToken
+                ? { "X-Media-Session-Token": this.leaseToken }
+                : {},
+              method: "POST",
+            },
+          );
         } catch (error) {
           if (current()) this.failed(error);
         } finally {
@@ -181,7 +205,8 @@ export class MediaEngine {
               seconds > 0 && data.framesDecoded !== undefined
                 ? (data.framesDecoded - lastFrames) / seconds
                 : null;
-            if (
+            if (this.video.paused) this.state("paused");
+            else if (
               !this.video.requestVideoFrameCallback &&
               fps &&
               this.video.readyState >= 2
@@ -257,9 +282,11 @@ export class MediaEngine {
       1000 * 2 ** this.retries,
     );
   }
-  private closeSession(id: string) {
+  private closeSession(id: string, token = this.leaseToken) {
     return api
-      .request(`/console/media-sessions/${id}`, {
+      .request((this.access.leasePrefix || "/console/media-sessions/") + id, {
+        anonymous: this.access.anonymous,
+        headers: token ? { "X-Media-Session-Token": token } : {},
         method: "DELETE",
         keepalive: true,
       })
@@ -286,6 +313,7 @@ export class MediaEngine {
     if (this.session) {
       void this.closeSession(this.session);
       this.session = null;
+      this.leaseToken = "";
     }
   }
   stop() {
