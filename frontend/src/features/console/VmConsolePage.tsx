@@ -2,7 +2,13 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { api } from "../../api";
 import { navigate } from "../../app/router";
 import { PageHeader } from "../../components/ConsoleUI";
-import { ErrorBanner, LoadingState, describeError } from "../../components/ui";
+import {
+  ErrorBanner,
+  LoadingState,
+  describeError,
+  StatusBadge,
+} from "../../components/ui";
+import { Icon } from "../../components/icons";
 import type { Instance } from "../../types";
 const Console = lazy(() =>
   import("../../components/VncConsole").then((m) => ({
@@ -67,7 +73,12 @@ export function VmConsolePage({ id, admin }: { id: number; admin: boolean }) {
     <div className="vm-console-page">
       <PageHeader
         title={`${vm?.name || "虚拟机"} · 远程控制台`}
-        description="独立控制台页面"
+        description={
+          vm
+            ? `${vm.node_name} · ${vm.vcpu} vCPU · ${vm.memory_mib / 1024} GiB 内存`
+            : "正在读取控制台信息"
+        }
+        meta={vm ? <StatusBadge status={vm.observed_state} /> : undefined}
         back={{
           label: "返回虚拟机列表",
           onClick: () => navigate(prefix + "/vms"),
@@ -77,22 +88,19 @@ export function VmConsolePage({ id, admin }: { id: number; admin: boolean }) {
           className="action"
           onClick={() => navigate(`${prefix}/vms/${id}`)}
         >
+          <Icon name="settings" size={15} />
           虚拟机详情
         </button>
       </PageHeader>
       <ErrorBanner message={error} />
-      {clipboardConfigured === false && (
-        <p className="muted">
-          此虚拟机尚未配置客体剪贴板通道。请正常关机后在“硬件”页启用通道，并在客体安装、运行
-          spice-vdagent；配置前双向复制粘贴不会生效。
-        </p>
-      )}
       {vm ? (
         <Suspense fallback={<LoadingState text="正在加载控制台…" />}>
           <Console
             key={id}
             instanceId={id}
             desktopAvailable={vm.observed_state === "RUNNING"}
+            instanceName={vm.name}
+            clipboardConfigured={clipboardConfigured}
           />
         </Suspense>
       ) : !error ? (

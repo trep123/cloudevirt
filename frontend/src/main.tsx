@@ -7,6 +7,7 @@ import "./styles.css";
 import "./styles/console.css";
 import "./styles/app.css";
 import "./styles/hardware.css";
+import "./styles/console-studio.css";
 
 const container = document.getElementById("root");
 if (!container) {
