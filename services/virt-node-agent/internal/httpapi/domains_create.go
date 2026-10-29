@@ -366,6 +366,30 @@ func writeExistingDomain(writer http.ResponseWriter, deps Dependencies, ctx cont
 		writeAPIError(writer, deps.Logger, err, requestID)
 		return
 	}
+	if payload.Autostart != nil {
+		setter, ok := deps.Virtualizer.(interface {
+			SetDomainAutostart(context.Context, string, bool) error
+		})
+		if !ok {
+			writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeOperationFailed, "节点不支持自启控制", nil), requestID)
+			return
+		}
+		if err := setter.SetDomainAutostart(ctx, payload.Name, *payload.Autostart); err != nil {
+			writeAPIError(writer, deps.Logger, err, requestID)
+			return
+		}
+	}
+	if payload.StartAfterCreate != nil && *payload.StartAfterCreate && state == "SHUTOFF" {
+		if err := deps.Virtualizer.StartDomain(ctx, payload.Name); err != nil {
+			writeAPIError(writer, deps.Logger, err, requestID)
+			return
+		}
+		state, err = deps.Virtualizer.DomainState(ctx, payload.Name)
+		if err != nil {
+			writeAPIError(writer, deps.Logger, err, requestID)
+			return
+		}
+	}
 	var virtualSize int64
 	if _, size, infoErr := storage.DiskInfo(ctx, actual.DiskPath); infoErr == nil {
 		virtualSize = size

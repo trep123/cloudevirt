@@ -131,6 +131,14 @@ def execute_instance_create(task: Task) -> dict:
         )
         creation_requested = True
         result = client.create_domain(payload)
+        if (
+            config.get('start_after_create', True)
+            and normalize_state(str(result.get('state') or '')) != ObservedState.RUNNING
+        ):
+            raise AppError(
+                ErrorCode.OPERATION_FAILED,
+                '节点未确认虚拟机运行，创建启动阶段失败，请检查 libvirt 日志',
+            )
     except AppError as exc:
         instance.operation_status = 'FAILED'
         instance.last_error_code = exc.code
@@ -280,6 +288,10 @@ def execute_instance_action(task: Task) -> dict:
     try:
         result = client.domain_action(instance.libvirt_domain_name, action)
         state = normalize_state(str(result.get('state') or ''))
+        if action == 'start' and state != ObservedState.RUNNING:
+            raise AppError(
+                ErrorCode.OPERATION_FAILED, '节点未确认虚拟机运行，启动任务不能标记为成功'
+            )
         if action in {'shutdown', 'force-stop'} and state != ObservedState.SHUTOFF:
             state = wait_for_state(
                 client,

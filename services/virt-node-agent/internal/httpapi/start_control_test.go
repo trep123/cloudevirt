@@ -36,3 +36,18 @@ func TestCreateCanRemainStoppedWithHostAutostart(t *testing.T) {
 		t.Fatal("startup flags were conflated")
 	}
 }
+
+func TestRetryExistingDomainCompletesStartupWithoutRedefinition(t *testing.T) {
+	operator := &autostartOperator{fakeOperator: fakeOperator{exists: true, state: "SHUTOFF", dumpXML: fakeDump()}}
+	deps := testDependencies()
+	deps.DiskDir = t.TempDir()
+	deps.Virtualizer = operator
+	body := strings.TrimSuffix(createPayload(t), "}") + `,"start_after_create":true,"autostart":true}`
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/domains", strings.NewReader(body))
+	request.Header.Set("Authorization", "Bearer "+deps.Token)
+	recorder := httptest.NewRecorder()
+	NewRouter(deps).ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK || operator.startCall != 1 || operator.defineCall != 0 || operator.calls != 1 {
+		t.Fatal("retry did not resume startup", recorder.Code, recorder.Body.String())
+	}
+}

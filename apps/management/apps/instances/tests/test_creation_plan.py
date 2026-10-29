@@ -9,6 +9,23 @@ from apps.templates.models import Template, TemplateVersion
 
 
 class CreationPlanTests(TestCase):
+    def test_requested_start_cannot_succeed_when_agent_reports_shutoff(self):
+        from apps.instances.executors import execute_instance_create
+        from common.errors import AppError
+
+        response = self.post('instances', {**self.data, 'start_after_create': True})
+        self.assertEqual(response.status_code, 202, response.content)
+        with (
+            patch(
+                'apps.nodes.client.AgentClient.get_json',
+                return_value={'image_clone': True, 'iso_install': True, 'start_control': True},
+            ),
+            patch('apps.nodes.client.AgentClient.create_domain', return_value={'state': 'SHUTOFF'}),
+            self.assertRaises(AppError),
+        ):
+            execute_instance_create(Task.objects.get())
+        self.assertEqual(Instance.objects.get().operation_status, 'FAILED')
+
     def setUp(self):
         self.user = make_user('creation-plan-admin', 'Admin')
         self.client.force_login(self.user)

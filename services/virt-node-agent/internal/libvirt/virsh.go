@@ -344,6 +344,11 @@ func (c *Client) run(ctx context.Context, args ...string) (string, error) {
 //
 //	定义失败时返回稳定错误码。
 func (c *Client) DefineDomain(ctx context.Context, content string) error {
+	normalized, normalizeErr := normalizeFirmware(content)
+	if normalizeErr != nil {
+		return apierr.New(apierr.CodeInvalidArgument, normalizeErr.Error(), normalizeErr)
+	}
+	content = normalized
 	file, err := os.CreateTemp("", "cloudvirt-domain-*.xml")
 	if err != nil {
 		return apierr.New(apierr.CodeOperationFailed, "无法创建临时文件", err)
@@ -370,6 +375,22 @@ func (c *Client) DefineDomain(ctx context.Context, content string) error {
 // StartDomain 启动域。
 func (c *Client) StartDomain(ctx context.Context, name string) error {
 	_, err := c.run(ctx, "start", name)
+	if err != nil && strings.Contains(err.Error(), "AppArmor") {
+		content, readErr := c.run(ctx, "dumpxml", name, "--inactive")
+		if readErr != nil {
+			return err
+		}
+		normalized, normalizeErr := normalizeFirmware(content)
+		if normalizeErr != nil {
+			return apierr.New(apierr.CodeInvalidArgument, normalizeErr.Error(), normalizeErr)
+		}
+		if normalized != content {
+			if defineErr := c.DefineDomain(ctx, normalized); defineErr != nil {
+				return defineErr
+			}
+			_, err = c.run(ctx, "start", name)
+		}
+	}
 	return err
 }
 
