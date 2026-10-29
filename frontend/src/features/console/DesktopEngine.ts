@@ -293,6 +293,17 @@ export class DesktopEngine {
   paste(text: string) {
     if (text.length <= 65536) this.client?.clipboardPasteFrom(text);
   }
+  shortcut(key: "c" | "v" | "x", shift = false) {
+    if (!this.client || this.options.viewOnly) return;
+    this.client.blur();
+    this.client.sendKey(0xffe3, "ControlLeft", true);
+    if (shift) this.client.sendKey(0xffe1, "ShiftLeft", true);
+    this.client.sendKey(key.charCodeAt(0), "Key" + key.toUpperCase(), true);
+    this.client.sendKey(key.charCodeAt(0), "Key" + key.toUpperCase(), false);
+    if (shift) this.client.sendKey(0xffe1, "ShiftLeft", false);
+    this.client.sendKey(0xffe3, "ControlLeft", false);
+    this.client.focus({ preventScroll: true });
+  }
   ctrlAltDel() {
     this.client?.sendCtrlAltDel();
   }

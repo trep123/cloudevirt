@@ -29,7 +29,7 @@ class DisplayTests(TestCase):
         )
         self.client.force_login(self.user)
         self.url = f'/api/v1/admin/vms/{self.vm.pk}/display/'
-        self.data = {'model': 'virtio', 'width': 1920, 'height': 1080}
+        self.data = {'model': 'virtio', 'width': 1920, 'height': 1080, 'clipboard': False}
 
     def post(self, data=None):
         return self.client.post(self.url, data or self.data, content_type='application/json')

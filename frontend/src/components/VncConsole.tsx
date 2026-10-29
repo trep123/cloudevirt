@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { ClipboardShortcuts } from "../features/console/ClipboardShortcuts";
 import {
   DesktopEngine,
   type DesktopState,
@@ -26,31 +27,58 @@ export function VncConsole({
 }) {
   const target = useRef<HTMLDivElement>(null),
     engine = useRef<DesktopEngine | null>(null);
+  const ready = useRef(false),
+    readOnly = useRef(false);
+  const [pageFull, setPageFull] = useState(false);
   const [state, setState] = useState<DesktopState>("idle"),
     [message, setMessage] = useState<string | null>(null);
-  const [metrics, setMetrics] = useState<DesktopMetrics | null>(null),
-    [clipboard, setClipboard] = useState(""),
-    [paste, setPaste] = useState("");
+  const [metrics, setMetrics] = useState<DesktopMetrics | null>(null);
   const [captured, setCaptured] = useState(false),
     [profile, setProfile] = useState("text"),
     [scale, setScale] = useState(true),
     [viewOnly, setViewOnly] = useState(false);
+  readOnly.current = viewOnly;
+  useEffect(() => {
+    if (!pageFull) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        setPageFull(false);
+      }
+    };
+    window.addEventListener("keydown", escape, true);
+    return () => {
+      document.body.style.overflow = previous;
+      window.removeEventListener("keydown", escape, true);
+    };
+  }, [pageFull]);
   useEffect(() => {
     if (!target.current || !desktopAvailable) return;
+    let bridge: ClipboardShortcuts;
     const current = new DesktopEngine(
       target.current,
       instanceId,
       (value, detail) => {
         setState(value);
+        ready.current = ["connected", "rendering"].includes(value);
         setMessage(detail || null);
         if (!["rendering", "connected"].includes(value)) setCaptured(false);
       },
       setMetrics,
-      setClipboard,
+      (text) => bridge?.receive(text),
     );
     engine.current = current;
     current.start();
     const container = target.current;
+    bridge = new ClipboardShortcuts(container, {
+      enabled: () => ready.current && !readOnly.current,
+      paste: (text) => current.paste(text),
+      shortcut: (key, shift) => current.shortcut(key, shift),
+      report: setMessage,
+    });
     const focus = () => {
       current.focus();
       setCaptured(true);
@@ -76,6 +104,8 @@ export function VncConsole({
       window.removeEventListener("keydown", shortcut, true);
       window.removeEventListener("blur", blur);
       current.dispose();
+      bridge.dispose();
+      ready.current = false;
       engine.current = null;
     };
   }, [instanceId, desktopAvailable]);
@@ -93,7 +123,15 @@ export function VncConsole({
   const value = (number: number | null | undefined, suffix: string) =>
     number == null ? "—" : number.toFixed(1) + suffix;
   return (
-    <div className="console-workspace">
+    <div
+      className={`console-workspace${pageFull ? " console-page-fullscreen" : ""}`}
+      style={
+        {
+          "--vnc-aspect-ratio": `${metrics?.width || 16} / ${metrics?.height || 9}`,
+          "--vnc-ratio": (metrics?.width || 16) / (metrics?.height || 9),
+        } as CSSProperties
+      }
+    >
       <div className="vnc-toolbar workspace-toolbar">
         <strong>虚拟机远程控制台</strong>
       </div>
@@ -104,6 +142,13 @@ export function VncConsole({
               {desktopAvailable ? labels[state] : "虚拟机未运行，桌面不可连接"}
             </span>
             <span>{captured ? "键鼠已捕获" : "键鼠未捕获"}</span>
+            <button
+              className="action"
+              aria-pressed={pageFull}
+              onClick={() => setPageFull((v) => !v)}
+            >
+              {pageFull ? "退出页面全屏" : "页面全屏"}
+            </button>
             <button
               className="action"
               disabled={!desktopAvailable}
@@ -144,7 +189,7 @@ export function VncConsole({
                   .catch(() => setMessage("浏览器拒绝全屏请求"))
               }
             >
-              桌面全屏
+              浏览器全屏
             </button>
           </div>
           <div className="vnc-toolbar">
@@ -197,40 +242,11 @@ export function VncConsole({
             点击桌面捕获键鼠，Ctrl+Alt 释放。后台 30
             秒后暂停桌面。更新次数为屏幕刷新次数，绘制耗时不包含网络耗时。
           </p>
-          <details>
-            <summary>剪贴板（仅手动发送 / 复制）</summary>
-            <textarea
-              aria-label="发送到虚拟机的文本"
-              maxLength={65536}
-              value={paste}
-              onChange={(e) => setPaste(e.target.value)}
-              rows={2}
-            />
-            <button
-              className="action"
-              disabled={!paste || viewOnly}
-              onClick={() => engine.current?.paste(paste)}
-            >
-              发送文本
-            </button>
-            <textarea
-              aria-label="虚拟机剪贴板"
-              value={clipboard}
-              readOnly
-              rows={2}
-            />
-            <button
-              className="action"
-              disabled={!clipboard}
-              onClick={() =>
-                void navigator.clipboard
-                  ?.writeText(clipboard)
-                  .catch(() => setMessage("复制失败，请手动选择文本"))
-              }
-            >
-              复制到本机
-            </button>
-          </details>
+          <p className="muted">
+            复制 / 粘贴：Ctrl+C / Ctrl+V（macOS 可用 ⌘）；Linux 终端用
+            Ctrl+Shift+C / V。仅同步文本，需要客体剪贴板通道和
+            spice-vdagent；复制到本机需要浏览器剪贴板写入权限。
+          </p>
         </section>
       </div>
     </div>

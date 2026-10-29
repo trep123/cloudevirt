@@ -20,6 +20,7 @@ from common.scope import instances_for
 
 
 class DisplayInput(StrictInput):
+    clipboard = serializers.BooleanField(default=False)
     model = serializers.ChoiceField(choices=['vga', 'virtio'])
     width = serializers.IntegerField(min_value=640, max_value=3840)
     height = serializers.IntegerField(min_value=480, max_value=2160)
@@ -38,6 +39,9 @@ class InstanceDisplayView(APIView):
                     'video_models', []
                 ),
                 'requires_shutdown': True,
+                'clipboard_supported': client.get_json('/api/v1/node/capabilities').get(
+                    'clipboard', False
+                ),
             }
         )
 
@@ -131,6 +135,7 @@ def execute_instance_display(task):
             'video_model': configured['model'],
             'video_width': configured['width'],
             'video_height': configured['height'],
+            'clipboard': configured['clipboard'],
         }
         instance.creation_config, instance.operation_status = config, 'SUCCEEDED'
         instance.last_error_code = instance.last_error_message = ''

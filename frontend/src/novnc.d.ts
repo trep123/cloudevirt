@@ -21,6 +21,7 @@ declare module "@novnc/novnc" {
     disconnect(): void;
     sendCtrlAltDel(): void;
     clipboardPasteFrom(text: string): void;
+    sendKey(keysym: number, code: string, down?: boolean): void;
     addEventListener(type: string, listener: (event: Event) => void): void;
     removeEventListener(type: string, listener: (event: Event) => void): void;
   }

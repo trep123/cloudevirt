@@ -46,7 +46,7 @@ func TestDisplayBootIntegration(t *testing.T) {
 			if err = client.DefineDomain(ctx, content); err != nil {
 				t.Fatal(err)
 			}
-			want := DisplayConfig{Model: model, Width: 1920, Height: 1080}
+			want := DisplayConfig{Model: model, Width: 1920, Height: 1080, Clipboard: true}
 			if _, err = client.ConfigureDisplay(ctx, name, want); err != nil {
 				t.Fatal(err)
 			}

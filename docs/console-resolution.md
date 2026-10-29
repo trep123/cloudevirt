@@ -12,3 +12,15 @@
 API：`GET/POST /api/v1/admin/vms/{id}/display/`。GET 返回节点持久显卡配置与可用型号；POST 接收 `{ "model": "virtio", "width": 1920, "height": 1080 }`，返回异步任务。写入仅限管理员，校验对象范围、节点可用性、状态新鲜度、并发任务及输入范围，并记录提交审计。任务结果明确 `guest_mode_confirmed: false`。
 
 参考：[libvirt Video devices](https://libvirt.org/formatdomain.html#video-devices)。
+
+## 独立控制台与快捷键
+
+控制台入口统一打开 `/admin/vms/{id}/console` 或 `/app/vms/{id}/console`。页面保持登录和对象授权边界，列表与详情不再嵌入画面。按实际 framebuffer 宽高比构建视口，页面全屏可用 Esc 退出；浏览器全屏保留完整桌面比例，不裁剪或拉伸。
+
+Ctrl+C/X、Ctrl+V 支持文本复制、剪切、粘贴；macOS 可用 Command，Linux 终端使用 Ctrl+Shift+C/V。浏览器原生 paste 事件提供文本，不后台轮询本地剪贴板。只有用户明确请求复制后，收到的客体剪贴板内容才会写入本地剪贴板；拒绝权限或未收到客体数据时提示原因。仅支持文本，不传文件或图片。
+
+硬件页与创建向导提供 `clipboard` 开关，默认关闭。节点通过 QEMU 支持的字符设备检测能力，使用 `qemu-vdagent` 通道与 `com.redhat.spice.0` 端口，并显式启用 `<source><clipboard copypaste="yes"/></source>`。既有实例必须正常关机后保存，再启动生效；不自动停止实例。不替换已有 SPICE 通道或直通配置。
+
+客体需安装并运行 SPICE vdagent（Ubuntu：`sudo apt install spice-vdagent`，然后重新登录图形桌面；Windows 需要对应的驱动及代理）。浏览器复制需要受信任的 HTTPS 和剪贴板写入权限。通道存在不等于代理已就绪，不宣称粘贴已经被客体应用接收。
+
+参考：[libvirt Channel device / qemu-vdagent](https://libvirt.org/formatdomain.html#channel)。

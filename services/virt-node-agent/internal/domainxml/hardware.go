@@ -5,6 +5,7 @@ import (
 )
 
 type Hardware struct {
+	Clipboard       bool   `json:"clipboard"`
 	VideoModel      string `json:"video_model"`
 	VideoWidth      int    `json:"video_width"`
 	VideoHeight     int    `json:"video_height"`
@@ -75,6 +76,9 @@ func ApplyHardware(payload *domain, spec Spec) error {
 		return err
 	}
 	payload.Devices.Video = video
+	if h.Clipboard {
+		payload.Devices.Channels = []ClipboardChannel{NewClipboardChannel()}
+	}
 	if h.CPUMode != "" && h.CPUMode != "host-model" && h.CPUMode != "host-passthrough" {
 		return apierr.New(apierr.CodeInvalidArgument, "CPU 模式不受支持", nil)
 	}

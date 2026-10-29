@@ -16,6 +16,7 @@ class StrictInput(serializers.Serializer):
 
 
 class HardwareSerializer(StrictInput):
+    clipboard = serializers.BooleanField(required=False)
     video_model = serializers.ChoiceField(choices=['vga', 'virtio'], required=False)
     video_width = serializers.IntegerField(min_value=640, max_value=3840, required=False)
     video_height = serializers.IntegerField(min_value=480, max_value=2160, required=False)
@@ -133,6 +134,8 @@ def validate_creation_capabilities(data, capabilities):
         )
     hardware = data.get('hardware', {})
     errors = {}
+    if hardware.get('clipboard') and capabilities.get('clipboard') is not True:
+        errors['hardware.clipboard'] = '节点不支持客体剪贴板通道'
     if hardware.get('video_model') and hardware['video_model'] not in capabilities.get(
         'video_models', []
     ):

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/xml"
 	"os/exec"
+	"strings"
 )
 
 type capabilityEnum struct {
@@ -69,6 +70,7 @@ func (c *Client) CreationCapabilities(ctx context.Context) (map[string]any, erro
 		}
 	}
 	_, swtpmErr := exec.LookPath("swtpm")
+	charDevices, charErr := exec.CommandContext(ctx, "qemu-system-x86_64", "-chardev", "help").CombinedOutput()
 	videoModels := []string{}
 	for _, enum := range parsed.Devices.Video.Enums {
 		if enum.Name == "modelType" {
@@ -79,5 +81,5 @@ func (c *Client) CreationCapabilities(ctx context.Context) (map[string]any, erro
 			}
 		}
 	}
-	return map[string]any{"video_models": videoModels, "cpu_modes": modes, "firmware": firmware, "secure_boot": secure && parsed.OS.Loader.Supported == "yes", "tpm_emulator": parsed.Devices.TPM.Supported == "yes" && swtpmErr == nil}, nil
+	return map[string]any{"clipboard": charErr == nil && strings.Contains(string(charDevices), "qemu-vdagent"), "video_models": videoModels, "cpu_modes": modes, "firmware": firmware, "secure_boot": secure && parsed.OS.Loader.Supported == "yes", "tpm_emulator": parsed.Devices.TPM.Supported == "yes" && swtpmErr == nil}, nil
 }

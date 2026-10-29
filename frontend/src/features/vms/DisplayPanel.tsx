@@ -3,8 +3,17 @@ import { api } from "../../api";
 import { ErrorBanner, describeError } from "../../components/ui";
 import { TaskProgressDrawer } from "../../components/ConsoleUI";
 
-type Display = { model: string; width: number; height: number };
-type Info = { configured: Display; video_models: string[] };
+type Display = {
+  model: string;
+  width: number;
+  height: number;
+  clipboard: boolean;
+};
+type Info = {
+  configured: Display;
+  video_models: string[];
+  clipboard_supported: boolean;
+};
 export function DisplayPanel({
   id,
   admin,
@@ -18,6 +27,7 @@ export function DisplayPanel({
     [error, setError] = useState<string | null>(null),
     [busy, setBusy] = useState(false);
   const [model, setModel] = useState("vga"),
+    [clipboard, setClipboard] = useState(false),
     [width, setWidth] = useState(1920),
     [height, setHeight] = useState(1080),
     [task, setTask] = useState<string | null>(null),
@@ -33,6 +43,7 @@ export function DisplayPanel({
       .then((v) => {
         if (alive) {
           setInfo(v);
+          setClipboard(v.configured.clipboard);
           setModel(
             v.video_models.includes(v.configured.model)
               ? v.configured.model
@@ -72,7 +83,10 @@ export function DisplayPanel({
     try {
       const result = await api.request<{ task: { id: string } }>(
         `/instances/${id}/display`,
-        { method: "POST", body: JSON.stringify({ model, width, height }) },
+        {
+          method: "POST",
+          body: JSON.stringify({ model, width, height, clipboard }),
+        },
       );
       setTask(result.task.id);
     } catch (e) {
@@ -109,6 +123,17 @@ export function DisplayPanel({
           </p>
           {admin && (
             <div className="infra-form">
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={clipboard}
+                  disabled={
+                    busy || !stopped || !!task || !info.clipboard_supported
+                  }
+                  onChange={(e) => setClipboard(e.target.checked)}
+                />
+                启用客体剪贴板通道（需安装并运行 spice-vdagent，下次启动生效）
+              </label>
               <label>
                 显卡
                 <select

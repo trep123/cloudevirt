@@ -43,6 +43,9 @@ func includesCapability(caps map[string]any, key, value string) bool {
 func checkHardwareCapabilities(deps Dependencies, ctx context.Context, payload createDomainRequest) error {
 	h := payload.Hardware
 	caps := creationCapabilities(deps, ctx)
+	if h.Clipboard && caps["clipboard"] != true {
+		return apierr.New(apierr.CodeInvalidArgument, "节点不支持 QEMU 剪贴板通道", nil)
+	}
 	if h.VideoModel != "" && !includesCapability(caps, "video_models", h.VideoModel) {
 		return apierr.New(apierr.CodeInvalidArgument, "节点不支持所选显卡", nil)
 	}

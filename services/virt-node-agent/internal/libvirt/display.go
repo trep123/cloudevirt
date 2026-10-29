@@ -10,9 +10,10 @@ import (
 )
 
 type DisplayConfig struct {
-	Model  string `json:"model"`
-	Width  int    `json:"width"`
-	Height int    `json:"height"`
+	Clipboard bool   `json:"clipboard"`
+	Model     string `json:"model"`
+	Width     int    `json:"width"`
+	Height    int    `json:"height"`
 }
 
 var videoElement = regexp.MustCompile(`(?s)<video(?:\s[^>]*)?>.*?</video>`)
@@ -21,7 +22,8 @@ var videoModelElement = regexp.MustCompile(`(?s)<model\b[^>]*(?:/>|>.*?</model>)
 func parseDisplay(content string) (DisplayConfig, error) {
 	var root struct {
 		Devices struct {
-			Video []struct {
+			Channels []domainxml.ClipboardChannel `xml:"channel"`
+			Video    []struct {
 				Model struct {
 					Type       string                    `xml:"type,attr"`
 					Resolution domainxml.VideoResolution `xml:"resolution"`
@@ -36,7 +38,13 @@ func parseDisplay(content string) (DisplayConfig, error) {
 		return DisplayConfig{}, apierr.New(apierr.CodeConflict, "仅支持单显卡虚拟机的显示配置", nil)
 	}
 	m := root.Devices.Video[0].Model
-	return DisplayConfig{Model: m.Type, Width: m.Resolution.X, Height: m.Resolution.Y}, nil
+	clipboard := false
+	for _, channel := range root.Devices.Channels {
+		if channel.Type == "qemu-vdagent" && channel.Target.Name == "com.redhat.spice.0" && channel.Source.Clipboard.CopyPaste == "yes" {
+			clipboard = true
+		}
+	}
+	return DisplayConfig{Model: m.Type, Width: m.Resolution.X, Height: m.Resolution.Y, Clipboard: clipboard}, nil
 }
 
 func replaceDisplay(content string, config DisplayConfig) (string, error) {
@@ -66,6 +74,29 @@ func replaceDisplay(content string, config DisplayConfig) (string, error) {
 	}
 	section = section[:m[0]] + string(model) + section[m[1]:]
 	result := content[:loc[0]] + section + content[loc[1]:]
+	channelElement := regexp.MustCompile(`(?s)<channel\b[^>]*>.*?</channel>`)
+	for _, part := range channelElement.FindAllString(result, -1) {
+		var channel domainxml.ClipboardChannel
+		if err := xml.Unmarshal([]byte(part), &channel); err != nil {
+			return "", err
+		}
+		if channel.Target.Name == "com.redhat.spice.0" {
+			if channel.Type != "qemu-vdagent" {
+				return "", apierr.New(apierr.CodeConflict, "现有 SPICE 通道需人工核对，禁止自动替换", nil)
+			}
+			result = strings.Replace(result, part, "", 1)
+		}
+	}
+	if config.Clipboard {
+		channel, err := xml.Marshal(struct {
+			XMLName xml.Name `xml:"channel"`
+			domainxml.ClipboardChannel
+		}{ClipboardChannel: domainxml.NewClipboardChannel()})
+		if err != nil {
+			return "", err
+		}
+		result = strings.Replace(result, "</devices>", string(channel)+"</devices>", 1)
+	}
 	if _, err := parseDisplay(result); err != nil {
 		return "", err
 	}

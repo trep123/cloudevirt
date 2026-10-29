@@ -39,6 +39,10 @@ func displayHandler(deps Dependencies) http.HandlerFunc {
 				fail(apierr.New(apierr.CodeInvalidArgument, "节点不支持此显卡", nil))
 				return
 			}
+			if config.Clipboard && creationCapabilities(deps, r.Context())["clipboard"] != true {
+				fail(apierr.New(apierr.CodeInvalidArgument, "节点不支持剪贴板通道", nil))
+				return
+			}
 			config, err = provider.ConfigureDisplay(r.Context(), name, config)
 		} else {
 			config, err = provider.DomainDisplay(r.Context(), name)

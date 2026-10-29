@@ -9,7 +9,7 @@ import (
 
 func TestDisplayReplacementPreservesUnrelatedXML(t *testing.T) {
 	original := `<domain><name>cv-test</name><metadata><custom value="keep"/></metadata><devices><disk type="file"><source file="/disk.qcow2"/></disk><video><model type="cirrus" vram="16384"/><alias name="video0"/><address type="pci" bus="0x00" slot="0x02"/></video></devices></domain>`
-	want := DisplayConfig{Model: "virtio", Width: 1920, Height: 1080}
+	want := DisplayConfig{Model: "virtio", Width: 1920, Height: 1080, Clipboard: true}
 	result, err := replaceDisplay(original, want)
 	if err != nil {
 		t.Fatal(err)

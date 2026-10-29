@@ -9,6 +9,7 @@ import { SnapshotsPage } from "./features/infrastructure/SnapshotsPage";
 import { SettingsPage } from "./features/infrastructure/SettingsPage";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { VmsPage } from "./features/vms/VmsPage";
+import { VmConsolePage } from "./features/console/VmConsolePage";
 import { StoragePage } from "./features/storage/StoragePage";
 import { NodeDetailPage } from "./features/nodes/NodeDetailPage";
 import { AuditPage } from "./features/audit/AuditPage";
@@ -119,6 +120,8 @@ export default function App() {
   else if (key === "storage-pools" && admin) content = <StoragePoolsPage />;
   else if (key === "snapshots") content = <SnapshotsPage admin={admin} />;
   else if (key === "settings" && admin) content = <SettingsPage />;
+  else if (/^\/(admin|app)\/vms\/\d+\/console$/.test(path))
+    content = <VmConsolePage id={Number(path.split("/")[3])} admin={admin} />;
   else if (key === "vms") content = <VmsPage user={user} path={path} />;
   else if (key === "nodes" && admin)
     content = path.split("/")[3] ? (

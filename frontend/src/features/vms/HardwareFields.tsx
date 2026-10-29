@@ -1,5 +1,6 @@
 import { Field } from "../../components/ui";
 export type HardwareConfig = {
+  clipboard?: boolean;
   video_model?: string;
   video_width?: number;
   video_height?: number;
@@ -16,6 +17,7 @@ export type HardwareConfig = {
   network_mbps?: number;
 };
 export type CreationCapabilities = {
+  clipboard?: boolean;
   video_models?: string[];
   static_networks?: boolean;
   policy?: { vcpu: number; memory_mib: number; disk_gib: number };
@@ -52,6 +54,17 @@ export function HardwareFields({
         模式可能影响迁移兼容性；性能限制不代表物理资源独占。
       </p>
       <div className="infra-form">
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={value.clipboard || false}
+            disabled={locked || !caps?.clipboard}
+            onChange={(e) =>
+              onChange({ ...value, clipboard: e.target.checked })
+            }
+          />
+          启用客体剪贴板通道（需要 spice-vdagent，仅文本）
+        </label>
         <Field label="虚拟机显卡">
           <select
             value={value.video_model || ""}

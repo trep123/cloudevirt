@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../../api";
 import { navigate } from "../../app/router";
 import {
@@ -24,11 +24,6 @@ import {
   RowMenu,
 } from "../../components/ui";
 import { Icon } from "../../components/icons";
-const VncConsole = lazy(() =>
-  import("../../components/VncConsole").then((module) => ({
-    default: module.VncConsole,
-  })),
-);
 import { VmWizard } from "./VmWizard";
 import { DisplayPanel } from "./DisplayPanel";
 import { SnapshotsPage } from "../infrastructure/SnapshotsPage";
@@ -64,7 +59,6 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
     [node, setNode] = useState(""),
     [page, setPage] = useState(1),
     [tab, setTab] = useState("概览"),
-    [consoleOpen, setConsoleOpen] = useState(false),
     [taskId, setTaskId] = useState<string | null>(null),
     [pending, setPending] = useState<{ vm: Instance; action: string } | null>(
       null,
@@ -151,8 +145,7 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
           disabled={!running || active}
           title={!running ? "运行后可打开控制台" : ""}
           onClick={() => {
-            setConsoleOpen(true);
-            navigate(prefix + "/vms/" + vm.id);
+            navigate(prefix + "/vms/" + vm.id + "/console");
           }}
         >
           控制台
@@ -271,7 +264,12 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
             }
           >
             {detail ? (
-              <button className="action" onClick={() => setConsoleOpen(true)}>
+              <button
+                className="action"
+                onClick={() =>
+                  navigate(prefix + "/vms/" + detail.id + "/console")
+                }
+              >
                 <Icon name="console" size={15} />
                 远程控制台
               </button>
@@ -436,28 +434,6 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
                   />
                 )}
               </Card>
-              {consoleOpen ? (
-                <Card
-                  title="远程控制台"
-                  extra={
-                    <button
-                      className="action sm"
-                      onClick={() => setConsoleOpen(false)}
-                    >
-                      关闭控制台
-                    </button>
-                  }
-                >
-                  <Suspense
-                    fallback={<LoadingState text="正在加载远程控制台…" />}
-                  >
-                    <VncConsole
-                      instanceId={detail.id}
-                      desktopAvailable={detail.observed_state === "RUNNING"}
-                    />
-                  </Suspense>
-                </Card>
-              ) : null}
             </>
           ) : (
             <div className="card">
@@ -576,7 +552,6 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
                           <button
                             className="text-link"
                             onClick={() => {
-                              setConsoleOpen(false);
                               navigate(prefix + "/vms/" + vm.id);
                             }}
                           >

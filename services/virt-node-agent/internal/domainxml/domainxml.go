@@ -92,12 +92,13 @@ type osType struct {
 }
 
 type devices struct {
-	Video      *Video        `xml:"video,omitempty"`
-	TPM        *tpmSpec      `xml:"tpm,omitempty"`
-	Disks      []disk        `xml:"disk"`
-	Interfaces []*iface      `xml:"interface,omitempty"`
-	Console    consoleSpec   `xml:"console"`
-	Graphics   *graphicsSpec `xml:"graphics,omitempty"`
+	Channels   []ClipboardChannel `xml:"channel,omitempty"`
+	Video      *Video             `xml:"video,omitempty"`
+	TPM        *tpmSpec           `xml:"tpm,omitempty"`
+	Disks      []disk             `xml:"disk"`
+	Interfaces []*iface           `xml:"interface,omitempty"`
+	Console    consoleSpec        `xml:"console"`
+	Graphics   *graphicsSpec      `xml:"graphics,omitempty"`
 }
 
 type disk struct {
