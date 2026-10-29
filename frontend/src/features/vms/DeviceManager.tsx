@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { api } from "../../api";
 import { TaskProgressDrawer } from "../../components/ConsoleUI";
 import { ErrorBanner, describeError } from "../../components/ui";
@@ -34,6 +34,7 @@ export function DeviceManager({
   admin: boolean;
   section: "compute" | "disks" | "nics";
 }) {
+  const pendingKeys = useRef(new Map<string, string>());
   const [info, setInfo] = useState<Inventory | null>(null),
     [error, setError] = useState<string | null>(null),
     [busy, setBusy] = useState(false),
@@ -95,10 +96,32 @@ export function DeviceManager({
     setBusy(true);
     setError(null);
     try {
+      const storageKey = `cloudvirt-hardware:${vm.id}:${JSON.stringify(payload)}`;
+      let key = pendingKeys.current.get(storageKey);
+      try {
+        key = key || sessionStorage.getItem(storageKey) || undefined;
+      } catch {}
+      if (!key) {
+        key = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) =>
+          b.toString(16).padStart(2, "0"),
+        ).join("");
+      }
+      pendingKeys.current.set(storageKey, key);
+      try {
+        sessionStorage.setItem(storageKey, key);
+      } catch {}
       const result = await api.request<{ task: { id: string } }>(
         `/instances/${vm.id}/hardware`,
-        { method: "POST", body: JSON.stringify(payload) },
+        {
+          method: "POST",
+          headers: { "Idempotency-Key": key },
+          body: JSON.stringify(payload),
+        },
       );
+      pendingKeys.current.delete(storageKey);
+      try {
+        sessionStorage.removeItem(storageKey);
+      } catch {}
       setTask(result.task.id);
     } catch (e) {
       setError(describeError(e));

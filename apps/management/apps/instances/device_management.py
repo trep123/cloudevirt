@@ -3,6 +3,7 @@
 import secrets
 import uuid
 from datetime import timedelta
+import hashlib
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -23,7 +24,7 @@ from apps.networks.models import InstanceNIC, IPLease, Network
 from apps.networks.services import validate_network_for_instance
 from apps.nodes.client import AgentClient
 from apps.nodes.models import Node
-from apps.tasks.models import TaskType
+from apps.tasks.models import Task, TaskType
 from apps.tasks.services import enqueue
 from common.errors import AppError, ErrorCode
 from common.permissions import CanViewInstance, RequiresPasswordChange, check_permission
@@ -109,6 +110,36 @@ class InstanceHardwareView(APIView):
         check_permission(
             request.user, 'instances.change_instance', target_type='instance', target_id=str(pk)
         )
+        serializer = DeviceInput(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = dict(serializer.validated_data)
+        raw_key = request.headers.get('Idempotency-Key', '')
+        if len(raw_key) > 128:
+            raise AppError(ErrorCode.INVALID_ARGUMENT, '幂等键过长')
+        scoped_key = (
+            hashlib.sha256(f'hardware:{request.user.pk}:{pk}:{raw_key}'.encode()).hexdigest()
+            if raw_key
+            else None
+        )
+        if scoped_key:
+            previous = Task.objects.filter(
+                type=TaskType.INSTANCE_HARDWARE,
+                idempotency_key=scoped_key,
+                requested_by=request.user,
+            ).first()
+            if previous:
+                if previous.payload.get('request') != data:
+                    raise AppError(ErrorCode.CONFLICT, '此幂等键已用于其他硬件配置，请先核对原任务')
+                return Response(
+                    {
+                        'task': {
+                            'id': str(previous.pk),
+                            'status': previous.status,
+                            'status_url': f'/api/v1/tasks/{previous.pk}',
+                        }
+                    },
+                    status=202,
+                )
         cold_instance(instance)
         if instance.reservations.filter(status='HELD').exists():
             raise AppError(ErrorCode.CONFLICT, '创建任务仍保留资源，请先核对创建结果')
@@ -119,9 +150,6 @@ class InstanceHardwareView(APIView):
             raise AppError(
                 ErrorCode.CONFLICT, '存在未核对的硬件变更，请先在任务中心核对并重试原任务'
             )
-        serializer = DeviceInput(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        data = dict(serializer.validated_data)
         op = data['operation']
         payload = {'operation': op, 'uuid': str(instance.uuid)}
         meta = {}
@@ -263,7 +291,8 @@ class InstanceHardwareView(APIView):
             resource_type='instance',
             resource_id=str(pk),
             requested_by=request.user,
-            payload={'change': payload, 'metadata': meta},
+            payload={'change': payload, 'metadata': meta, 'request': data},
+            idempotency_key=scoped_key,
             max_attempts=1,
         )
         ResourceReservation.objects.create(

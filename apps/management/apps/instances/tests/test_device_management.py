@@ -11,6 +11,31 @@ from common.errors import AppError, ErrorCode
 
 
 class DeviceManagementTests(TestCase):
+    def test_response_loss_reuses_completed_task_instead_of_allocating_another_disk(self):
+        data = {'operation': 'disk-add', 'size_gib': 2, 'bus': 'virtio'}
+        first = self.client.post(
+            self.url, data, content_type='application/json', HTTP_IDEMPOTENCY_KEY='stable-request'
+        )
+        self.assertEqual(first.status_code, 202, first.content)
+        task = Task.objects.get()
+        task.status = 'SUCCEEDED'
+        task.save(update_fields=['status'])
+        Instance.objects.filter(pk=self.vm.pk).update(observed_state='RUNNING')
+        second = self.client.post(
+            self.url, data, content_type='application/json', HTTP_IDEMPOTENCY_KEY='stable-request'
+        )
+        self.assertEqual(second.status_code, 202, second.content)
+        self.assertEqual(second.json()['task']['id'], first.json()['task']['id'])
+        self.assertEqual(Task.objects.count(), 1)
+        self.assertEqual(self.vm.disks.filter(role='DATA').count(), 1)
+        changed = self.client.post(
+            self.url,
+            {**data, 'size_gib': 3},
+            content_type='application/json',
+            HTTP_IDEMPOTENCY_KEY='stable-request',
+        )
+        self.assertEqual(changed.status_code, 409)
+
     def test_cancel_unstarted_hardware_releases_only_unstarted_resources(self):
         self.assertEqual(self.post(operation='disk-add', size_gib=2, bus='virtio').status_code, 202)
         task = Task.objects.get()
