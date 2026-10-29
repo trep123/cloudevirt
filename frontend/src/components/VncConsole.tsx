@@ -7,15 +7,15 @@ import {
 import { ErrorBanner } from "./ui";
 
 const labels: Record<DesktopState, string> = {
-  idle: "δ����",
-  authorizing: "������Ȩ",
-  connecting: "Э��������",
-  connected: "������ɣ��ȴ�����",
-  rendering: "����ʾ����",
-  reconnecting: "��������",
-  paused: "����ͣ",
-  failed: "����ʧ��",
-  closed: "�ѹر�",
+  idle: "未连接",
+  authorizing: "正在授权",
+  connecting: "协议连接中",
+  connected: "握手完成，等待画面",
+  rendering: "已显示画面",
+  reconnecting: "正在重连",
+  paused: "已暂停",
+  failed: "连接失败",
+  closed: "已关闭",
 };
 export function VncConsole({
   instanceId,
@@ -91,25 +91,25 @@ export function VncConsole({
     });
   }, [profile, scale, viewOnly, desktopAvailable]);
   const value = (number: number | null | undefined, suffix: string) =>
-    number == null ? "��" : number.toFixed(1) + suffix;
+    number == null ? "—" : number.toFixed(1) + suffix;
   return (
     <div className="console-workspace">
       <div className="vnc-toolbar workspace-toolbar">
-        <strong>�����Զ�̿���̨</strong>
+        <strong>虚拟机远程控制台</strong>
       </div>
       <div className="console-panes">
-        <section className="vnc-panel" aria-label="Զ������">
+        <section className="vnc-panel" aria-label="远程桌面">
           <div className="vnc-toolbar">
             <span role="status">
-              {desktopAvailable ? labels[state] : "�����δ���У����治������"}
+              {desktopAvailable ? labels[state] : "虚拟机未运行，桌面不可连接"}
             </span>
-            <span>{captured ? "�����Ѳ���" : "����δ����"}</span>
+            <span>{captured ? "键鼠已捕获" : "键鼠未捕获"}</span>
             <button
               className="action"
               disabled={!desktopAvailable}
               onClick={() => engine.current?.start()}
             >
-              ������Ȩ����
+              重新授权连接
             </button>
             <button
               className="action"
@@ -118,7 +118,7 @@ export function VncConsole({
                 setCaptured(false);
               }}
             >
-              �Ͽ�����
+              断开桌面
             </button>
             <button
               className="action"
@@ -127,7 +127,7 @@ export function VncConsole({
                 setCaptured(false);
               }}
             >
-              Ctrl+Alt �ͷ�
+              Ctrl+Alt 释放
             </button>
             <button
               className="action"
@@ -141,22 +141,22 @@ export function VncConsole({
               onClick={() =>
                 void target.current?.parentElement
                   ?.requestFullscreen()
-                  .catch(() => setMessage("������ܾ�ȫ������"))
+                  .catch(() => setMessage("浏览器拒绝全屏请求"))
               }
             >
-              ����ȫ��
+              桌面全屏
             </button>
           </div>
           <div className="vnc-toolbar">
             <label>
-              ����{" "}
+              画质{" "}
               <select
                 value={profile}
                 onChange={(e) => setProfile(e.target.value)}
               >
-                <option value="balanced">ƽ��</option>
-                <option value="bandwidth">�ʹ���</option>
-                <option value="text">��������</option>
+                <option value="balanced">平衡</option>
+                <option value="bandwidth">低带宽</option>
+                <option value="text">文字清晰</option>
               </select>
             </label>
             <label>
@@ -165,7 +165,7 @@ export function VncConsole({
                 checked={scale}
                 onChange={(e) => setScale(e.target.checked)}
               />
-              ���ػ�������
+              本地画面缩放
             </label>
             <label>
               <input
@@ -173,7 +173,7 @@ export function VncConsole({
                 checked={viewOnly}
                 onChange={(e) => setViewOnly(e.target.checked)}
               />
-              ����ֻ��ģʽ
+              本地只读模式
             </label>
           </div>
           <ErrorBanner message={message} />
@@ -181,26 +181,26 @@ export function VncConsole({
             <div ref={target} className="vnc-screen" tabIndex={0} />
           </div>
           <p className="muted">
-            ʵ�ʻ��棺
+            实际画面：
             {metrics?.width && metrics?.height
-              ? `${metrics.width} �� ${metrics.height}`
-              : "�ȴ�����"}
-            ����������ֻ�ı���ʾ������������Կ���������ʾ�ߴ����ڡ�Ӳ����ҳ���ã�����ֱ��ʿ��ڿ���ϵͳ����ʾ���á���ѡ��
+              ? `${metrics.width} × ${metrics.height}`
+              : "等待画面"}
+            。本地缩放只改变显示比例。虚拟机显卡和启动显示尺寸请在“硬件”页设置；桌面分辨率可在客体系统“显示设置”中选择。
           </p>
           <div className="console-metrics">
-            <span>���� {value(metrics?.handshakeMs, " ms")}</span>
-            <span>�״� Canvas ���� {value(metrics?.firstDrawMs, " ms")}</span>
-            <span>������� {value(metrics?.updatesPerSecond, "/s")}</span>
-            <span>ƽ�����Ƶ��� {value(metrics?.drawMs, " ms")}</span>
+            <span>握手 {value(metrics?.handshakeMs, " ms")}</span>
+            <span>首次 Canvas 绘制 {value(metrics?.firstDrawMs, " ms")}</span>
+            <span>画面更新 {value(metrics?.updatesPerSecond, "/s")}</span>
+            <span>平均绘制调用 {value(metrics?.drawMs, " ms")}</span>
           </div>
           <p className="muted">
-            ������沶�����Ctrl+Alt �ͷš���̨ 30
-            �����ͣ���档���´���Ϊ��Ļˢ�´��������ƺ�ʱ�����������ʱ��
+            点击桌面捕获键鼠，Ctrl+Alt 释放。后台 30
+            秒后暂停桌面。更新次数为屏幕刷新次数，绘制耗时不包含网络耗时。
           </p>
           <details>
-            <summary>�����壨���ֶ����� / ���ƣ�</summary>
+            <summary>剪贴板（仅手动发送 / 复制）</summary>
             <textarea
-              aria-label="���͵���������ı�"
+              aria-label="发送到虚拟机的文本"
               maxLength={65536}
               value={paste}
               onChange={(e) => setPaste(e.target.value)}
@@ -211,10 +211,10 @@ export function VncConsole({
               disabled={!paste || viewOnly}
               onClick={() => engine.current?.paste(paste)}
             >
-              �����ı�
+              发送文本
             </button>
             <textarea
-              aria-label="�����������"
+              aria-label="虚拟机剪贴板"
               value={clipboard}
               readOnly
               rows={2}
@@ -225,10 +225,10 @@ export function VncConsole({
               onClick={() =>
                 void navigator.clipboard
                   ?.writeText(clipboard)
-                  .catch(() => setMessage("����ʧ�ܣ����ֶ�ѡ���ı�"))
+                  .catch(() => setMessage("复制失败，请手动选择文本"))
               }
             >
-              ���Ƶ�����
+              复制到本机
             </button>
           </details>
         </section>

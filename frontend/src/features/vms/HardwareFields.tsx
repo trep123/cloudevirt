@@ -46,13 +46,13 @@ export function HardwareFields({
   const topology = value.sockets !== undefined;
   return (
     <details className="field-wide">
-      <summary>�߼�Ӳ�������ܿ���{locked ? "��ģ����������" : ""}</summary>
+      <summary>高级硬件与性能控制{locked ? "（模板已锁定）" : ""}</summary>
       <p className="muted">
-        ѡ�����ݽڵ�ʵ��������CPU
-        ģʽ����Ӱ��Ǩ�Ƽ����ԣ��������Ʋ�����������Դ��ռ��
+        选项依据节点实际能力。CPU
+        模式可能影响迁移兼容性；性能限制不代表物理资源独占。
       </p>
       <div className="infra-form">
-        <Field label="������Կ�">
+        <Field label="虚拟机显卡">
           <select
             value={value.video_model || ""}
             disabled={locked || !caps?.video_models?.length}
@@ -70,19 +70,19 @@ export function HardwareFields({
               onChange(next);
             }}
           >
-            <option value="">�ڵ�Ĭ�ϣ���׼ VGA��</option>
+            <option value="">节点默认（标准 VGA）</option>
             {caps?.video_models?.map((v) => (
               <option key={v} value={v}>
                 {v === "virtio"
-                  ? "VirtIO GPU�������������"
-                  : "��׼ VGA��64 MiB��"}
+                  ? "VirtIO GPU（需客体驱动）"
+                  : "标准 VGA（64 MiB）"}
               </option>
             ))}
           </select>
         </Field>
         {value.video_model && (
           <>
-            <Field label="������ʾ����">
+            <Field label="启动显示宽度">
               <input
                 type="number"
                 min={640}
@@ -94,7 +94,7 @@ export function HardwareFields({
                 }
               />
             </Field>
-            <Field label="������ʾ�߶�">
+            <Field label="启动显示高度">
               <input
                 type="number"
                 min={480}
@@ -107,12 +107,12 @@ export function HardwareFields({
               />
             </Field>
             <p className="muted field-wide">
-              �ߴ�д�������Կ����ã����������ʹ���Լ�����ʾ���ã�������ǿ������ֱ��ʡ�Linux
-              ���� VirtIO��Windows ���Ӧ������
+              尺寸写入虚拟显卡配置；客体桌面可使用自己的显示设置，不等于强制桌面分辨率。Linux
+              建议 VirtIO，Windows 需对应驱动。
             </p>
           </>
         )}
-        <Field label="CPU ģʽ">
+        <Field label="CPU 模式">
           <select
             value={value.cpu_mode || ""}
             disabled={locked || !caps}
@@ -123,7 +123,7 @@ export function HardwareFields({
               onChange(next);
             }}
           >
-            <option value="">�ڵ�Ĭ��</option>
+            <option value="">节点默认</option>
             {caps?.cpu_modes?.map((mode) => (
               <option key={mode} value={mode}>
                 {mode}
@@ -131,7 +131,7 @@ export function HardwareFields({
             ))}
           </select>
         </Field>
-        <Field label="�̼�">
+        <Field label="固件">
           <select
             value={value.firmware || "bios"}
             disabled={locked || !caps}
@@ -169,14 +169,14 @@ export function HardwareFields({
               onChange(next);
             }}
           />
-          ָ�� CPU ����
+          指定 CPU 拓扑
         </label>
         {topology &&
           (["sockets", "cores", "threads"] as const).map((key) => (
             <Field
               key={key}
               label={
-                { sockets: "���", cores: "ÿ��ۺ���", threads: "ÿ�����߳�" }[
+                { sockets: "插槽", cores: "每插槽核心", threads: "每核心线程" }[
                   key
                 ]
               }
@@ -202,7 +202,7 @@ export function HardwareFields({
               onChange({ ...value, secure_boot: e.target.checked })
             }
           />
-          Secure Boot����Ҫ UEFI �̼�����Կ��
+          Secure Boot（需要 UEFI 固件和密钥）
         </label>
         <label className="check">
           <input
@@ -211,7 +211,7 @@ export function HardwareFields({
             disabled={locked || !caps?.tpm_emulator}
             onChange={(e) => onChange({ ...value, tpm: e.target.checked })}
           />
-          TPM 2.0 ģ����
+          TPM 2.0 模拟器
         </label>
         {isAdmin &&
           caps?.performance_limits &&
@@ -227,10 +227,10 @@ export function HardwareFields({
               key={key}
               label={
                 {
-                  cpu_quota_percent: "CPU ���޶100%=1�ˣ�0=���ޣ�",
-                  disk_read_iops: "ÿ�̶�ȡ IOPS��0=���ޣ�",
-                  disk_write_iops: "ÿ��д�� IOPS��0=���ޣ�",
-                  network_mbps: "ÿ����˫�� Mbit/s��0=���ޣ�OVS �ݲ�֧�֣�",
+                  cpu_quota_percent: "CPU 总限额（100%=1核，0=不限）",
+                  disk_read_iops: "每盘读取 IOPS（0=不限）",
+                  disk_write_iops: "每盘写入 IOPS（0=不限）",
+                  network_mbps: "每网卡双向 Mbit/s（0=不限，OVS 暂不支持）",
                 }[key]
               }
             >

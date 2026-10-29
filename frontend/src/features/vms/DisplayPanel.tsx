@@ -58,12 +58,12 @@ export function DisplayPanel({
       height < 480 ||
       height > 2160
     ) {
-      setError("������ 640��480 �� 3840��2160 �������ߴ�");
+      setError("请输入 640×480 至 3840×2160 的整数尺寸");
       return;
     }
     if (
       !window.confirm(
-        `���Կ�����Ϊ ${model}��������ʾ�ߴ� ${width}��${height}���´�������Ч������ϵͳ����ʹ���Լ�����ʾ���á�VirtIO ��Ҫ����������ȷ�ϱ��棿`,
+        `将显卡配置为 ${model}，启动显示尺寸 ${width}×${height}。下次启动生效，桌面系统可能使用自己的显示设置。VirtIO 需要客体驱动。确认保存？`,
       )
     )
       return;
@@ -83,34 +83,34 @@ export function DisplayPanel({
   };
   return (
     <section>
-      <h3>������Կ���������ʾ�ߴ�</h3>
+      <h3>虚拟机显卡与启动显示尺寸</h3>
       <ErrorBanner message={error} />
       <button
         type="button"
         onClick={() => setRefresh((v) => v + 1)}
         disabled={busy}
       >
-        ˢ���Կ�����
+        刷新显卡配置
       </button>
-      {!info && !error && <p>���ڶ�ȡ�ڵ��Կ����á�</p>}
+      {!info && !error && <p>正在读取节点显卡配置…</p>}
       {info && (
         <>
           <p>
-            ��ǰ���ã�{info.configured.model} ��{" "}
+            当前配置：{info.configured.model} ·{" "}
             {info.configured.width
-              ? `${info.configured.width} �� ${info.configured.height}`
-              : "ϵͳĬ����ʾ�ߴ�"}
+              ? `${info.configured.width} × ${info.configured.height}`
+              : "系统默认显示尺寸"}
           </p>
           <p className="muted">
-            �˴��޸������Ӳ����������ҳ���š��ߴ�ͨ�������Կ��ṩ�����壬����ʵ�ʷֱ������ɲ���ϵͳ������������Linux
-            ���� VirtIO��Windows
-            �л�ǰ�谲װ��Ӧ������������ֶ���������ϵͳ����ʾ���á�ѡ��Ŀ��ֱ��ʣ�noVNC
-            ��ʾʵ������ߴ硣
+            此处修改虚拟机硬件，不是网页缩放。尺寸通过虚拟显卡提供给客体，桌面实际分辨率仍由操作系统和驱动决定。Linux
+            建议 VirtIO；Windows
+            切换前需安装对应驱动。保存后手动启动，在系统“显示设置”选择目标分辨率；noVNC
+            显示实际输出尺寸。
           </p>
           {admin && (
             <div className="infra-form">
               <label>
-                �Կ�
+                显卡
                 <select
                   value={model}
                   disabled={busy || !stopped || !!task}
@@ -118,13 +118,13 @@ export function DisplayPanel({
                 >
                   {info.video_models.map((v) => (
                     <option key={v} value={v}>
-                      {v === "virtio" ? "VirtIO GPU" : "��׼ VGA��64 MiB��"}
+                      {v === "virtio" ? "VirtIO GPU" : "标准 VGA（64 MiB）"}
                     </option>
                   ))}
                 </select>
               </label>
               <label>
-                ���óߴ�
+                常用尺寸
                 <select
                   defaultValue=""
                   disabled={busy || !stopped || !!task}
@@ -136,7 +136,7 @@ export function DisplayPanel({
                     }
                   }}
                 >
-                  <option value="">�Զ��� / ѡ��Ԥ��</option>
+                  <option value="">自定义 / 选择预设</option>
                   {[
                     "1280x720",
                     "1366x768",
@@ -146,13 +146,13 @@ export function DisplayPanel({
                     "3840x2160",
                   ].map((v) => (
                     <option key={v} value={v}>
-                      {v.replace("x", " �� ")}
+                      {v.replace("x", " × ")}
                     </option>
                   ))}
                 </select>
               </label>
               <label>
-                ����
+                宽度
                 <input
                   type="number"
                   min={640}
@@ -163,7 +163,7 @@ export function DisplayPanel({
                 />
               </label>
               <label>
-                �߶�
+                高度
                 <input
                   type="number"
                   min={480}
@@ -183,24 +183,24 @@ export function DisplayPanel({
                 }
                 onClick={() => void save()}
               >
-                {busy ? "�����ύ��" : "�����������ʾ����"}
+                {busy ? "正在提交…" : "保存虚拟机显示配置"}
               </button>
             </div>
           )}
           {!stopped && (
             <p>
-              ���������ر���������ȴ��ڵ�ȷ�Ϻ����޸��Կ����á������Զ��ػ���
+              请先正常关闭虚拟机，等待节点确认后再修改显卡配置。不会自动关机。
             </p>
           )}
         </>
       )}
       {task && (
         <p>
-          �����������ύ����δȷ����ɡ�
+          配置任务已提交，尚未确认完成。
           <button type="button" onClick={() => setShowTask(true)}>
-            �鿴����
+            查看任务
           </button>
-          ���ɹ���ˢ���Կ����á�
+          ；成功后刷新显卡配置。
         </p>
       )}
       {task && showTask && (

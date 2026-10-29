@@ -15,7 +15,7 @@ func displayHandler(deps Dependencies) http.HandlerFunc {
 		name := r.PathValue("name")
 		fail := func(err error) { writeAPIError(w, deps.Logger, err, id) }
 		if !domainxml.ValidName(name) {
-			fail(apierr.New(apierr.CodeInvalidArgument, "������Ч", nil))
+			fail(apierr.New(apierr.CodeInvalidArgument, "域名无效", nil))
 			return
 		}
 		provider, ok := deps.Virtualizer.(interface {
@@ -23,7 +23,7 @@ func displayHandler(deps Dependencies) http.HandlerFunc {
 			ConfigureDisplay(context.Context, string, libvirt.DisplayConfig) (libvirt.DisplayConfig, error)
 		})
 		if !ok {
-			fail(apierr.New(apierr.CodeConflict, "�ڵ�δ�ṩ�Կ���������", nil))
+			fail(apierr.New(apierr.CodeConflict, "节点未提供显卡配置能力", nil))
 			return
 		}
 		var config libvirt.DisplayConfig
@@ -32,11 +32,11 @@ func displayHandler(deps Dependencies) http.HandlerFunc {
 			decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2048))
 			decoder.DisallowUnknownFields()
 			if err = decoder.Decode(&config); err != nil {
-				fail(apierr.New(apierr.CodeInvalidArgument, "��ʾ������Ч", err))
+				fail(apierr.New(apierr.CodeInvalidArgument, "显示配置无效", err))
 				return
 			}
 			if !includesCapability(creationCapabilities(deps, r.Context()), "video_models", config.Model) {
-				fail(apierr.New(apierr.CodeInvalidArgument, "�ڵ㲻֧�ִ��Կ�", nil))
+				fail(apierr.New(apierr.CodeInvalidArgument, "节点不支持此显卡", nil))
 				return
 			}
 			config, err = provider.ConfigureDisplay(r.Context(), name, config)

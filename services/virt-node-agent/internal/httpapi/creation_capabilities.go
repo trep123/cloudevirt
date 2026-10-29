@@ -44,26 +44,26 @@ func checkHardwareCapabilities(deps Dependencies, ctx context.Context, payload c
 	h := payload.Hardware
 	caps := creationCapabilities(deps, ctx)
 	if h.VideoModel != "" && !includesCapability(caps, "video_models", h.VideoModel) {
-		return apierr.New(apierr.CodeInvalidArgument, "�ڵ㲻֧����ѡ�Կ�", nil)
+		return apierr.New(apierr.CodeInvalidArgument, "节点不支持所选显卡", nil)
 	}
 	if payload.Initialization != nil && caps["cloud_init"] != true {
-		return apierr.New(apierr.CodeInvalidArgument, "�ڵ�δ��װ genisoimage���޷����ɳ�ʼ������", nil)
+		return apierr.New(apierr.CodeInvalidArgument, "节点未安装 genisoimage，无法生成初始化介质", nil)
 	}
 	mode := h.CPUMode
 	if mode == "" && (h.Sockets != 0 || h.Cores != 0 || h.Threads != 0) {
 		mode = "host-model"
 	}
 	if mode != "" && !includesCapability(caps, "cpu_modes", mode) {
-		return apierr.New(apierr.CodeInvalidArgument, "�ڵ㲻֧����ѡ CPU ģʽ", nil)
+		return apierr.New(apierr.CodeInvalidArgument, "节点不支持所选 CPU 模式", nil)
 	}
 	if h.Firmware != "" && !includesCapability(caps, "firmware", h.Firmware) {
-		return apierr.New(apierr.CodeInvalidArgument, "�ڵ㲻֧����ѡ�̼�", nil)
+		return apierr.New(apierr.CodeInvalidArgument, "节点不支持所选固件", nil)
 	}
 	if h.SecureBoot && caps["secure_boot"] != true {
-		return apierr.New(apierr.CodeInvalidArgument, "�ڵ�δ��⵽ Secure Boot �̼�", nil)
+		return apierr.New(apierr.CodeInvalidArgument, "节点未检测到 Secure Boot 固件", nil)
 	}
 	if h.TPM && caps["tpm_emulator"] != true {
-		return apierr.New(apierr.CodeInvalidArgument, "�ڵ㲻֧�� TPM ģ����", nil)
+		return apierr.New(apierr.CodeInvalidArgument, "节点不支持 TPM 模拟器", nil)
 	}
 	return nil
 }

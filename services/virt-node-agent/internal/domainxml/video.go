@@ -23,10 +23,10 @@ func BuildVideo(model string, width, height int) (*Video, error) {
 		model = "vga"
 	}
 	if model != "vga" && model != "virtio" {
-		return nil, apierr.New(apierr.CodeInvalidArgument, "��֧�� VGA �� VirtIO �Կ�", nil)
+		return nil, apierr.New(apierr.CodeInvalidArgument, "仅支持 VGA 或 VirtIO 显卡", nil)
 	}
 	if (width != 0 || height != 0) && (width < 640 || width > 3840 || height < 480 || height > 2160) {
-		return nil, apierr.New(apierr.CodeInvalidArgument, "�Կ��ֱ�����Ϊ 640��480 �� 3840��2160", nil)
+		return nil, apierr.New(apierr.CodeInvalidArgument, "显卡分辨率需为 640×480 至 3840×2160", nil)
 	}
 	v := &Video{Model: VideoModel{Type: model, Heads: 1, Primary: "yes"}}
 	if model == "vga" {

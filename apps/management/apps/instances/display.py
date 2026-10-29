@@ -47,16 +47,16 @@ class InstanceDisplayView(APIView):
             instances_for(request.user).select_for_update(of=('self',)), pk=pk
         )
         if not is_admin(request.user):
-            raise AppError(ErrorCode.PERMISSION_DENIED, '�Կ��������ƽ̨����Ա')
+            raise AppError(ErrorCode.PERMISSION_DENIED, '显卡变更仅限平台管理员')
         check_permission(
             request.user, 'instances.change_instance', target_type='instance', target_id=str(pk)
         )
         data = DisplayInput(data=request.data)
         data.is_valid(raise_exception=True)
         if instance.observed_state != 'SHUTOFF' or instance.observed_state_is_stale:
-            raise AppError(ErrorCode.CONFLICT, '���������ر�����������ڵ�ȷ���ѹػ������޸�')
+            raise AppError(ErrorCode.CONFLICT, '请先正常关闭虚拟机，待节点确认已关机后再修改')
         if not instance.node.is_schedulable:
-            raise AppError(ErrorCode.NODE_OFFLINE, '�ڵ㲻����')
+            raise AppError(ErrorCode.NODE_OFFLINE, '节点不可用')
         ensure_no_active_task(instance)
         task = enqueue(
             task_type=TaskType.INSTANCE_DISPLAY,
@@ -97,7 +97,7 @@ def execute_instance_display(task):
             or not task.requested_by.is_active
             or not is_admin(task.requested_by)
         ):
-            raise AppError(ErrorCode.PERMISSION_DENIED, '�����˵��Կ����Ȩ����ʧЧ')
+            raise AppError(ErrorCode.PERMISSION_DENIED, '发起人的显卡变更权限已失效')
         check_permission(
             task.requested_by,
             'instances.change_instance',
@@ -110,7 +110,7 @@ def execute_instance_display(task):
             instance.libvirt_domain_name, dict(data.validated_data)
         )
         if configured != dict(data.validated_data):
-            raise AppError(ErrorCode.OPERATION_FAILED, '�ڵ�δȷ�ϱ���Ŀ���Կ�����')
+            raise AppError(ErrorCode.OPERATION_FAILED, '节点未确认保存目标显卡配置')
     except AppError as exc:
         instance.operation_status = 'FAILED'
         instance.last_error_code, instance.last_error_message = exc.code, exc.message
@@ -146,5 +146,5 @@ def execute_instance_display(task):
     return {
         'configured': configured,
         'guest_mode_confirmed': False,
-        'message': '�Կ������ѱ��棻�´�������Ч������ʵ��ģʽ�ɿ���ϵͳ����',
+        'message': '显卡配置已保存；下次启动生效，桌面实际模式由客体系统决定',
     }

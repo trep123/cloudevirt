@@ -42,14 +42,14 @@ const ACTIVE = [
   "RECONCILING",
 ];
 const TABS = [
-  "����",
-  "���",
-  "Ӳ��",
-  "����",
-  "����",
-  "����",
-  "������־",
-  "Ȩ��",
+  "概览",
+  "监控",
+  "硬件",
+  "磁盘",
+  "网络",
+  "快照",
+  "任务日志",
+  "权限",
 ];
 export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
   const [items, setItems] = useState<Instance[]>([]),
@@ -63,7 +63,7 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
     [status, setStatus] = useState(""),
     [node, setNode] = useState(""),
     [page, setPage] = useState(1),
-    [tab, setTab] = useState("����"),
+    [tab, setTab] = useState("概览"),
     [consoleOpen, setConsoleOpen] = useState(false),
     [taskId, setTaskId] = useState<string | null>(null),
     [pending, setPending] = useState<{ vm: Instance; action: string } | null>(
@@ -149,13 +149,13 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
         <button
           className="action sm"
           disabled={!running || active}
-          title={!running ? "���к�ɴ򿪿���̨" : ""}
+          title={!running ? "运行后可打开控制台" : ""}
           onClick={() => {
             setConsoleOpen(true);
             navigate(prefix + "/vms/" + vm.id);
           }}
         >
-          ����̨
+          控制台
         </button>
         {stopped && can("instances.start_instance") ? (
           <button
@@ -163,7 +163,7 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
             disabled={active || busy}
             onClick={() => setPending({ vm, action: "start" })}
           >
-            ����
+            启动
           </button>
         ) : null}
         {running && can("instances.shutdown_instance") ? (
@@ -172,7 +172,7 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
             disabled={active || busy}
             onClick={() => setPending({ vm, action: "shutdown" })}
           >
-            �����ػ�
+            正常关机
           </button>
         ) : null}
         <RowMenu>
@@ -181,7 +181,7 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
               disabled={active || busy}
               onClick={() => setPending({ vm, action: "reboot" })}
             >
-              ����
+              重启
             </button>
           ) : null}
           {running && can("instances.force_stop_instance") ? (
@@ -190,7 +190,7 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
               disabled={active || busy}
               onClick={() => setPending({ vm, action: "force-stop" })}
             >
-              ǿ�ƹػ�
+              强制关机
             </button>
           ) : null}
           {stopped && can("instances.delete_instance") ? (
@@ -199,18 +199,18 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
               disabled={active || busy}
               onClick={() => setPending({ vm, action: "delete" })}
             >
-              ɾ�����������̣�
+              删除（保留磁盘）
             </button>
           ) : null}
-          <button onClick={() => navigate(prefix + "/tasks")}>�鿴����</button>
+          <button onClick={() => navigate(prefix + "/tasks")}>查看任务</button>
         </RowMenu>
       </div>
     );
   }
   if (rawId && rawId !== "create" && !/^\d+$/.test(rawId)) {
     return (
-      <Card title="404 �� �����������">
-        <p>�����Ȩ��Դ�б�ѡ���������</p>
+      <Card title="404 · 虚拟机不存在">
+        <p>请从授权资源列表选择虚拟机。</p>
       </Card>
     );
   }
@@ -225,18 +225,18 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
         onCancel={() => navigate(prefix + "/vms")}
       />
     ) : (
-      <Card title="��Ȩ����">
-        <p>û�д��������Ȩ�ޡ�</p>
+      <Card title="无权访问">
+        <p>没有创建虚拟机权限。</p>
       </Card>
     );
   const memGb = (mib: number) =>
     mib % 1024 === 0 ? `${mib / 1024} GB` : `${(mib / 1024).toFixed(1)} GB`;
   const STATUS_FILTERS = [
-    { value: "", label: "ȫ��" },
-    { value: "RUNNING", label: "������" },
-    { value: "SHUTOFF", label: "�ѹر�" },
-    { value: "PAUSED", label: "����ͣ" },
-    { value: "CRASHED", label: "�쳣" },
+    { value: "", label: "全部" },
+    { value: "RUNNING", label: "运行中" },
+    { value: "SHUTOFF", label: "已关闭" },
+    { value: "PAUSED", label: "已暂停" },
+    { value: "CRASHED", label: "异常" },
   ];
   return (
     <>
@@ -244,10 +244,10 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
         <>
           <PageHeader
             back={{
-              label: "������б�",
+              label: "虚拟机列表",
               onClick: () => navigate(prefix + "/vms"),
             }}
-            title={detail?.name || "���������"}
+            title={detail?.name || "虚拟机详情"}
             meta={
               detail ? (
                 <StatusBadge
@@ -262,18 +262,18 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
             description={
               detail ? (
                 <>
-                  <span className="mono">{detail.uuid}</span> �� �����ڵ�{" "}
+                  <span className="mono">{detail.uuid}</span> · 所属节点{" "}
                   {detail.node_name}
                 </>
               ) : (
-                "���ڶ�ȡ��Դ"
+                "正在读取资源"
               )
             }
           >
             {detail ? (
               <button className="action" onClick={() => setConsoleOpen(true)}>
                 <Icon name="console" size={15} />
-                Զ�̿���̨
+                远程控制台
               </button>
             ) : null}
             {detail ? actions(detail) : null}
@@ -283,11 +283,11 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
             <>
               <div className="summary-strip">
                 {[
-                  ["cpu", "vCPU", `${detail.vcpu} ��`],
-                  ["memory", "�ڴ�", memGb(detail.memory_mib)],
-                  ["disk", "ϵͳ��", `${detail.disk_gib} GB`],
-                  ["server", "�ڵ�", detail.node_name],
-                  ["image", "����", detail.image_name],
+                  ["cpu", "vCPU", `${detail.vcpu} 核`],
+                  ["memory", "内存", memGb(detail.memory_mib)],
+                  ["disk", "系统盘", `${detail.disk_gib} GB`],
+                  ["server", "节点", detail.node_name],
+                  ["image", "镜像", detail.image_name],
                 ].map(([icon, label, value]) => (
                   <div className="summary-item" key={label}>
                     <Icon name={icon} size={18} />
@@ -300,65 +300,65 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
               </div>
               {detail.observed_state_is_stale ? (
                 <div className="banner banner-info">
-                  �۲������ѹ��� �� ������{" "}
+                  观测数据已过期 · 最后更新{" "}
                   {formatTime(detail.observed_state_updated_at)}
                 </div>
               ) : null}
               <Tabs
-                label="���������"
-                tabs={TABS.filter((t) => admin || t !== "Ȩ��")}
+                label="虚拟机详情"
+                tabs={TABS.filter((t) => admin || t !== "权限")}
                 value={tab}
                 onChange={setTab}
               />
-              <Card title={tab} flush={tab === "����"}>
-                {tab === "����" ? (
+              <Card title={tab} flush={tab === "磁盘"}>
+                {tab === "概览" ? (
                   <>
                     <DescList
                       columns={3}
                       items={[
-                        ["����", detail.name],
+                        ["名称", detail.name],
                         ["UUID", <span className="mono">{detail.uuid}</span>],
                         [
-                          "Libvirt ����",
+                          "Libvirt 域名",
                           <span className="mono">
                             {detail.libvirt_domain_name}
                           </span>,
                         ],
-                        ["�����ڵ�", detail.node_name],
-                        ["����", detail.image_name],
-                        ["����", detail.network_name || "δ����"],
+                        ["所属节点", detail.node_name],
+                        ["镜像", detail.image_name],
+                        ["网络", detail.network_name || "未接入"],
                         [
-                          "����״̬",
+                          "期望状态",
                           <StatusBadge status={detail.desired_state} />,
                         ],
                         [
-                          "�۲�״̬",
+                          "观测状态",
                           <StatusBadge status={detail.observed_state} />,
                         ],
-                        ["��������", detail.autostart ? "��" : "��"],
+                        ["开机自启", detail.autostart ? "是" : "否"],
                         [
-                          "����۲�",
+                          "最近观测",
                           formatTime(detail.observed_state_updated_at),
                         ],
-                        ["����ʱ��", formatTime(detail.created_at)],
-                        ["����ʱ��", formatTime(detail.updated_at)],
+                        ["创建时间", formatTime(detail.created_at)],
+                        ["更新时间", formatTime(detail.updated_at)],
                       ]}
                     />
                     {detail.last_error_message ? (
                       <p role="alert" className="inline-alert">
                         <Icon name="alert" size={15} />
-                        {detail.last_error_code}��{detail.last_error_message}
+                        {detail.last_error_code}：{detail.last_error_message}
                       </p>
                     ) : null}
                   </>
-                ) : tab === "Ӳ��" ? (
+                ) : tab === "硬件" ? (
                   <>
                     <DescList
                       columns={2}
                       items={[
-                        ["������", `${detail.vcpu} ��`],
-                        ["�ڴ�", memGb(detail.memory_mib)],
-                        ["ϵͳ��", `${detail.disk_gib} GB �� qcow2`],
+                        ["处理器", `${detail.vcpu} 核`],
+                        ["内存", memGb(detail.memory_mib)],
+                        ["系统盘", `${detail.disk_gib} GB · qcow2`],
                       ]}
                     />
                     <DisplayPanel
@@ -370,17 +370,17 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
                       }
                     />
                   </>
-                ) : tab === "����" ? (
+                ) : tab === "磁盘" ? (
                   detail.disks.length ? (
                     <div className="table-scroll">
                       <table className="data-table">
                         <thead>
                           <tr>
-                            <th>����</th>
-                            <th>��ɫ</th>
-                            <th className="num">����</th>
-                            <th>״̬</th>
-                            <th>�豸</th>
+                            <th>名称</th>
+                            <th>角色</th>
+                            <th className="num">容量</th>
+                            <th>状态</th>
+                            <th>设备</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -399,57 +399,57 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
                       </table>
                     </div>
                   ) : (
-                    <EmptyState title="���޴���" icon="disk" />
+                    <EmptyState title="暂无磁盘" icon="disk" />
                   )
-                ) : tab === "����" ? (
+                ) : tab === "网络" ? (
                   <DescList
                     columns={2}
                     items={[
-                      ["�ѵǼ�����", detail.network_name || "δ����"],
-                      ["˵��", "ʵ���������ӿ������������в鿴��"],
+                      ["已登记网络", detail.network_name || "未接入"],
+                      ["说明", "实际网卡连接可在网络拓扑中查看。"],
                     ]}
                   />
-                ) : tab === "����" ? (
+                ) : tab === "快照" ? (
                   <SnapshotsPage
                     admin={user.console_scope === "admin"}
                     instance={detail}
                   />
-                ) : tab === "������־" ? (
+                ) : tab === "任务日志" ? (
                   <EmptyState
                     icon="task"
-                    title="������־����������ͳһ�鿴"
-                    description="������������Ĵ�������ͣ��ɾ�����첽�����¼���"
+                    title="任务日志在任务中心统一查看"
+                    description="包含该虚拟机的创建、启停、删除等异步任务及事件。"
                     action={
                       <button
                         className="action"
                         onClick={() => navigate(prefix + "/tasks")}
                       >
-                        ����Ȩ��������
+                        打开授权任务中心
                       </button>
                     }
                   />
                 ) : (
                   <EmptyState
-                    icon={tab === "���" ? "trend" : "info"}
-                    title={`����${tab}����`}
-                    description="��ǰ�����δ�ṩ��������"
+                    icon={tab === "监控" ? "trend" : "info"}
+                    title={`暂无${tab}数据`}
+                    description="当前后端尚未提供此能力。"
                   />
                 )}
               </Card>
               {consoleOpen ? (
                 <Card
-                  title="Զ�̿���̨"
+                  title="远程控制台"
                   extra={
                     <button
                       className="action sm"
                       onClick={() => setConsoleOpen(false)}
                     >
-                      �رտ���̨
+                      关闭控制台
                     </button>
                   }
                 >
                   <Suspense
-                    fallback={<LoadingState text="���ڼ���Զ�̿���̨��" />}
+                    fallback={<LoadingState text="正在加载远程控制台…" />}
                   >
                     <VncConsole
                       instanceId={detail.id}
@@ -462,10 +462,10 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
           ) : (
             <div className="card">
               {loading ? (
-                <LoadingState text="���ڶ�ȡ�������" />
+                <LoadingState text="正在读取虚拟机…" />
               ) : (
                 <EmptyState
-                  title={error ? "�޷���ȡ����Դ" : "��Դ�����ڻ���Ȩ����"}
+                  title={error ? "无法读取该资源" : "资源不存在或无权访问"}
                 />
               )}
             </div>
@@ -474,12 +474,12 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
       ) : (
         <>
           <PageHeader
-            title={admin ? "�����" : "�ҵ������"}
-            description="������Ȩ��Χ�ڵ�ʵ������Դ״̬�Է���˹۲���Ϊ׼"
+            title={admin ? "虚拟机" : "我的虚拟机"}
+            description="管理授权范围内的实例，资源状态以服务端观测结果为准"
           >
             <button className="action" onClick={() => setRefresh((v) => v + 1)}>
               <Icon name="refresh" size={15} />
-              ˢ��
+              刷新
             </button>
             {can("instances.add_instance") ? (
               <button
@@ -487,7 +487,7 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
                 onClick={() => navigate(prefix + "/vms/create")}
               >
                 <Icon name="plus" size={15} />
-                ���������
+                创建虚拟机
               </button>
             ) : null}
           </PageHeader>
@@ -504,23 +504,23 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
                     setPage(1);
                   }}
                 >
-                  ����
+                  重置
                 </button>
               ) : null
             }
           >
             <SearchInput
-              label="��������"
+              label="搜索名称"
               value={search}
               onChange={(v) => {
                 setSearch(v);
                 setPage(1);
               }}
-              placeholder="���ƻ� UUID"
+              placeholder="名称或 UUID"
               width={260}
             />
             <Segmented
-              label="����״̬"
+              label="运行状态"
               value={status}
               options={STATUS_FILTERS}
               onChange={(v) => {
@@ -529,27 +529,27 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
               }}
             />
             <input
-              aria-label="�ڵ� ID"
+              aria-label="节点 ID"
               className="input-narrow"
               value={node}
               onChange={(e) => {
                 setNode(e.target.value);
                 setPage(1);
               }}
-              placeholder="�ڵ� ID��ȫ����"
+              placeholder="节点 ID（全部）"
               inputMode="numeric"
             />
           </Toolbar>
           <Card
             flush
-            title="������б�"
-            description={`�� ${total} ̨ʵ��`}
+            title="虚拟机列表"
+            description={`共 ${total} 台实例`}
             footer={
               <Pagination
                 page={page}
                 pageSize={20}
                 total={total}
-                unit="̨"
+                unit="台"
                 onChange={setPage}
               />
             }
@@ -558,14 +558,14 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
               <table className="data-table vm-table">
                 <thead>
                   <tr>
-                    <th>����</th>
-                    <th>״̬</th>
-                    <th>�ڵ�</th>
-                    <th>���</th>
-                    <th className="col-image">����</th>
-                    <th>IP ��ַ</th>
-                    <th>����ʱ��</th>
-                    <th className="col-actions">����</th>
+                    <th>名称</th>
+                    <th>状态</th>
+                    <th>节点</th>
+                    <th>规格</th>
+                    <th className="col-image">镜像</th>
+                    <th>IP 地址</th>
+                    <th>创建时间</th>
+                    <th className="col-actions">操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -599,21 +599,21 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
                             />
                           </span>
                           {vm.observed_state_is_stale ? (
-                            <small className="stale-label">�����ѹ���</small>
+                            <small className="stale-label">数据已过期</small>
                           ) : null}
                         </div>
                       </td>
                       <td>{vm.node_name}</td>
                       <td className="spec-text">
-                        {vm.vcpu} vCPU �� {memGb(vm.memory_mib)}
+                        {vm.vcpu} vCPU · {memGb(vm.memory_mib)}
                       </td>
                       <td className="col-image">
                         <span className="truncate muted" title={vm.image_name}>
                           {vm.image_name}
                         </span>
                       </td>
-                      <td className="muted" title="IP ��ַ��δ����">
-                        ��
+                      <td className="muted" title="IP 地址尚未缓存">
+                        —
                       </td>
                       <td>
                         <span className="mono time-text">
@@ -627,13 +627,13 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
               </table>
             </div>
             {loading && !items.length ? (
-              <LoadingState text="���ڶ�ȡ�������" />
+              <LoadingState text="正在读取虚拟机…" />
             ) : null}
             {!loading && !items.length ? (
               <EmptyState
                 icon="vm"
-                title="���޷��������������"
-                description="����ɸѡ�������򴴽�һ̨�µ��������"
+                title="暂无符合条件的虚拟机"
+                description="调整筛选条件，或创建一台新的虚拟机。"
               />
             ) : null}
           </Card>
@@ -645,20 +645,20 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
           operation={
             (
               {
-                start: "����",
-                shutdown: "�����ػ�",
-                reboot: "����",
-                "force-stop": "ǿ�ƹػ�",
-                delete: "ɾ��ʵ��",
+                start: "启动",
+                shutdown: "正常关机",
+                reboot: "重启",
+                "force-stop": "强制关机",
+                delete: "删除实例",
               } as Record<string, string>
             )[pending.action]
           }
           description={
             pending.action === "force-stop"
-              ? "�˲�����ͬ�ϵ磬δ��������ݿ��ܶ�ʧ��"
+              ? "此操作等同断电，未保存的数据可能丢失。"
               : pending.action === "delete"
-                ? "ͨ���������ɾ�� libvirt ʵ�������������ļ����������ݾ��к˶ԡ�"
-                : "�������ύΪ�첽��������״̬�Խڵ�۲���Ϊ׼��"
+                ? "通过后端任务删除 libvirt 实例并保留磁盘文件，可在数据卷中核对。"
+                : "操作将提交为异步任务，最终状态以节点观测结果为准。"
           }
           busy={busy}
           error={error}

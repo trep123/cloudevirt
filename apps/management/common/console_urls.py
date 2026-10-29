@@ -24,7 +24,7 @@ class ConsoleBoundaryMixin:
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
         if is_admin(request.user) != self.admin_scope:
-            raise AppError(ErrorCode.PERMISSION_DENIED, '�˺Ų����ڴ˿���̨����Ȩ��Χ')
+            raise AppError(ErrorCode.PERMISSION_DENIED, '账号不属于此控制台的授权范围')
 
 
 ROUTES = [

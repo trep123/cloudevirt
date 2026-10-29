@@ -1,7 +1,7 @@
-"""�첽����ģ����״̬�ֵ䡣
+"""异步任务模型与状态字典。
 
-������ API ��ӣ��ɶ��� worker ԭ����ȡ��ִ�У�
-ͬһ��Դ��ͬһʱ��ֻ��������һ��δ��̬����
+任务由 API 入队，由独立 worker 原子领取并执行；
+同一资源在同一时刻只允许存在一个未终态任务。
 """
 
 import uuid
@@ -11,39 +11,39 @@ from django.db import models
 
 
 class TaskStatus(models.TextChoices):
-    """����״̬��"""
+    """任务状态。"""
 
-    PENDING = 'PENDING', '�ȴ�ִ��'
-    VALIDATING = 'VALIDATING', 'У����'
-    PREPARING = 'PREPARING', '׼����'
-    CREATING = 'CREATING', '������'
-    VERIFYING = 'VERIFYING', 'У������'
-    SUCCEEDED = 'SUCCEEDED', '�ɹ�'
-    FAILED = 'FAILED', 'ʧ��'
-    CANCELLED = 'CANCELLED', '��ȡ��'
-    RECONCILING = 'RECONCILING', '������'
+    PENDING = 'PENDING', '等待执行'
+    VALIDATING = 'VALIDATING', '校验中'
+    PREPARING = 'PREPARING', '准备中'
+    CREATING = 'CREATING', '创建中'
+    VERIFYING = 'VERIFYING', '校验结果中'
+    SUCCEEDED = 'SUCCEEDED', '成功'
+    FAILED = 'FAILED', '失败'
+    CANCELLED = 'CANCELLED', '已取消'
+    RECONCILING = 'RECONCILING', '对账中'
 
 
 class TaskType(models.TextChoices):
-    """�������͡�"""
+    """任务类型。"""
 
-    NODE_REFRESH = 'NODE_REFRESH', 'ˢ�½ڵ���Դ'
-    ACCOUNT_BATCH = 'ACCOUNT_BATCH', '�û����뵼��'
-    INSTANCE_CREATE = 'INSTANCE_CREATE', '���������'
-    INSTANCE_DISPLAY = 'INSTANCE_DISPLAY', '�޸��������ʾ����'
-    INSTANCE_START = 'INSTANCE_START', '���������'
-    INSTANCE_SHUTDOWN = 'INSTANCE_SHUTDOWN', '�ر������'
-    INSTANCE_FORCE_STOP = 'INSTANCE_FORCE_STOP', 'ǿ��ֹͣ�����'
-    INSTANCE_REBOOT = 'INSTANCE_REBOOT', '���������'
-    INSTANCE_DELETE = 'INSTANCE_DELETE', 'ɾ�������'
-    IMAGE_IMPORT = 'IMAGE_IMPORT', '���뾵��'
-    IMAGE_DELETE = 'IMAGE_DELETE', 'ɾ������'
-    RECONCILE = 'RECONCILE', '״̬����'
-    STORAGE_POOL_CREATE = 'STORAGE_POOL_CREATE', '�����洢��'
-    INSTANCE_SNAPSHOT = 'INSTANCE_SNAPSHOT', '���������'
+    NODE_REFRESH = 'NODE_REFRESH', '刷新节点资源'
+    ACCOUNT_BATCH = 'ACCOUNT_BATCH', '用户导入导出'
+    INSTANCE_CREATE = 'INSTANCE_CREATE', '创建虚拟机'
+    INSTANCE_DISPLAY = 'INSTANCE_DISPLAY', '修改虚拟机显示配置'
+    INSTANCE_START = 'INSTANCE_START', '启动虚拟机'
+    INSTANCE_SHUTDOWN = 'INSTANCE_SHUTDOWN', '关闭虚拟机'
+    INSTANCE_FORCE_STOP = 'INSTANCE_FORCE_STOP', '强制停止虚拟机'
+    INSTANCE_REBOOT = 'INSTANCE_REBOOT', '重启虚拟机'
+    INSTANCE_DELETE = 'INSTANCE_DELETE', '删除虚拟机'
+    IMAGE_IMPORT = 'IMAGE_IMPORT', '导入镜像'
+    IMAGE_DELETE = 'IMAGE_DELETE', '删除镜像'
+    RECONCILE = 'RECONCILE', '状态对账'
+    STORAGE_POOL_CREATE = 'STORAGE_POOL_CREATE', '创建存储池'
+    INSTANCE_SNAPSHOT = 'INSTANCE_SNAPSHOT', '虚拟机快照'
 
 
-# δ��̬���ɱ�ִ�С����뻥���ж����ݵ�ΨһԼ��
+# 未终态：可被执行、参与互斥判断与幂等唯一约束
 ACTIVE_STATUSES = frozenset(
     {
         TaskStatus.PENDING,
@@ -55,7 +55,7 @@ ACTIVE_STATUSES = frozenset(
     }
 )
 
-# ��̬�����ٱ��
+# 终态：不再变更
 TERMINAL_STATUSES = frozenset(
     {
         TaskStatus.SUCCEEDED,
@@ -64,7 +64,7 @@ TERMINAL_STATUSES = frozenset(
     }
 )
 
-# �ɻָ������������޴�����
+# 可恢复错误：允许有限次重试
 RETRYABLE_ERROR_CODES = frozenset(
     {
         'NODE_OFFLINE',
@@ -75,50 +75,50 @@ RETRYABLE_ERROR_CODES = frozenset(
 
 
 class Task(models.Model):
-    """�첽����"""
+    """异步任务。"""
 
-    id = models.UUIDField('���� ID', primary_key=True, default=uuid.uuid4, editable=False)
-    type = models.CharField('����', max_length=32, choices=TaskType.choices)
+    id = models.UUIDField('任务 ID', primary_key=True, default=uuid.uuid4, editable=False)
+    type = models.CharField('类型', max_length=32, choices=TaskType.choices)
     status = models.CharField(
-        '״̬', max_length=16, choices=TaskStatus.choices, default=TaskStatus.PENDING
+        '状态', max_length=16, choices=TaskStatus.choices, default=TaskStatus.PENDING
     )
-    resource_type = models.CharField('��Դ����', max_length=32)
-    resource_id = models.CharField('��Դ��ʶ', max_length=64)
+    resource_type = models.CharField('资源类型', max_length=32)
+    resource_id = models.CharField('资源标识', max_length=64)
     requested_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name='tasks',
-        verbose_name='������',
+        verbose_name='发起人',
     )
-    idempotency_key = models.CharField('�ݵȼ�', max_length=64, blank=True, default='')
-    payload = models.JSONField('�������', default=dict, blank=True)
-    result = models.JSONField('ִ�н��', null=True, blank=True)
+    idempotency_key = models.CharField('幂等键', max_length=64, blank=True, default='')
+    payload = models.JSONField('请求快照', default=dict, blank=True)
+    result = models.JSONField('执行结果', null=True, blank=True)
 
-    attempt_count = models.PositiveIntegerField('�ѳ��Դ���', default=0)
-    max_attempts = models.PositiveIntegerField('����Դ���', default=3)
-    next_retry_at = models.DateTimeField('�´�����ʱ��', null=True, blank=True)
-    locked_at = models.DateTimeField('��ȡʱ��', null=True, blank=True)
-    locked_by = models.CharField('��ȡ��', max_length=64, blank=True, default='')
+    attempt_count = models.PositiveIntegerField('已尝试次数', default=0)
+    max_attempts = models.PositiveIntegerField('最大尝试次数', default=3)
+    next_retry_at = models.DateTimeField('下次重试时间', null=True, blank=True)
+    locked_at = models.DateTimeField('领取时间', null=True, blank=True)
+    locked_by = models.CharField('领取者', max_length=64, blank=True, default='')
 
-    started_at = models.DateTimeField('��ʼʱ��', null=True, blank=True)
-    finished_at = models.DateTimeField('����ʱ��', null=True, blank=True)
-    last_error_code = models.CharField('���������', max_length=64, blank=True, default='')
-    last_error_message = models.TextField('���������Ϣ', blank=True, default='')
+    started_at = models.DateTimeField('开始时间', null=True, blank=True)
+    finished_at = models.DateTimeField('结束时间', null=True, blank=True)
+    last_error_code = models.CharField('最近错误码', max_length=64, blank=True, default='')
+    last_error_message = models.TextField('最近错误信息', blank=True, default='')
     parent_task = models.ForeignKey(
-        'self', on_delete=models.SET_NULL, null=True, blank=True, verbose_name='������'
+        'self', on_delete=models.SET_NULL, null=True, blank=True, verbose_name='父任务'
     )
-    created_at = models.DateTimeField('����ʱ��', auto_now_add=True)
-    updated_at = models.DateTimeField('����ʱ��', auto_now=True)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
 
     class Meta:
-        verbose_name = '����'
-        verbose_name_plural = '����'
+        verbose_name = '任务'
+        verbose_name_plural = '任务'
         ordering = ['-created_at']
         permissions = [
-            ('cancel_task', '����ȡ��δ��ʼ������'),
-            ('retry_task', '��������ʧ�ܵ�����'),
+            ('cancel_task', '可以取消未开始的任务'),
+            ('retry_task', '可以重试失败的任务'),
         ]
         indexes = [
             models.Index(fields=['status', 'next_retry_at']),
@@ -140,33 +140,33 @@ class Task(models.Model):
         ]
 
     def __str__(self) -> str:
-        """���ؿɶ���ʶ��"""
+        """返回可读标识。"""
         return f'{self.type}:{self.resource_id} {self.status}'
 
     @property
     def is_active(self) -> bool:
-        """�Ƿ���δ��̬��"""
+        """是否处于未终态。"""
         return self.status in ACTIVE_STATUSES
 
 
 class TaskEvent(models.Model):
-    """�����¼���ˮ������׷�ٳ�����״̬Ǩ�ơ�"""
+    """任务事件流水，用于追踪尝试与状态迁移。"""
 
     task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='events')
-    attempt = models.PositiveIntegerField('�������', default=0)
-    from_status = models.CharField('ԭ״̬', max_length=16, blank=True, default='')
-    to_status = models.CharField('��״̬', max_length=16, blank=True, default='')
-    level = models.CharField('����', max_length=16, default='INFO')
-    error_code = models.CharField('������', max_length=64, blank=True, default='')
-    message = models.TextField('˵��', blank=True, default='')
-    created_at = models.DateTimeField('����ʱ��', auto_now_add=True)
+    attempt = models.PositiveIntegerField('尝试序号', default=0)
+    from_status = models.CharField('原状态', max_length=16, blank=True, default='')
+    to_status = models.CharField('新状态', max_length=16, blank=True, default='')
+    level = models.CharField('级别', max_length=16, default='INFO')
+    error_code = models.CharField('错误码', max_length=64, blank=True, default='')
+    message = models.TextField('说明', blank=True, default='')
+    created_at = models.DateTimeField('发生时间', auto_now_add=True)
 
     class Meta:
-        verbose_name = '�����¼�'
-        verbose_name_plural = '�����¼�'
+        verbose_name = '任务事件'
+        verbose_name_plural = '任务事件'
         ordering = ['created_at']
         indexes = [models.Index(fields=['task', 'created_at'])]
 
     def __str__(self) -> str:
-        """���ؿɶ���ʶ��"""
+        """返回可读标识。"""
         return f'{self.task_id} {self.from_status}->{self.to_status} {self.level}'

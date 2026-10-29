@@ -76,11 +76,11 @@ func ApplyHardware(payload *domain, spec Spec) error {
 	}
 	payload.Devices.Video = video
 	if h.CPUMode != "" && h.CPUMode != "host-model" && h.CPUMode != "host-passthrough" {
-		return apierr.New(apierr.CodeInvalidArgument, "CPU ģʽ����֧��", nil)
+		return apierr.New(apierr.CodeInvalidArgument, "CPU 模式不受支持", nil)
 	}
 	topology := h.Sockets != 0 || h.Cores != 0 || h.Threads != 0
 	if topology && (h.Sockets < 1 || h.Sockets > 128 || h.Cores < 1 || h.Cores > 128 || h.Threads < 1 || h.Threads > 128 || h.Sockets*h.Cores*h.Threads != spec.VCPU) {
-		return apierr.New(apierr.CodeInvalidArgument, "CPU ������ vCPU ��һ��", nil)
+		return apierr.New(apierr.CodeInvalidArgument, "CPU 拓扑与 vCPU 不一致", nil)
 	}
 	if h.CPUMode != "" || topology {
 		mode := h.CPUMode
@@ -93,10 +93,10 @@ func ApplyHardware(payload *domain, spec Spec) error {
 		}
 	}
 	if h.Firmware != "" && h.Firmware != "bios" && h.Firmware != "uefi" {
-		return apierr.New(apierr.CodeInvalidArgument, "�̼�������Ч", nil)
+		return apierr.New(apierr.CodeInvalidArgument, "固件类型无效", nil)
 	}
 	if h.SecureBoot && h.Firmware != "uefi" {
-		return apierr.New(apierr.CodeInvalidArgument, "Secure Boot ��Ҫ UEFI", nil)
+		return apierr.New(apierr.CodeInvalidArgument, "Secure Boot 需要 UEFI", nil)
 	}
 	if h.Firmware == "uefi" {
 		payload.Features = &featuresSpec{ACPI: &struct{}{}, APIC: &struct{}{}}
@@ -111,7 +111,7 @@ func ApplyHardware(payload *domain, spec Spec) error {
 		payload.Devices.TPM = &tpmSpec{Model: "tpm-crb", Backend: tpmBackend{Type: "emulator", Version: "2.0"}}
 	}
 	if h.CPUQuotaPercent < 0 || h.CPUQuotaPercent > spec.VCPU*100 || h.DiskReadIOPS < 0 || h.DiskReadIOPS > 1000000 || h.DiskWriteIOPS < 0 || h.DiskWriteIOPS > 1000000 || h.NetworkMbps < 0 || h.NetworkMbps > 100000 {
-		return apierr.New(apierr.CodeInvalidArgument, "�������Ʋ���������Χ", nil)
+		return apierr.New(apierr.CodeInvalidArgument, "性能限制参数超出范围", nil)
 	}
 	if h.CPUQuotaPercent > 0 {
 		payload.CPUTune = &cpuTune{Period: 100000, Quota: h.CPUQuotaPercent * 1000}
@@ -123,7 +123,7 @@ func ApplyHardware(payload *domain, spec Spec) error {
 	}
 	if h.NetworkMbps > 0 {
 		if spec.NetworkType == "OVS" {
-			return apierr.New(apierr.CodeInvalidArgument, "OVS ��������� QoS ʵ��", nil)
+			return apierr.New(apierr.CodeInvalidArgument, "OVS 限速需独立 QoS 实现", nil)
 		}
 		for _, nic := range payload.Devices.Interfaces {
 			if nic != nil {
