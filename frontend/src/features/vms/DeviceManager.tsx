@@ -1,7 +1,11 @@
 import { useEffect, useState, useRef } from "react";
 import { api } from "../../api";
-import { TaskProgressDrawer } from "../../components/ConsoleUI";
+import {
+  TaskProgressDrawer,
+  ConfirmOperationModal,
+} from "../../components/ConsoleUI";
 import { ErrorBanner, describeError } from "../../components/ui";
+import { Icon } from "../../components/icons";
 import type { Instance, Network } from "../../types";
 type Disk = {
   target: string;
@@ -35,6 +39,12 @@ export function DeviceManager({
   section: "compute" | "disks" | "nics";
 }) {
   const pendingKeys = useRef(new Map<string, string>());
+  const [confirmation, setConfirmation] = useState<{
+      payload: Record<string, unknown>;
+      description: string;
+      minimum?: number;
+    } | null>(null),
+    [resizeSize, setResizeSize] = useState(0);
   const [info, setInfo] = useState<Inventory | null>(null),
     [error, setError] = useState<string | null>(null),
     [busy, setBusy] = useState(false),
@@ -85,14 +95,17 @@ export function DeviceManager({
       alive = false;
     };
   }, [admin, section]);
-  async function submit(payload: Record<string, unknown>, description: string) {
+  async function submit(
+    payload: Record<string, unknown>,
+    description: string,
+    confirmed = false,
+  ) {
     if (locked) return;
-    if (
-      !window.confirm(
-        `${vm.name}：${description}\n变更只应用于已关机实例；下次启动生效。磁盘卸载保留文件，扩容后还需在客体扩展文件系统。确认执行？`,
-      )
-    )
+    if (!confirmed) {
+      setError(null);
+      setConfirmation({ payload, description });
       return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -123,6 +136,7 @@ export function DeviceManager({
         sessionStorage.removeItem(storageKey);
       } catch {}
       setTask(result.task.id);
+      setConfirmation(null);
     } catch (e) {
       setError(describeError(e));
     } finally {
@@ -130,35 +144,118 @@ export function DeviceManager({
     }
   }
   return (
-    <section>
-      <h3>
-        {
-          {
-            compute: "CPU 与内存变更",
-            disks: "磁盘设备管理",
-            nics: "网卡设备管理",
-          }[section]
-        }
-      </h3>
+    <section className={`device-manager device-${section}`}>
+      <header className="hardware-panel-head">
+        <div className="hardware-title">
+          <span className="hardware-icon">
+            <Icon
+              name={{ compute: "cpu", disks: "disk", nics: "network" }[section]}
+              size={20}
+            />
+          </span>
+          <div>
+            <h3>
+              {
+                {
+                  compute: "CPU 与内存变更",
+                  disks: "磁盘设备管理",
+                  nics: "网卡设备管理",
+                }[section]
+              }
+            </h3>
+            <p>
+              {
+                {
+                  compute: "调整计算规格，变更将在下次启动时生效。",
+                  disks: "管理实例存储设备，保留清晰的数据边界。",
+                  nics: "连接受控业务网络，查看每一张网卡的配置。",
+                }[section]
+              }
+            </p>
+          </div>
+        </div>
+        <div className="hardware-head-actions">
+          <span className={`hardware-permission ${admin ? "is-admin" : ""}`}>
+            <Icon name="key" size={13} />
+            {admin ? "管理员管理" : "只读访问"}
+          </span>
+          <button
+            className="action sm"
+            onClick={() => setRevision((v) => v + 1)}
+            disabled={busy}
+          >
+            <Icon name="refresh" size={14} />
+            刷新
+          </button>
+        </div>
+      </header>
       <ErrorBanner message={error} />
-      <button
-        className="action sm"
-        onClick={() => setRevision((v) => v + 1)}
-        disabled={busy}
-      >
-        刷新节点配置
-      </button>
       {!info && !error && <p>正在读取节点实际硬件…</p>}
       {admin && !stopped && (
-        <p className="muted">
-          请先正常关闭虚拟机，待节点确认后操作。不会自动关机。
-        </p>
+        <div className="hardware-notice">
+          <Icon name="info" size={16} />
+          <div>
+            <strong>
+              {vm.observed_state === "RUNNING"
+                ? "运行中 · 硬件变更暂不可用"
+                : "状态待确认 · 硬件变更暂不可用"}
+            </strong>
+            <span>请先正常关闭虚拟机，等待节点确认。平台不会自动关机。</span>
+          </div>
+        </div>
+      )}
+      {info && section !== "compute" && (
+        <div className="hardware-kpis">
+          <div>
+            <span>{section === "disks" ? "已挂载磁盘" : "已连接网卡"}</span>
+            <strong>
+              {section === "disks" ? info.disks.length : info.nics.length}
+              <small> 个</small>
+            </strong>
+          </div>
+          <div>
+            <span>{section === "disks" ? "虚拟容量合计" : "关联网络"}</span>
+            <strong>
+              {section === "disks"
+                ? Math.round(
+                    info.disks.reduce((n, d) => n + d.size_bytes, 0) /
+                      1024 ** 3,
+                  )
+                : new Set(info.nics.map((n) => n.source)).size}
+              <small>{section === "disks" ? " GiB" : " 个"}</small>
+            </strong>
+          </div>
+          <div>
+            <span>{section === "disks" ? "保留磁盘" : "变更方式"}</span>
+            <strong>
+              {section === "disks" ? info.retained_disks.length : "关机配置"}
+              <small>{section === "disks" ? " 个" : ""}</small>
+            </strong>
+          </div>
+        </div>
       )}
       {info && section === "compute" && (
         <>
-          <p>
-            节点配置：{info.vcpu} vCPU · {info.memory_mib} MiB 内存
-          </p>
+          <div className="hardware-kpis">
+            <div>
+              <span>当前处理器</span>
+              <strong>
+                {info.vcpu}
+                <small> vCPU</small>
+              </strong>
+            </div>
+            <div>
+              <span>当前内存</span>
+              <strong>
+                {info.memory_mib / 1024}
+                <small> GiB</small>
+              </strong>
+            </div>
+            <div>
+              <span>生效方式</span>
+              <strong>下次启动</strong>
+            </div>
+          </div>
           {admin && (
             <div className="infra-form">
               <label>
@@ -219,9 +316,33 @@ export function DeviceManager({
               <tbody>
                 {info.disks.map((d) => (
                   <tr key={d.target}>
-                    <td>{d.target}</td>
-                    <td>{d.role}</td>
-                    <td>{d.bus}</td>
+                    <td>
+                      <div className="hardware-device-cell">
+                        <span className="device-glyph">
+                          <Icon name="volume" size={18} />
+                        </span>
+                        <div>
+                          <strong>{d.target}</strong>
+                          <small>{d.managed ? "受管 QCOW2" : "外部设备"}</small>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <span
+                        className={`hardware-tag ${d.role === "SYSTEM" ? "tag-system" : ""}`}
+                      >
+                        {d.role === "SYSTEM"
+                          ? "系统盘"
+                          : d.role === "DATA"
+                            ? "数据盘"
+                            : d.role}
+                      </span>
+                    </td>
+                    <td>
+                      <code className="hardware-bus">
+                        {d.bus.toUpperCase()}
+                      </code>
+                    </td>
                     <td>{Math.round(d.size_bytes / 1024 ** 3)} GiB</td>
                     <td>
                       {admin && d.disk_id && d.managed ? (
@@ -230,21 +351,19 @@ export function DeviceManager({
                             className="action sm"
                             disabled={locked}
                             onClick={() => {
-                              const value = window.prompt(
-                                `扩容 ${d.target} 至多少 GiB？仅增加，不格式化。`,
-                                String(
-                                  Math.round(d.size_bytes / 1024 ** 3) + 10,
-                                ),
+                              const current = Math.round(
+                                d.size_bytes / 1024 ** 3,
                               );
-                              if (value !== null)
-                                void submit(
-                                  {
-                                    operation: "disk-resize",
-                                    disk_id: d.disk_id,
-                                    size_gib: Number(value),
-                                  },
-                                  `扩容 ${d.target} 至 ${value} GiB`,
-                                );
+                              setResizeSize(Math.min(2048, current + 10));
+                              setError(null);
+                              setConfirmation({
+                                payload: {
+                                  operation: "disk-resize",
+                                  disk_id: d.disk_id,
+                                },
+                                description: `扩容磁盘 ${d.target}，当前容量 ${current} GiB`,
+                                minimum: current,
+                              });
                             }}
                           >
                             扩容
@@ -357,9 +476,21 @@ export function DeviceManager({
               <tbody>
                 {info.nics.map((n) => (
                   <tr key={n.mac}>
-                    <td>{n.mac}</td>
-                    <td>{n.source}</td>
-                    <td>{n.model}</td>
+                    <td>
+                      <div className="hardware-device-cell">
+                        <span className="device-glyph">
+                          <Icon name="network" size={18} />
+                        </span>
+                        <strong className="mono">{n.mac}</strong>
+                      </div>
+                    </td>
+                    <td>
+                      <span className="hardware-network-dot" />
+                      {n.source}
+                    </td>
+                    <td>
+                      <code className="hardware-bus">{n.model}</code>
+                    </td>
                     <td>
                       {admin ? (
                         <button
@@ -431,6 +562,72 @@ export function DeviceManager({
             </div>
           )}
         </>
+      )}
+      {confirmation && (
+        <ConfirmOperationModal
+          target={vm.name}
+          operation={
+            (
+              {
+                compute: "调整计算规格",
+                "disk-add": "添加数据盘",
+                "disk-detach": "卸载数据盘",
+                "disk-attach": "重新挂载",
+                "disk-resize": "扩容磁盘",
+                "nic-add": "添加网卡",
+                "nic-remove": "移除网卡",
+              } as Record<string, string>
+            )[String(confirmation.payload.operation)]
+          }
+          description={confirmation.description}
+          busy={busy}
+          error={error}
+          onCancel={() => {
+            setConfirmation(null);
+            setError(null);
+          }}
+          onConfirm={() => {
+            if (
+              confirmation.minimum !== undefined &&
+              (!Number.isInteger(resizeSize) ||
+                resizeSize <= confirmation.minimum ||
+                resizeSize > 2048)
+            ) {
+              setError("目标容量必须大于当前容量，且不超过 2048 GiB");
+              return;
+            }
+            void submit(
+              confirmation.minimum === undefined
+                ? confirmation.payload
+                : { ...confirmation.payload, size_gib: resizeSize },
+              confirmation.description,
+              true,
+            );
+          }}
+        >
+          <div
+            className="hardware-confirm-body"
+            data-danger={["disk-detach", "nic-remove"].includes(
+              String(confirmation.payload.operation),
+            )}
+          >
+            {confirmation.minimum !== undefined && (
+              <label>
+                目标容量（GiB）
+                <input
+                  type="number"
+                  min={confirmation.minimum + 1}
+                  max={2048}
+                  value={resizeSize}
+                  onChange={(e) => setResizeSize(Number(e.target.value))}
+                />
+              </label>
+            )}
+            <p>
+              变更在下次启动时生效。卸载磁盘会保留文件；扩容后需在客体内扩展分区和文件系统。
+            </p>
+          </div>
+        </ConfirmOperationModal>
       )}
       {task && (
         <TaskProgressDrawer

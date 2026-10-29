@@ -133,13 +133,61 @@ export function DeploymentTemplateEditor({
     }
   }
   return (
-    <Card title="发布部署模板版本">
+    <Card
+      title="发布部署版本"
+      description="将规格、镜像与设备配置固化为可交付的版本。"
+      className="deployment-editor"
+    >
+      <div className="deployment-flow">
+        <span>
+          <b>01</b>关联规格与镜像
+        </span>
+        <i />
+        <span>
+          <b>02</b>配置硬件与网络
+        </span>
+        <i />
+        <span>
+          <b>03</b>发布版本
+        </span>
+      </div>
       <p className="muted">
         将现有规格与镜像固化为可复用版本，继承规格模板可见性。此操作不会创建虚拟机或复制镜像。
       </p>
       <ErrorBanner message={error} />
       {notice && <p>{notice}</p>}
-      <form className="inline" onSubmit={publish}>
+      <form className="inline deployment-form" onSubmit={publish}>
+        <label>
+          规格模板
+          <select
+            value={parent}
+            onChange={(e) => setParent(e.target.value)}
+            required
+          >
+            <option value="">选择模板</option>
+            {templates.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          系统镜像
+          <select
+            value={image}
+            onChange={(e) => setImage(e.target.value)}
+            required
+          >
+            <option value="">选择镜像</option>
+            {images.map((i) => (
+              <option key={i.id} value={i.id}>
+                {i.name} · {i.format}
+              </option>
+            ))}
+          </select>
+        </label>
+
         <label>
           能力校验节点
           <select value={node} onChange={(e) => setNode(e.target.value)}>
@@ -240,36 +288,6 @@ export function DeploymentTemplateEditor({
           硬件、数据盘、附加网卡在用户部署时固定继承；每台实例生成独立磁盘与
           MAC。模板沿用所属规格的公开 / 用户分配规则。
         </p>
-        <label>
-          规格模板
-          <select
-            value={parent}
-            onChange={(e) => setParent(e.target.value)}
-            required
-          >
-            <option value="">选择模板</option>
-            {templates.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          系统镜像
-          <select
-            value={image}
-            onChange={(e) => setImage(e.target.value)}
-            required
-          >
-            <option value="">选择镜像</option>
-            {images.map((i) => (
-              <option key={i.id} value={i.id}>
-                {i.name} · {i.format}
-              </option>
-            ))}
-          </select>
-        </label>
         <label className="check">
           <input
             type="checkbox"

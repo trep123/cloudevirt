@@ -6,6 +6,7 @@ import "./styles/tokens.css";
 import "./styles.css";
 import "./styles/console.css";
 import "./styles/app.css";
+import "./styles/hardware.css";
 
 const container = document.getElementById("root");
 if (!container) {

@@ -264,17 +264,6 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
               )
             }
           >
-            {detail ? (
-              <button
-                className="action"
-                onClick={() =>
-                  navigate(prefix + "/vms/" + detail.id + "/console")
-                }
-              >
-                <Icon name="console" size={15} />
-                远程控制台
-              </button>
-            ) : null}
             {detail ? actions(detail) : null}
           </PageHeader>
           <ErrorBanner message={error} />
@@ -309,7 +298,12 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
                 value={tab}
                 onChange={setTab}
               />
-              <Card title={tab} flush={tab === "磁盘"}>
+              <Card
+                title={tab}
+                className={
+                  ["硬件", "磁盘", "网络"].includes(tab) ? "vm-device-card" : ""
+                }
+              >
                 {tab === "概览" ? (
                   <>
                     <DescList
@@ -351,14 +345,12 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
                     ) : null}
                   </>
                 ) : tab === "硬件" ? (
-                  <>
-                    <DescList
-                      columns={2}
-                      items={[
-                        ["处理器", `${detail.vcpu} 核`],
-                        ["内存", memGb(detail.memory_mib)],
-                        ["系统盘", `${detail.disk_gib} GB · qcow2`],
-                      ]}
+                  <div className="hardware-sections">
+                    {" "}
+                    <DeviceManager
+                      vm={detail}
+                      admin={admin}
+                      section="compute"
                     />
                     <DisplayPanel
                       id={detail.id}
@@ -368,12 +360,7 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
                         !detail.observed_state_is_stale
                       }
                     />
-                    <DeviceManager
-                      vm={detail}
-                      admin={admin}
-                      section="compute"
-                    />
-                  </>
+                  </div>
                 ) : tab === "磁盘" ? (
                   <DeviceManager vm={detail} admin={admin} section="disks" />
                 ) : tab === "网络" ? (

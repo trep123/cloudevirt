@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api";
 import { ErrorBanner, describeError } from "../../components/ui";
-import { TaskProgressDrawer } from "../../components/ConsoleUI";
+import {
+  TaskProgressDrawer,
+  ConfirmOperationModal,
+} from "../../components/ConsoleUI";
+import { Icon } from "../../components/icons";
 
 type Display = {
   model: string;
@@ -26,6 +30,7 @@ export function DisplayPanel({
   const [info, setInfo] = useState<Info | null>(null),
     [error, setError] = useState<string | null>(null),
     [busy, setBusy] = useState(false);
+  const [confirmSave, setConfirmSave] = useState(false);
   const [model, setModel] = useState("vga"),
     [clipboard, setClipboard] = useState(false),
     [width, setWidth] = useState(1920),
@@ -60,7 +65,7 @@ export function DisplayPanel({
       alive = false;
     };
   }, [id, refresh]);
-  const save = async () => {
+  const save = async (confirmed = false) => {
     if (
       !Number.isInteger(width) ||
       !Number.isInteger(height) ||
@@ -72,12 +77,10 @@ export function DisplayPanel({
       setError("请输入 640×480 至 3840×2160 的整数尺寸");
       return;
     }
-    if (
-      !window.confirm(
-        `将显卡配置为 ${model}，启动显示尺寸 ${width}×${height}。下次启动生效，桌面系统可能使用自己的显示设置。VirtIO 需要客体驱动。确认保存？`,
-      )
-    )
+    if (!confirmed) {
+      setConfirmSave(true);
       return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -89,6 +92,7 @@ export function DisplayPanel({
         },
       );
       setTask(result.task.id);
+      setConfirmSave(false);
     } catch (e) {
       setError(describeError(e));
     } finally {
@@ -96,31 +100,46 @@ export function DisplayPanel({
     }
   };
   return (
-    <section>
-      <h3>虚拟机显卡与启动显示尺寸</h3>
+    <section className="display-manager">
+      <header className="hardware-panel-head">
+        <div className="hardware-title">
+          <span className="hardware-icon">
+            <Icon name="monitor" size={20} />
+          </span>
+          <div>
+            <h3>显示与交互</h3>
+            <p>虚拟显卡、启动显示尺寸与客体剪贴板。</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          className="action sm"
+          onClick={() => setRefresh((v) => v + 1)}
+          disabled={busy}
+        >
+          <Icon name="refresh" size={14} />
+          刷新
+        </button>
+      </header>
       <ErrorBanner message={error} />
-      <button
-        type="button"
-        onClick={() => setRefresh((v) => v + 1)}
-        disabled={busy}
-      >
-        刷新显卡配置
-      </button>
       {!info && !error && <p>正在读取节点显卡配置…</p>}
       {info && (
         <>
-          <p>
+          <p className="display-current">
             当前配置：{info.configured.model} ·{" "}
             {info.configured.width
               ? `${info.configured.width} × ${info.configured.height}`
               : "系统默认显示尺寸"}
           </p>
-          <p className="muted">
-            此处修改虚拟机硬件，不是网页缩放。尺寸通过虚拟显卡提供给客体，桌面实际分辨率仍由操作系统和驱动决定。Linux
-            建议 VirtIO；Windows
-            切换前需安装对应驱动。保存后手动启动，在系统“显示设置”选择目标分辨率；noVNC
-            显示实际输出尺寸。
-          </p>
+          <details className="hardware-help">
+            <summary>分辨率与驱动说明</summary>
+            <p className="muted">
+              此处修改虚拟机硬件，不是网页缩放。尺寸通过虚拟显卡提供给客体，桌面实际分辨率仍由操作系统和驱动决定。Linux
+              建议 VirtIO；Windows
+              切换前需安装对应驱动。保存后手动启动，在系统“显示设置”选择目标分辨率；noVNC
+              显示实际输出尺寸。
+            </p>
+          </details>
           {admin && (
             <div className="infra-form">
               <label className="check">
@@ -227,6 +246,24 @@ export function DisplayPanel({
           </button>
           ；成功后刷新显卡配置。
         </p>
+      )}
+      {confirmSave && (
+        <ConfirmOperationModal
+          target={`虚拟机 #${id}`}
+          operation="保存显示配置"
+          description={`${model.toUpperCase()} · ${width} × ${height} · 剪贴板${clipboard ? "开启" : "关闭"}`}
+          busy={busy}
+          error={error}
+          onCancel={() => setConfirmSave(false)}
+          onConfirm={() => void save(true)}
+        >
+          <div className="hardware-confirm-body" data-danger={false}>
+            <p>
+              配置在下次启动后生效。VirtIO
+              和剪贴板需要客体驱动支持，实际桌面模式仍由客体系统决定。
+            </p>
+          </div>
+        </ConfirmOperationModal>
       )}
       {task && showTask && (
         <TaskProgressDrawer id={task} onClose={() => setShowTask(false)} />

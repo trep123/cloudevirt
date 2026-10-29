@@ -49,7 +49,7 @@ export function HardwareFields({
 }) {
   const topology = value.sockets !== undefined;
   return (
-    <details className="field-wide">
+    <details className="field-wide hardware-details">
       <summary>
         高级硬件与性能控制{locked ? "（管理员配置，仅查看）" : ""}
       </summary>
