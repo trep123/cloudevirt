@@ -12,6 +12,8 @@ export type DesktopState =
   | "failed"
   | "closed";
 export type DesktopMetrics = {
+  width?: number;
+  height?: number;
   handshakeMs: number | null;
   firstDrawMs: number | null;
   updatesPerSecond: number | null;
@@ -23,6 +25,7 @@ export type DesktopSession = {
   password: string;
 };
 export type DesktopOptions = {
+  resize?: boolean;
   quality: number;
   compression: number;
   scale: boolean;
@@ -86,6 +89,7 @@ export class DesktopEngine {
       this.client.compressionLevel = options.compression;
       this.client.scaleViewport = options.scale;
       this.client.viewOnly = options.viewOnly;
+      this.client.resizeSession = options.resize === true && !options.viewOnly;
     }
   }
   start() {
@@ -154,12 +158,9 @@ export class DesktopEngine {
           if (renewing || !current()) return;
           renewing = true;
           try {
-            await api.request(
-              `/console/sessions/${session.session_id}`,
-              {
-                method: "POST",
-              },
-            );
+            await api.request(`/console/sessions/${session.session_id}`, {
+              method: "POST",
+            });
           } catch (error) {
             if (current()) this.failed(error);
           } finally {
@@ -211,6 +212,8 @@ export class DesktopEngine {
         const now = performance.now(),
           seconds = (now - lastSample) / 1000;
         values.updatesPerSecond = draws / seconds;
+        values.width = canvas?.width || 0;
+        values.height = canvas?.height || 0;
         values.drawMs = draws ? drawTime / draws : null;
         draws = 0;
         drawTime = 0;

@@ -32,9 +32,40 @@ export function VncConsole({
     [clipboard, setClipboard] = useState(""),
     [paste, setPaste] = useState("");
   const [captured, setCaptured] = useState(false),
-    [profile, setProfile] = useState("balanced"),
+    [profile, setProfile] = useState("text"),
     [scale, setScale] = useState(true),
     [viewOnly, setViewOnly] = useState(false);
+  const [resolution, setResolution] = useState("native"),
+    [customWidth, setCustomWidth] = useState(1920),
+    [customHeight, setCustomHeight] = useState(1080),
+    [requested, setRequested] = useState<{
+      width: number;
+      height: number;
+    } | null>(null);
+  const applyResolution = (value: string) => {
+    if (value === "native" || value === "auto") {
+      setResolution(value);
+      setRequested(null);
+      return;
+    }
+    const [width, height] =
+      value === "custom"
+        ? [customWidth, customHeight]
+        : value.split("x").map(Number);
+    if (
+      !Number.isInteger(width) ||
+      !Number.isInteger(height) ||
+      width < 640 ||
+      height < 480 ||
+      width > 3840 ||
+      height > 2160
+    ) {
+      setMessage("分辨率需为 640×480 至 3840×2160 的整数尺寸");
+      return;
+    }
+    setResolution(value);
+    setRequested({ width, height });
+  };
   useEffect(() => {
     if (!target.current || !desktopAvailable) return;
     const current = new DesktopEngine(
@@ -87,8 +118,9 @@ export function VncConsole({
       compression: values[1],
       scale,
       viewOnly,
+      resize: resolution !== "native",
     });
-  }, [profile, scale, viewOnly, desktopAvailable]);
+  }, [profile, scale, viewOnly, desktopAvailable, resolution, requested]);
   const value = (number: number | null | undefined, suffix: string) =>
     number == null ? "—" : number.toFixed(1) + suffix;
   return (
@@ -138,7 +170,7 @@ export function VncConsole({
             <button
               className="action"
               onClick={() =>
-                void target.current
+                void target.current?.parentElement
                   ?.requestFullscreen()
                   .catch(() => setMessage("浏览器拒绝全屏请求"))
               }
@@ -159,12 +191,65 @@ export function VncConsole({
               </select>
             </label>
             <label>
+              客体分辨率{" "}
+              <select
+                value={resolution}
+                disabled={viewOnly}
+                onChange={(e) => applyResolution(e.target.value)}
+              >
+                <option value="native">保持当前</option>
+                <option value="auto">随窗口调整</option>
+                {[
+                  "1024x768",
+                  "1280x720",
+                  "1366x768",
+                  "1600x900",
+                  "1920x1080",
+                  "2560x1440",
+                  "3840x2160",
+                ].map((size) => (
+                  <option key={size} value={size}>
+                    {size.replace("x", " × ")}
+                  </option>
+                ))}
+                <option value="custom">自定义</option>
+              </select>
+            </label>
+            {resolution === "custom" && (
+              <label>
+                宽×高{" "}
+                <input
+                  aria-label="自定义分辨率宽度"
+                  type="number"
+                  min={640}
+                  max={3840}
+                  value={customWidth}
+                  onChange={(e) => setCustomWidth(Number(e.target.value))}
+                />
+                <input
+                  aria-label="自定义分辨率高度"
+                  type="number"
+                  min={480}
+                  max={2160}
+                  value={customHeight}
+                  onChange={(e) => setCustomHeight(Number(e.target.value))}
+                />
+                <button
+                  className="action"
+                  disabled={viewOnly}
+                  onClick={() => applyResolution("custom")}
+                >
+                  应用
+                </button>
+              </label>
+            )}
+            <label>
               <input
                 type="checkbox"
                 checked={scale}
                 onChange={(e) => setScale(e.target.checked)}
               />
-              适应窗口
+              本地画面缩放
             </label>
             <label>
               <input
@@ -176,7 +261,35 @@ export function VncConsole({
             </label>
           </div>
           <ErrorBanner message={message} />
-          <div ref={target} className="vnc-screen" tabIndex={0} />
+          <div className="vnc-viewport">
+            <div
+              ref={target}
+              className="vnc-screen"
+              style={
+                requested
+                  ? {
+                      width: requested.width,
+                      height: requested.height,
+                      minHeight: requested.height,
+                      maxWidth: "none",
+                    }
+                  : {}
+              }
+              tabIndex={0}
+            />
+          </div>
+          <p className="muted">
+            实际画面：
+            {metrics?.width && metrics?.height
+              ? `${metrics.width} × ${metrics.height}`
+              : "等待画面"}
+            {requested
+              ? `；请求：${requested.width} × ${requested.height}`
+              : ""}
+            。本地缩放只改变显示比例，关闭后按原始像素显示。客体分辨率调整需要
+            VNC
+            服务端和客体显卡驱动支持；若实际尺寸未变化，请在客体“显示设置”中选择分辨率。
+          </p>
           <div className="console-metrics">
             <span>握手 {value(metrics?.handshakeMs, " ms")}</span>
             <span>首次 Canvas 绘制 {value(metrics?.firstDrawMs, " ms")}</span>

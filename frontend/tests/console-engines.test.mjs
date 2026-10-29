@@ -116,6 +116,27 @@ test("desktop distinguishes handshake/draw and isolates stale connection callbac
     engine.start();
     await settle();
     const old = globalThis.__rfb[0];
+    engine.configure({
+      quality: 9,
+      compression: 2,
+      scale: false,
+      viewOnly: false,
+      resize: true,
+    });
+    assert.equal(old.resizeSession, true);
+    assert.equal(old.scaleViewport, false);
+    engine.configure({
+      quality: 9,
+      compression: 2,
+      scale: true,
+      viewOnly: true,
+      resize: true,
+    });
+    assert.equal(
+      old.resizeSession,
+      false,
+      "read-only must not request guest resize",
+    );
     assert.ok(old.url.endsWith("/console-ws/desktop-session"));
     assert.ok(!old.url.includes("sig="));
     old.dispatchEvent(new Event("connect"));
