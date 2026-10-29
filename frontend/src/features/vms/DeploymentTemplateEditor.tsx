@@ -19,10 +19,14 @@ export function DeploymentTemplateEditor({
     [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null),
     [notice, setNotice] = useState("");
-  const [lockCpu, setLockCpu] = useState(false),
-    [lockMemory, setLockMemory] = useState(false),
-    [start, setStart] = useState(true),
+  const [start, setStart] = useState(true),
     [autostart, setAutostart] = useState(false);
+  const [vcpu, setVcpu] = useState(2),
+    [memoryGiB, setMemoryGiB] = useState(2),
+    [systemDisk, setSystemDisk] = useState(20);
+  const [initialize, setInitialize] = useState(false),
+    [guestUser, setGuestUser] = useState("cloudvirt"),
+    [sshKeys, setSshKeys] = useState("");
   const [hardware, setHardware] = useState<HardwareConfig>({}),
     [dataDisks, setDataDisks] = useState<number[]>([]),
     [extraNetworks, setExtraNetworks] = useState<string[]>([]),
@@ -85,16 +89,29 @@ export function DeploymentTemplateEditor({
     setNotice("");
     try {
       const t = templates.find((t) => t.id === Number(parent));
-      if (!t || !image) throw Error("请选择规格模板和可用镜像");
+      if (!t || !image || !node)
+        throw Error("请选择规格模板、可用镜像和目标节点");
       const configuration = {
+        node: Number(node),
+        ...(initialize
+          ? {
+              initialization: {
+                username: guestUser,
+                ssh_public_keys: sshKeys
+                  .split(/\r?\n/)
+                  .map((s) => s.trim())
+                  .filter(Boolean),
+              },
+            }
+          : {}),
         hardware,
         data_disks: dataDisks,
         additional_networks: extraNetworks,
         network_name: network,
         image: Number(image),
-        vcpu: t.vcpu,
-        memory_mib: t.memory_mib,
-        disk_gib: t.disk_gib,
+        vcpu,
+        memory_mib: Math.round(memoryGiB * 1024),
+        disk_gib: systemDisk,
         start_after_create: start,
         autostart,
       };
@@ -108,12 +125,13 @@ export function DeploymentTemplateEditor({
               locked: [
                 "hardware",
                 "data_disks",
-                "additional_networks",
                 "image",
-                ...(lockCpu || hardware.sockets || hardware.cpu_quota_percent
-                  ? ["vcpu"]
-                  : []),
-                ...(lockMemory ? ["memory_mib"] : []),
+                "node",
+                "vcpu",
+                "memory_mib",
+                "disk_gib",
+                "autostart",
+                "start_after_create",
               ],
             },
           }),
@@ -161,7 +179,15 @@ export function DeploymentTemplateEditor({
           规格模板
           <select
             value={parent}
-            onChange={(e) => setParent(e.target.value)}
+            onChange={(e) => {
+              setParent(e.target.value);
+              const t = templates.find((t) => t.id === Number(e.target.value));
+              if (t) {
+                setVcpu(t.vcpu);
+                setMemoryGiB(t.memory_mib / 1024);
+                setSystemDisk(t.disk_gib);
+              }
+            }}
             required
           >
             <option value="">选择模板</option>
@@ -176,7 +202,11 @@ export function DeploymentTemplateEditor({
           系统镜像
           <select
             value={image}
-            onChange={(e) => setImage(e.target.value)}
+            onChange={(e) => {
+              setImage(e.target.value);
+              setNode("");
+              setInitialize(false);
+            }}
             required
           >
             <option value="">选择镜像</option>
@@ -189,21 +219,66 @@ export function DeploymentTemplateEditor({
         </label>
 
         <label>
-          能力校验节点
-          <select value={node} onChange={(e) => setNode(e.target.value)}>
-            <option value="">选择节点以编辑高级硬件</option>
-            {nodes.map((n) => (
-              <option key={n.id} value={n.id}>
-                {n.name}
-              </option>
-            ))}
+          部署目标节点
+          <select
+            required
+            value={node}
+            onChange={(e) => setNode(e.target.value)}
+          >
+            <option value="">选择持有镜像的节点</option>
+            {nodes
+              .filter(
+                (n) =>
+                  n.is_schedulable &&
+                  (!images.find((i) => i.id === Number(image))?.node ||
+                    images.find((i) => i.id === Number(image))?.node === n.id),
+              )
+              .map((n) => (
+                <option key={n.id} value={n.id}>
+                  {n.name}
+                </option>
+              ))}
           </select>
+        </label>
+        <label>
+          vCPU（核）
+          <input
+            required
+            type="number"
+            min={1}
+            max={64}
+            value={vcpu}
+            onChange={(e) => setVcpu(Number(e.target.value))}
+          />
+        </label>
+        <label>
+          内存（GiB）
+          <input
+            required
+            type="number"
+            min={0.125}
+            max={128}
+            step={0.125}
+            value={memoryGiB}
+            onChange={(e) => setMemoryGiB(Number(e.target.value))}
+          />
+        </label>
+        <label>
+          系统盘（GiB）
+          <input
+            required
+            type="number"
+            min={1}
+            max={2048}
+            value={systemDisk}
+            onChange={(e) => setSystemDisk(Number(e.target.value))}
+          />
         </label>
         <HardwareFields
           value={hardware}
           onChange={setHardware}
           caps={caps}
-          cpu={templates.find((t) => t.id === Number(parent))?.vcpu || 2}
+          cpu={vcpu}
           isAdmin={true}
           locked={!caps}
         />
@@ -288,22 +363,45 @@ export function DeploymentTemplateEditor({
           硬件、数据盘、附加网卡在用户部署时固定继承；每台实例生成独立磁盘与
           MAC。模板沿用所属规格的公开 / 用户分配规则。
         </p>
-        <label className="check">
+        <p className="muted field-wide">
+          发布后
+          CPU、内存、磁盘、硬件和启动策略固定继承。使用者仅填写名称并为模板网卡选择网络。
+        </p>
+        <label className="check field-wide">
           <input
             type="checkbox"
-            checked={lockCpu}
-            onChange={(e) => setLockCpu(e.target.checked)}
+            checked={initialize}
+            disabled={
+              !caps?.cloud_init ||
+              !images.find((i) => i.id === Number(image))?.supports_cloud_init
+            }
+            onChange={(e) => setInitialize(e.target.checked)}
           />
-          锁定 CPU
+          cloud-init 初始化（仅已审核支持的磁盘镜像）
         </label>
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={lockMemory}
-            onChange={(e) => setLockMemory(e.target.checked)}
-          />
-          锁定内存
-        </label>
+        {initialize && (
+          <>
+            <label>
+              客体用户名
+              <input
+                required
+                value={guestUser}
+                onChange={(e) => setGuestUser(e.target.value)}
+                placeholder="cloudvirt"
+              />
+            </label>
+            <label className="field-wide">
+              SSH 公钥
+              <textarea
+                required
+                value={sshKeys}
+                onChange={(e) => setSshKeys(e.target.value)}
+                rows={3}
+                placeholder="每行一个 SSH 公钥；会应用到该模板的每台实例"
+              />
+            </label>
+          </>
+        )}
         <label className="check">
           <input
             type="checkbox"

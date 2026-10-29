@@ -115,7 +115,7 @@ add-apt-repository -y universe
 apt-get update
 apt-get install -y python3 python3-venv python3-dev build-essential libpq-dev \
     postgresql postgresql-client nginx golang-go qemu-system-x86 qemu-utils \
-    libvirt-daemon-system libvirt-clients libvirt-daemon-config-network acl genisoimage ovmf swtpm
+    libvirt-daemon-system libvirt-clients libvirt-daemon-config-network acl genisoimage ovmf swtpm iproute2
 [[ -x /usr/bin/qemu-system-x86_64 ]] || die "qemu-system-x86 did not provide /usr/bin/qemu-system-x86_64"
 python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3,14) else 1)' || die "Python >=3.14 is required by the pinned Django requirements"
 TMP_DIR=$(mktemp -d /var/tmp/cloudvirt-install.XXXXXX)
@@ -370,9 +370,29 @@ virsh -c qemu:///system net-autostart default
 runuser -u cloudvirt-agent -- virsh -c qemu:///system list --all >/dev/null
 
 STEP=services
-for service in management worker agent; do
+if [[ ! -e "$CONFIG_DIR/network.env" ]]; then
+    python3 - "$CONFIG_DIR/network.env" <<'PY'
+import ipaddress
+import json
+import pathlib
+import subprocess
+import sys
+
+links = json.loads(subprocess.check_output(['ip', '-j', 'address', 'show']))
+protected = sorted({link['ifname'] for link in links if link['ifname'] != 'lo'
+                    and any(not ipaddress.ip_address(address['local']).is_link_local
+                            for address in link.get('addr_info', []))})
+pathlib.Path(sys.argv[1]).write_text(
+    'CLOUDVIRT_PROTECTED_INTERFACES=' + ','.join(protected) + '\n', encoding='utf-8')
+PY
+    chown root:cloudvirt-agent "$CONFIG_DIR/network.env"
+    chmod 0640 "$CONFIG_DIR/network.env"
+fi
+for service in management worker agent network; do
     install -m 0644 "$APP_DIR/deploy/systemd/cloudvirt-$service.service" "/etc/systemd/system/cloudvirt-$service.service"
 done
+systemctl daemon-reload
+systemctl enable --now cloudvirt-network.service
 install -d -m 0755 /etc/systemd/system/cloudvirt-agent.service.d
 cat > /etc/systemd/system/cloudvirt-agent.service.d/install.conf <<ENV
 [Service]

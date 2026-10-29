@@ -16,6 +16,7 @@ from apps.instances.executors import (
     execute_instance_create,
     execute_instance_delete,
 )
+from apps.networks.bridges import execute_bridge
 from apps.nodes.models import Node
 from apps.nodes.services import refresh_node
 from apps.tasks.models import Task, TaskStatus, TaskType
@@ -48,6 +49,7 @@ def execute_node_refresh(task: Task) -> dict:
 
 
 EXECUTORS = {
+    'NETWORK_BRIDGE_CREATE': execute_bridge,
     TaskType.INSTANCE_HARDWARE: execute_hardware_change,
     TaskType.INSTANCE_DISPLAY: execute_instance_display,
     TaskType.ACCOUNT_BATCH: execute_account_batch,

@@ -178,7 +178,7 @@ def create_instance(
         type(size) is not int or not 1 <= size <= 2048 for size in data_disks
     ):
         raise AppError(ErrorCode.INVALID_ARGUMENT, '数据盘配置无效')
-    extra_networks = [validate_network_for_instance(name) for name in additional_networks]
+    extra_networks = [validate_network_for_instance(name, node) for name in additional_networks]
     if len(extra_networks) > 7 or any(n is None for n in extra_networks):
         raise AppError(ErrorCode.INVALID_ARGUMENT, '附加网络无效')
     total_disk_gib = disk_gib + sum(data_disks)
@@ -218,7 +218,7 @@ def create_instance(
             '镜像不可用',
             details={'image': [f'当前状态为 {image.status}']},
         )
-    network = validate_network_for_instance(network_name)
+    network = validate_network_for_instance(network_name, node)
     if network is not None:
         network_name = network.name
 

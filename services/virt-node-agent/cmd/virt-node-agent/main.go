@@ -19,11 +19,19 @@ import (
 	"time"
 
 	"github.com/tl2004/cloude-virt/services/virt-node-agent/internal/config"
+	"github.com/tl2004/cloude-virt/services/virt-node-agent/internal/hostbridge"
 	"github.com/tl2004/cloude-virt/services/virt-node-agent/internal/httpapi"
 	"github.com/tl2004/cloude-virt/services/virt-node-agent/internal/libvirt"
 )
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "--network-service" {
+		if err := hostbridge.Serve(); err != nil {
+			slog.Error("网络服务退出", "error", err)
+			os.Exit(1)
+		}
+		return
+	}
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
 

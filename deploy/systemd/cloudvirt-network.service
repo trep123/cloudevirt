@@ -1,0 +1,31 @@
+[Unit]
+Description=CloudVirt restricted bridge provisioning helper
+Wants=network-online.target
+After=network-online.target openvswitch-switch.service
+Before=cloudvirt-agent.service
+
+[Service]
+Type=simple
+User=root
+Group=cloudvirt-agent
+EnvironmentFile=-/etc/cloudvirt/network.env
+ExecStart=/opt/cloudvirt/services/virt-node-agent/bin/virt-node-agent --network-service
+RuntimeDirectory=cloudvirt-network
+RuntimeDirectoryMode=0750
+StateDirectory=cloudvirt/network
+StateDirectoryMode=0700
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+CapabilityBoundingSet=CAP_NET_ADMIN
+ReadWritePaths=/var/lib/cloudvirt/network /run/cloudvirt-network
+
+[Install]
+WantedBy=multi-user.target

@@ -1,3 +1,4 @@
+import { newRequestId } from "../../utils/requestId";
 import { useEffect, useRef, useState } from "react";
 import { api, fetchAllOptions } from "../../api";
 import { PageHeader } from "../../components/ConsoleUI";
@@ -12,6 +13,7 @@ import {
 } from "../../components/ui";
 import { Icon } from "../../components/icons";
 import type { Image, Node, Network, Template } from "../../types";
+import { TemplateDeploymentForm } from "./TemplateDeploymentForm";
 import {
   HardwareFields,
   type HardwareConfig,
@@ -145,7 +147,7 @@ export function VmWizard({
       alive = false;
     };
   }, []);
-  const key = useRef(crypto.randomUUID()),
+  const key = useRef(newRequestId()),
     submitting = useRef(false);
   useEffect(() => {
     let alive = true;
@@ -327,6 +329,23 @@ export function VmWizard({
           ],
         ]
       : [];
+  if (selectedVersion)
+    return (
+      <TemplateDeploymentForm
+        key={selectedVersion.id}
+        version={selectedVersion}
+        networks={networks}
+        onBack={() => {
+          setVersion("");
+          setHardware({});
+          setDataDisks([]);
+          setExtraNetworks([]);
+          setNode("");
+        }}
+        onCancel={onCancel}
+        onCreated={onCreated}
+      />
+    );
   return (
     <>
       <PageHeader
@@ -391,13 +410,6 @@ export function VmWizard({
                       <select
                         value={version}
                         onChange={(e) => {
-                          if (
-                            e.target.value &&
-                            !window.confirm(
-                              "应用部署模板将覆盖当前规格、镜像和硬件配置，是否继续？",
-                            )
-                          )
-                            return;
                           setVersion(e.target.value);
                           setNode("");
                           setTemplate("");

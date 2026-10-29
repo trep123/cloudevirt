@@ -115,10 +115,7 @@ class CreationPlanTests(TestCase):
         self.assertEqual(published.status_code, 200, published.content)
         parent.vcpu = 8
         parent.save()
-        config = {**self.data, 'template_version': version}
-        config.pop('vcpu')
-        config.pop('memory_mib')
-        config.pop('disk_gib')
+        config = {'name': self.data['name'], 'template_version': version}
         response = self.post('instances', config)
         self.assertEqual(response.status_code, 202, response.content)
         self.assertEqual(Instance.objects.get().vcpu, 2)

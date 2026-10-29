@@ -147,7 +147,7 @@ class InstanceCreateSerializer(serializers.Serializer):
         if len(set(names)) != len(names) or data.get('network_name') in names:
             raise serializers.ValidationError({'additional_networks': '网卡网络重复'})
         for name in names:
-            validate_network_for_instance(name)
+            validate_network_for_instance(name, data['node'])
         from apps.templates.versions import visible_templates
 
         template_id = data.get('template')

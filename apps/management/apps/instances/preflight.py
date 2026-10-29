@@ -30,7 +30,7 @@ class CreatePreflightView(APIView):
             raise AppError(ErrorCode.PERMISSION_DENIED, '无权在此节点创建实例')
         if not node.is_schedulable:
             raise AppError(ErrorCode.NODE_OFFLINE, '目标节点不可调度')
-        validate_network_for_instance(data.get('network_name', ''))
+        validate_network_for_instance(data.get('network_name', ''), node)
         total_disk = data['disk_gib'] + sum(data.get('data_disks', []))
         enforce_quota(
             request.user, vcpu=data['vcpu'], memory_mib=data['memory_mib'], disk_gib=total_disk

@@ -154,8 +154,13 @@ class OrganizationView(APIView):
         else:
             cluster = get_object_or_404(Cluster, pk=data['cluster_id'])
             ids = set(data.pop('instance_ids'))
-            instances = Instance.objects.select_for_update().filter(pk__in=ids, is_deleted=False)
+            # Membership checks add nullable joins; PostgreSQL may lock only instance rows.
+            instances = Instance.objects.select_for_update(of=('self',)).filter(
+                pk__in=ids, is_deleted=False
+            )
             list(instances.order_by('pk'))
+            # Locks acquired above remain until commit; derived EXISTS joins need no new lock.
+            instances = Instance.objects.filter(pk__in=ids, is_deleted=False)
             if instances.count() != len(ids):
                 raise AppError(ErrorCode.INVALID_ARGUMENT, '包含不存在的虚拟机')
             if instances.exclude(node__clusternode__cluster=cluster).exists():

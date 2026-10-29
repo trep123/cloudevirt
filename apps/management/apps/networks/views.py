@@ -48,6 +48,12 @@ class NetworkDetailView(generics.RetrieveUpdateDestroyAPIView):
     def perform_update(self, serializer) -> None:
         """保存变更并写审计。"""
         serializer.instance = Network.objects.select_for_update().get(pk=serializer.instance.pk)
+        if serializer.instance.managed and any(
+            key in serializer.validated_data
+            and serializer.validated_data[key] != getattr(serializer.instance, key)
+            for key in ['name', 'type', 'bridge', 'is_management']
+        ):
+            raise AppError(ErrorCode.CONFLICT, '托管网桥连接属性不可通过登记接口修改')
         from apps.networks.models import InstanceNIC, IPPool
 
         address_fields = {
@@ -104,6 +110,11 @@ class NetworkDetailView(generics.RetrieveUpdateDestroyAPIView):
     def perform_destroy(self, instance) -> None:
         """软删除网络，并提示调用方检查实例引用。"""
         instance = Network.objects.select_for_update().get(pk=instance.pk)
+        if instance.managed:
+            raise AppError(
+                ErrorCode.CONFLICT,
+                '托管网桥不能仅删除登记记录；需先在节点安全解除物理接口并清理配置',
+            )
         from apps.networks.models import InstanceNIC, IPPool
 
         if (

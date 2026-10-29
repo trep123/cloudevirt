@@ -21,6 +21,11 @@ class Network(models.Model):
     """白名单网络。"""
 
     name = models.CharField('名称', max_length=64, unique=True)
+    node = models.ForeignKey('nodes.Node', on_delete=models.PROTECT, null=True, blank=True)
+    managed = models.BooleanField(default=False)
+    uplink = models.CharField(max_length=15, blank=True, default='')
+    provisioning_status = models.CharField(max_length=16, default='READY')
+    last_error = models.CharField(max_length=500, blank=True, default='')
     type = models.CharField(
         '类型', max_length=16, choices=NetworkType.choices, default=NetworkType.LIBVIRT_NETWORK
     )
@@ -52,7 +57,9 @@ class Network(models.Model):
     @property
     def is_usable(self) -> bool:
         """是否允许实例接入。"""
-        return not self.is_deleted and not self.is_management
+        return (
+            not self.is_deleted and not self.is_management and self.provisioning_status == 'READY'
+        )
 
 
 class IPPool(models.Model):

@@ -114,11 +114,15 @@ def validate_hardware_policy(data, user):
         if not version or any(
             data.get(key, {} if key == 'hardware' else [])
             != version.configuration.get(key, {} if key == 'hardware' else [])
-            for key in ['hardware', 'data_disks', 'additional_networks']
+            for key in ['hardware', 'data_disks']
         ):
             raise serializers.ValidationError(
                 {'hardware': '硬件配置仅管理员可修改；普通用户可使用已分配的部署模板'}
             )
+        if len(data.get('additional_networks', [])) != len(
+            version.configuration.get('additional_networks', [])
+        ):
+            raise serializers.ValidationError({'additional_networks': '网卡数量由模板固定'})
     if (
         'sockets' in hardware
         and hardware['sockets'] * hardware['cores'] * hardware['threads'] != data['vcpu']

@@ -12,6 +12,8 @@ from apps.templates.models import Template, TemplateVersion
 from common.permissions import CanViewTemplate, RequiresPasswordChange
 
 CONFIG_FIELDS = {
+    'node',
+    'initialization',
     'data_disks',
     'additional_networks',
     'hardware',
@@ -55,7 +57,12 @@ class VersionSerializer(serializers.ModelSerializer):
         config = data.get('configuration', {})
         if not isinstance(config, dict):
             raise serializers.ValidationError({'configuration': '必须是配置对象'})
-        from apps.instances.hardware import HardwareSerializer
+        from apps.instances.hardware import HardwareSerializer, InitializationSerializer
+
+        if 'initialization' in config:
+            initialization = InitializationSerializer(data=config['initialization'])
+            initialization.is_valid(raise_exception=True)
+            config['initialization'] = initialization.validated_data
 
         if 'hardware' in config:
             hardware = HardwareSerializer(data=config['hardware'])
@@ -98,7 +105,7 @@ class VersionSerializer(serializers.ModelSerializer):
                 or not 0 < limits['min'] <= limits['max']
             ):
                 raise serializers.ValidationError({'constraints': f'{key} 上下限无效'})
-        for key in ['image', 'vcpu', 'memory_mib', 'disk_gib']:
+        for key in ['node', 'image', 'vcpu', 'memory_mib', 'disk_gib']:
             if key in config and (type(config[key]) is not int or config[key] <= 0):
                 raise serializers.ValidationError({'configuration': f'{key} 必须为正整数'})
         for key in ['autostart', 'start_after_create']:
@@ -189,6 +196,14 @@ class PublishTemplateVersionView(APIView):
         ).first()
         if image is None:
             raise serializers.ValidationError({'image': '发布前需指定可用镜像'})
+        from apps.nodes.models import Node
+
+        node_id = config.get('node') or image.node_id
+        node = None
+        if node_id:
+            node = get_object_or_404(Node, pk=node_id, is_deleted=False)
+            if image.node_id and image.node_id != node.pk:
+                raise serializers.ValidationError({'node': '目标节点必须持有所选镜像'})
         from apps.instances.hardware import validate_hardware_policy
 
         validate_hardware_policy({**config, 'image': image}, request.user)
@@ -203,9 +218,9 @@ class PublishTemplateVersionView(APIView):
             and image.virtual_size_bytes > config['disk_gib'] * 1024**3
         ):
             raise serializers.ValidationError({'disk_gib': '小于镜像虚拟容量'})
-        validate_network_for_instance(config.get('network_name', ''))
+        validate_network_for_instance(config.get('network_name', ''), node)
         for name in config.get('additional_networks', []):
-            validate_network_for_instance(name)
+            validate_network_for_instance(name, node)
         names = [config.get('network_name')] + config.get('additional_networks', [])
         if len([n for n in names if n]) != len({n for n in names if n}):
             raise serializers.ValidationError({'additional_networks': '网卡网络不能重复'})
@@ -236,27 +251,65 @@ def resolve_version(data, user):
     )
     from apps.images.models import Image
 
-    if not Image.objects.filter(
+    image = Image.objects.filter(
         pk=version.configuration.get('image'),
         checksum_sha256=version.image_checksum,
         status='READY',
         is_deleted=False,
-    ).exists():
+    ).first()
+    if image is None:
         raise serializers.ValidationError(
             {'template_version': '模板镜像已变更或不可用，请重新发布版本'}
         )
-    config = {
+    defaults = {
         'vcpu': version.template.vcpu,
         'memory_mib': version.template.memory_mib,
         'disk_gib': version.template.disk_gib,
         **version.configuration,
-        **data,
     }
+    if 'node' not in defaults and (image.node_id or data.get('node')):
+        defaults['node'] = image.node_id or data['node']
+    if not defaults.get('node'):
+        from apps.accounts.administration import limit_nodes
+        from apps.nodes.access import user_can_access
+        from apps.nodes.models import Node, NodePermission
+
+        nodes = Node.objects.filter(is_deleted=False).order_by('pk')
+        allowed = set(
+            limit_nodes(user, list(nodes.values_list('pk', flat=True)), 'instances.add_instance')
+        )
+        defaults['node'] = next(
+            (
+                n.pk
+                for n in nodes
+                if n.pk in allowed
+                and n.is_schedulable
+                and user_can_access(user, n, NodePermission.OPERATE)
+            ),
+            None,
+        )
+    defaults.setdefault('hardware', {})
+    defaults.setdefault('data_disks', [])
+    defaults.setdefault('autostart', False)
+    defaults.setdefault('start_after_create', True)
+    for field in CONFIG_FIELDS - {'network_name', 'additional_networks'}:
+        if field in data and data[field] != defaults.get(field):
+            raise serializers.ValidationError({field: '部署模板配置固定，请由管理员发布新版本'})
+    attachments = data.get('additional_networks', defaults.get('additional_networks', []))
+    if not isinstance(attachments, list) or len(attachments) != len(
+        defaults.get('additional_networks', [])
+    ):
+        raise serializers.ValidationError(
+            {'additional_networks': '网卡数量由模板固定，仅可选择接入网络'}
+        )
+    config = {**defaults, **data}
     for field in version.constraints.get('locked', []):
+        if field in {'network_name', 'additional_networks'}:
+            continue
         if config.get(field) != version.configuration.get(field):
             raise serializers.ValidationError({field: '此字段已被模板锁定'})
     if not is_admin(user):
-        for field in ['hardware', 'data_disks', 'additional_networks']:
+        for field in ['hardware', 'data_disks']:
             if config.get(field, {} if field == 'hardware' else []) != version.configuration.get(
                 field, {} if field == 'hardware' else []
             ):

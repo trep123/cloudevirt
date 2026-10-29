@@ -68,9 +68,10 @@ class CreateInstanceServiceTests(TestCase):
 
     def test_rejects_insufficient_resources(self) -> None:
         """资源不足应返回 409 并说明缺口。"""
+        capacity_admin = make_user('capacity-admin', 'Admin')
         with self.assertRaises(AppError) as ctx:
             create_instance(
-                user=self.user,
+                user=capacity_admin,
                 name='vm-big',
                 node=self.node,
                 image=self.image,
@@ -216,8 +217,8 @@ class CreateInstanceApiTests(TestCase):
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.json()['error']['code'], 'INSUFFICIENT_RESOURCE')
 
-    def test_viewer_can_list_instances(self) -> None:
-        """Viewer 可以查看实例列表。"""
+    def test_viewer_cannot_list_other_users_instances(self) -> None:
+        """Viewer 可以打开列表，但不能查看其他用户的实例。"""
         self.client.login(username='api-operator', password='Str0ngPassw0rd')
         self.client.post('/api/v1/instances', self.payload(), content_type='application/json')
         self.client.logout()
@@ -226,4 +227,4 @@ class CreateInstanceApiTests(TestCase):
         response = self.client.get('/api/v1/instances')
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.json()['results']), 1)
+        self.assertEqual(len(response.json()['results']), 0)

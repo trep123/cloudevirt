@@ -46,6 +46,12 @@ class InstanceExecutorTests(TestCase):
             memory_mib=1024,
             disk_gib=10,
         )
+        capabilities = mock.patch(
+            'apps.nodes.client.AgentClient.get_json',
+            return_value={'image_clone': True, 'iso_install': True, 'start_control': True},
+        )
+        capabilities.start()
+        self.addCleanup(capabilities.stop)
 
     def test_success_commits_reservation_and_updates_state(self) -> None:
         """创建成功应更新观测状态、磁盘状态并提交预留。"""
@@ -74,8 +80,8 @@ class InstanceExecutorTests(TestCase):
         self.instance.refresh_from_db()
         self.assertEqual(self.instance.observed_state, ObservedState.UNKNOWN)
 
-    def test_failure_records_error_and_releases_reservation(self) -> None:
-        """Agent 失败应记录错误、标记磁盘失败并释放预留。"""
+    def test_uncertain_creation_retains_reservation_for_reconciliation(self) -> None:
+        """已调用创建接口后连接失败，不能假设节点未创建资源。"""
         with mock.patch(
             'apps.nodes.client.AgentClient.create_domain',
             side_effect=AppError(ErrorCode.NODE_OFFLINE, '节点离线'),
@@ -88,7 +94,7 @@ class InstanceExecutorTests(TestCase):
         self.assertEqual(self.instance.last_error_code, ErrorCode.NODE_OFFLINE)
         self.assertEqual(self.instance.disks.first().status, DiskStatus.FAILED)
         reservation = ResourceReservation.objects.get(instance=self.instance)
-        self.assertEqual(reservation.status, ReservationStatus.RELEASED)
+        self.assertEqual(reservation.status, ReservationStatus.HELD)
         # 可恢复错误：任务重新排队等待重试
         self.assertEqual(self.task.status, TaskStatus.PENDING)
         self.assertIsNotNone(self.task.next_retry_at)

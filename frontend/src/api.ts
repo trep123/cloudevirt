@@ -1,3 +1,4 @@
+import { newRequestId } from "./utils/requestId";
 /**
  * 统一 API 客户端。
  *
@@ -289,28 +290,35 @@ export const api = {
   instance: (id: number) =>
     request<import("./types").Instance>(`/instances/${id}`),
   createInstance: (
-    body: {
-      name: string;
-      node: number;
-      image: number;
-      vcpu: number;
-      memory_mib: number;
-      disk_gib: number;
-      network_name?: string;
-      autostart?: boolean;
-      start_after_create?: boolean;
-      template?: number;
-      template_version?: number;
-      data_disks?: number[];
-      additional_networks?: string[];
-      hardware?: import("./features/vms/HardwareFields").HardwareConfig;
-      initialization?: {
-        hostname?: string;
-        username: string;
-        ssh_public_keys: string[];
-      };
-    },
-    idempotencyKey: string = crypto.randomUUID(),
+    body:
+      | {
+          name: string;
+          node: number;
+          image: number;
+          vcpu: number;
+          memory_mib: number;
+          disk_gib: number;
+          network_name?: string;
+          autostart?: boolean;
+          start_after_create?: boolean;
+          template?: number;
+          template_version?: number;
+          data_disks?: number[];
+          additional_networks?: string[];
+          hardware?: import("./features/vms/HardwareFields").HardwareConfig;
+          initialization?: {
+            hostname?: string;
+            username: string;
+            ssh_public_keys: string[];
+          };
+        }
+      | {
+          name: string;
+          template_version: number;
+          network_name?: string;
+          additional_networks?: string[];
+        },
+    idempotencyKey: string = newRequestId(),
   ) =>
     request<{
       instance: import("./types").Instance;

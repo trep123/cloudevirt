@@ -66,6 +66,11 @@ export interface Image {
 }
 
 export interface Network {
+  node?: number | null;
+  uplink?: string;
+  managed?: boolean;
+  provisioning_status?: string;
+  last_error?: string;
   id: number;
   name: string;
   type: string;

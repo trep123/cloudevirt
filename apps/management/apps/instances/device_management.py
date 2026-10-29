@@ -1,9 +1,9 @@
 """Administrator-only, cold hardware changes with durable resource reservations."""
 
+import hashlib
 import secrets
 import uuid
 from datetime import timedelta
-import hashlib
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -236,7 +236,7 @@ class InstanceHardwareView(APIView):
                             raise AppError(ErrorCode.CONFLICT, '无可用磁盘设备号')
                         payload['target'] = target
         elif op == 'nic-add':
-            network = validate_network_for_instance(data['network_name'])
+            network = validate_network_for_instance(data['network_name'], instance.node)
             if network is None or not network.is_usable:
                 raise AppError(ErrorCode.CONFLICT, '网络不可用')
             network = Network.objects.select_for_update().get(pk=network.pk)
@@ -386,7 +386,7 @@ def execute_hardware_change(task):
             target_id=str(instance.pk),
         )
         if change['operation'] == 'nic-add':
-            network = validate_network_for_instance(change['network']['network'])
+            network = validate_network_for_instance(change['network']['network'], instance.node)
             if (
                 network.pk != meta['network_id']
                 or network.type != change['network']['network_type']

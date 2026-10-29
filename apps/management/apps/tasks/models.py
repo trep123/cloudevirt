@@ -28,6 +28,7 @@ class TaskType(models.TextChoices):
     """任务类型。"""
 
     NODE_REFRESH = 'NODE_REFRESH', '刷新节点资源'
+    NETWORK_BRIDGE_CREATE = 'NETWORK_BRIDGE_CREATE', '创建桥接网络'
     ACCOUNT_BATCH = 'ACCOUNT_BATCH', '用户导入导出'
     INSTANCE_CREATE = 'INSTANCE_CREATE', '创建虚拟机'
     INSTANCE_DISPLAY = 'INSTANCE_DISPLAY', '修改虚拟机显示配置'

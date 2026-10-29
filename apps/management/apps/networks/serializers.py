@@ -16,6 +16,11 @@ class NetworkSerializer(serializers.ModelSerializer):
         model = Network
         fields = (
             'id',
+            'node',
+            'managed',
+            'uplink',
+            'provisioning_status',
+            'last_error',
             'name',
             'type',
             'bridge',
@@ -33,7 +38,15 @@ class NetworkSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         )
-        read_only_fields = ('created_at', 'updated_at')
+        read_only_fields = (
+            'created_at',
+            'updated_at',
+            'node',
+            'managed',
+            'uplink',
+            'provisioning_status',
+            'last_error',
+        )
 
     def validate_name(self, value: str) -> str:
         """校验名称格式。"""
