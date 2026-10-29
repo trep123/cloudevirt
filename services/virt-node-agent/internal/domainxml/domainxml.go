@@ -257,7 +257,15 @@ func Build(spec Spec) (string, error) {
 		if strings.TrimSpace(path) == "" {
 			return "", apierr.New(apierr.CodeInvalidArgument, "数据盘路径为空", nil)
 		}
-		payload.Devices.Disks = append(payload.Devices.Disks, disk{Type: "file", Device: "disk", Driver: diskDrive{Name: "qemu", Type: DiskFormat}, Source: diskSrc{File: path}, Target: diskTgt{Dev: fmt.Sprintf("vd%c", 'b'+index), Bus: DiskBus}})
+		bus := spec.Hardware.DataDiskBus
+		if bus == "" {
+			bus = DiskBus
+		}
+		dev := fmt.Sprintf("vd%c", 'b'+index)
+		if bus == "sata" {
+			dev = fmt.Sprintf("sd%c", 'c'+index)
+		}
+		payload.Devices.Disks = append(payload.Devices.Disks, disk{Type: "file", Device: "disk", Driver: diskDrive{Name: "qemu", Type: DiskFormat}, Source: diskSrc{File: path}, Target: diskTgt{Dev: dev, Bus: bus}})
 	}
 	switch spec.NetworkType {
 	case "OVS":

@@ -18,11 +18,21 @@ class TemplateSerializer(serializers.ModelSerializer):
             'memory_mib',
             'disk_gib',
             'is_public',
+            'assigned_users',
             'created_by',
             'created_at',
             'updated_at',
         )
         read_only_fields = ('created_by', 'created_at', 'updated_at')
+
+    def get_fields(self):
+        fields = super().get_fields()
+        from apps.accounts.roles import is_admin
+
+        request = self.context.get('request')
+        if request is not None and not is_admin(request.user):
+            fields.pop('assigned_users', None)
+        return fields
 
     def validate_name(self, value: str) -> str:
         """校验名称唯一性与格式。"""

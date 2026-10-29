@@ -26,6 +26,7 @@ import {
 import { Icon } from "../../components/icons";
 import { VmWizard } from "./VmWizard";
 import { DisplayPanel } from "./DisplayPanel";
+import { DeviceManager } from "./DeviceManager";
 import { SnapshotsPage } from "../infrastructure/SnapshotsPage";
 import type { CurrentUser, Instance, Paginated } from "../../types";
 const ACTIVE = [
@@ -367,46 +368,16 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
                         !detail.observed_state_is_stale
                       }
                     />
+                    <DeviceManager
+                      vm={detail}
+                      admin={admin}
+                      section="compute"
+                    />
                   </>
                 ) : tab === "磁盘" ? (
-                  detail.disks.length ? (
-                    <div className="table-scroll">
-                      <table className="data-table">
-                        <thead>
-                          <tr>
-                            <th>名称</th>
-                            <th>角色</th>
-                            <th className="num">容量</th>
-                            <th>状态</th>
-                            <th>设备</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {detail.disks.map((d) => (
-                            <tr key={d.id}>
-                              <td className="strong">{d.name}</td>
-                              <td className="muted">{d.role}</td>
-                              <td className="num">{d.size_gib} GB</td>
-                              <td>
-                                <StatusBadge status={d.status} />
-                              </td>
-                              <td className="mono">{d.target_dev}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <EmptyState title="暂无磁盘" icon="disk" />
-                  )
+                  <DeviceManager vm={detail} admin={admin} section="disks" />
                 ) : tab === "网络" ? (
-                  <DescList
-                    columns={2}
-                    items={[
-                      ["已登记网络", detail.network_name || "未接入"],
-                      ["说明", "实际网卡连接可在网络拓扑中查看。"],
-                    ]}
-                  />
+                  <DeviceManager vm={detail} admin={admin} section="nics" />
                 ) : tab === "快照" ? (
                   <SnapshotsPage
                     admin={user.console_scope === "admin"}

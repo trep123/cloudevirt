@@ -519,9 +519,12 @@ export function VmWizard({
                       caps={caps}
                       cpu={cpu}
                       isAdmin={isAdmin}
-                      locked={versions
-                        .find((v) => v.id === Number(version))
-                        ?.constraints.locked?.includes("hardware")}
+                      locked={
+                        !isAdmin ||
+                        versions
+                          .find((v) => v.id === Number(version))
+                          ?.constraints.locked?.includes("hardware")
+                      }
                     />
                   </>
                 ) : step === 2 ? (
@@ -545,6 +548,7 @@ export function VmWizard({
                             type="number"
                             min={1}
                             max={2048}
+                            disabled={!isAdmin || locked.has("data_disks")}
                             value={size}
                             onChange={(e) =>
                               setDataDisks(
@@ -556,6 +560,7 @@ export function VmWizard({
                           />
                           <button
                             className="action"
+                            disabled={!isAdmin || locked.has("data_disks")}
                             onClick={() =>
                               setDataDisks(
                                 dataDisks.filter((_, i) => i !== index),
@@ -568,7 +573,12 @@ export function VmWizard({
                       ))}
                       <button
                         className="action"
-                        disabled={!caps?.multi_disk || dataDisks.length >= 8}
+                        disabled={
+                          !isAdmin ||
+                          locked.has("data_disks") ||
+                          !caps?.multi_disk ||
+                          dataDisks.length >= 8
+                        }
                         onClick={() => setDataDisks([...dataDisks, 20])}
                       >
                         添加数据盘
@@ -635,7 +645,7 @@ export function VmWizard({
                       </Field>
                     )}
                     <Field label="网卡型号">
-                      <input disabled value="virtio" />
+                      <input disabled value={hardware.nic_model || "virtio"} />
                     </Field>
                     <p className="muted field-wide">
                       地址由宿主机实际 DHCP
@@ -645,7 +655,11 @@ export function VmWizard({
                       <select
                         multiple
                         value={extraNetworks}
-                        disabled={!caps?.multi_nic}
+                        disabled={
+                          !isAdmin ||
+                          locked.has("additional_networks") ||
+                          !caps?.multi_nic
+                        }
                         onChange={(e) =>
                           setExtraNetworks(
                             Array.from(

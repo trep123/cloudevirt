@@ -1,5 +1,7 @@
 import { Field } from "../../components/ui";
 export type HardwareConfig = {
+  nic_model?: string;
+  data_disk_bus?: string;
   clipboard?: boolean;
   video_model?: string;
   video_width?: number;
@@ -48,12 +50,36 @@ export function HardwareFields({
   const topology = value.sockets !== undefined;
   return (
     <details className="field-wide">
-      <summary>高级硬件与性能控制{locked ? "（模板已锁定）" : ""}</summary>
+      <summary>
+        高级硬件与性能控制{locked ? "（管理员配置，仅查看）" : ""}
+      </summary>
       <p className="muted">
         选项依据节点实际能力。CPU
         模式可能影响迁移兼容性；性能限制不代表物理资源独占。
       </p>
       <div className="infra-form">
+        <Field label="创建时网卡型号">
+          <select
+            value={value.nic_model || "virtio"}
+            disabled={locked}
+            onChange={(e) => onChange({ ...value, nic_model: e.target.value })}
+          >
+            <option value="virtio">VirtIO</option>
+            <option value="e1000e">Intel e1000e</option>
+          </select>
+        </Field>
+        <Field label="创建时数据盘总线">
+          <select
+            value={value.data_disk_bus || "virtio"}
+            disabled={locked}
+            onChange={(e) =>
+              onChange({ ...value, data_disk_bus: e.target.value })
+            }
+          >
+            <option value="virtio">VirtIO</option>
+            <option value="sata">SATA</option>
+          </select>
+        </Field>
         <label className="check">
           <input
             type="checkbox"

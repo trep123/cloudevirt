@@ -16,6 +16,8 @@ class StrictInput(serializers.Serializer):
 
 
 class HardwareSerializer(StrictInput):
+    nic_model = serializers.ChoiceField(choices=['virtio', 'e1000e'], required=False)
+    data_disk_bus = serializers.ChoiceField(choices=['virtio', 'sata'], required=False)
     clipboard = serializers.BooleanField(required=False)
     video_model = serializers.ChoiceField(choices=['vga', 'virtio'], required=False)
     video_width = serializers.IntegerField(min_value=640, max_value=3840, required=False)
@@ -100,6 +102,23 @@ class InitializationSerializer(StrictInput):
 
 def validate_hardware_policy(data, user):
     hardware = data.get('hardware', {})
+    if not is_admin(user) and any(
+        data.get(key) for key in ['hardware', 'data_disks', 'additional_networks']
+    ):
+        from apps.templates.models import TemplateVersion
+        from apps.templates.versions import visible_templates
+
+        version = TemplateVersion.objects.filter(
+            pk=data.get('template_version'), published=True, template__in=visible_templates(user)
+        ).first()
+        if not version or any(
+            data.get(key, {} if key == 'hardware' else [])
+            != version.configuration.get(key, {} if key == 'hardware' else [])
+            for key in ['hardware', 'data_disks', 'additional_networks']
+        ):
+            raise serializers.ValidationError(
+                {'hardware': '硬件配置仅管理员可修改；普通用户可使用已分配的部署模板'}
+            )
     if (
         'sockets' in hardware
         and hardware['sockets'] * hardware['cores'] * hardware['threads'] != data['vcpu']

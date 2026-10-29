@@ -192,6 +192,8 @@ def create_instance(
         {
             'hardware': hardware,
             'initialization': initialization,
+            'data_disks': data_disks,
+            'additional_networks': additional_networks,
             'vcpu': vcpu,
             'image': image,
             'template_version': template_version,
@@ -379,7 +381,10 @@ def create_instance(
                 name=filename,
                 relative_path=filename,
                 size_gib=size,
-                target_dev='vd' + chr(ord('a') + index),
+                bus=hardware.get('data_disk_bus', 'virtio'),
+                target_dev=('sd' + chr(ord('b') + index))
+                if hardware.get('data_disk_bus') == 'sata'
+                else ('vd' + chr(ord('a') + index)),
                 status=DiskStatus.CREATING,
             )
         from apps.networks.provisioning import provision_interfaces

@@ -1,5 +1,6 @@
 """任务 API：列表、详情、取消、重试。"""
 
+from django.db import transaction
 from rest_framework import generics
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -34,9 +35,10 @@ class TaskCancelView(APIView):
 
     permission_classes = [CanCancelTask, RequiresPasswordChange]
 
+    @transaction.atomic
     def post(self, request, pk) -> Response:
         """把等待中的任务置为已取消。"""
-        task = tasks_for(request.user).filter(pk=pk).first()
+        task = tasks_for(request.user).select_for_update().filter(pk=pk).first()
         if task is None:
             raise AppError(ErrorCode.NOT_FOUND)
         if task.status != TaskStatus.PENDING:
@@ -45,6 +47,14 @@ class TaskCancelView(APIView):
                 '只有等待中的任务可以取消',
                 details={'status': task.status},
             )
+        if task.type == 'INSTANCE_HARDWARE':
+            from apps.accounts.administration import require_admin
+
+            require_admin(request.user, 'instances.change_instance')
+            if task.payload.get('execution_started'):
+                raise AppError(
+                    ErrorCode.CONFLICT, '该硬件任务已尝试执行，请核对并重试，不能直接取消资源预留'
+                )
         task.status = TaskStatus.CANCELLED
         task.finished_at = None
         task.locked_at = None
@@ -68,9 +78,10 @@ class TaskRetryView(APIView):
 
     permission_classes = [CanRetryTask, RequiresPasswordChange]
 
+    @transaction.atomic
     def post(self, request, pk) -> Response:
         """把失败任务重新排队。"""
-        task = tasks_for(request.user).filter(pk=pk).first()
+        task = tasks_for(request.user).select_for_update().filter(pk=pk).first()
         if task is None:
             raise AppError(ErrorCode.NOT_FOUND)
         if task.status != TaskStatus.FAILED:
@@ -89,6 +100,26 @@ class TaskRetryView(APIView):
                 ErrorCode.CONFLICT,
                 '请下载批次结果，修正失败记录后重新预校验；不允许直接重放账号批次',
             )
+        if task.type == 'INSTANCE_HARDWARE':
+            from apps.accounts.administration import require_admin
+            from apps.instances.actions import ensure_no_active_task
+            from apps.instances.models import Instance
+
+            require_admin(request.user, 'instances.change_instance')
+            instance = Instance.objects.select_for_update().get(
+                pk=task.resource_id, is_deleted=False
+            )
+            from common.permissions import check_permission
+
+            check_permission(
+                request.user,
+                'instances.change_instance',
+                target_type='instance',
+                target_id=str(instance.pk),
+            )
+            if task.reservation.status != 'HELD':
+                raise AppError(ErrorCode.CONFLICT, '硬件任务的资源预留已结束，禁止重放已完成配置')
+            ensure_no_active_task(instance)
         task.status = TaskStatus.PENDING
         task.attempt_count = 0
         task.next_retry_at = None

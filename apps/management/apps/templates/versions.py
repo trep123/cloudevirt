@@ -27,7 +27,11 @@ CONFIG_FIELDS = {
 
 def visible_templates(user):
     query = Template.objects.filter(is_deleted=False)
-    return query if is_admin(user) else query.filter(Q(is_public=True) | Q(created_by=user))
+    return (
+        query
+        if is_admin(user)
+        else query.filter(Q(is_public=True) | Q(assigned_users=user)).distinct()
+    )
 
 
 class VersionSerializer(serializers.ModelSerializer):
@@ -185,6 +189,9 @@ class PublishTemplateVersionView(APIView):
         ).first()
         if image is None:
             raise serializers.ValidationError({'image': '发布前需指定可用镜像'})
+        from apps.instances.hardware import validate_hardware_policy
+
+        validate_hardware_policy({**config, 'image': image}, request.user)
         if len(image.checksum_sha256) != 64:
             raise serializers.ValidationError({'image': '镜像需重新登记以获取摘要'})
         for field, bounds in version.constraints.get('bounds', {}).items():
@@ -197,6 +204,11 @@ class PublishTemplateVersionView(APIView):
         ):
             raise serializers.ValidationError({'disk_gib': '小于镜像虚拟容量'})
         validate_network_for_instance(config.get('network_name', ''))
+        for name in config.get('additional_networks', []):
+            validate_network_for_instance(name)
+        names = [config.get('network_name')] + config.get('additional_networks', [])
+        if len([n for n in names if n]) != len({n for n in names if n}):
+            raise serializers.ValidationError({'additional_networks': '网卡网络不能重复'})
         if version.published:
             return Response(VersionSerializer(version).data)
         version.image_checksum = image.checksum_sha256
@@ -243,6 +255,14 @@ def resolve_version(data, user):
     for field in version.constraints.get('locked', []):
         if config.get(field) != version.configuration.get(field):
             raise serializers.ValidationError({field: '此字段已被模板锁定'})
+    if not is_admin(user):
+        for field in ['hardware', 'data_disks', 'additional_networks']:
+            if config.get(field, {} if field == 'hardware' else []) != version.configuration.get(
+                field, {} if field == 'hardware' else []
+            ):
+                raise serializers.ValidationError(
+                    {field: '硬件配置仅管理员可修改，请使用管理员发布的模板配置'}
+                )
     for field, bounds in version.constraints.get('bounds', {}).items():
         value = config.get(field)
         if type(value) is not int or not bounds['min'] <= value <= bounds['max']:

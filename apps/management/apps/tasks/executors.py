@@ -9,6 +9,7 @@ import logging
 from apps.accounts.bulk import execute_account_batch
 from apps.images.uploads import execute_image_import
 from apps.infrastructure.executors import execute_infrastructure
+from apps.instances.device_management import execute_hardware_change
 from apps.instances.display import execute_instance_display
 from apps.instances.executors import (
     execute_instance_action,
@@ -47,6 +48,7 @@ def execute_node_refresh(task: Task) -> dict:
 
 
 EXECUTORS = {
+    TaskType.INSTANCE_HARDWARE: execute_hardware_change,
     TaskType.INSTANCE_DISPLAY: execute_instance_display,
     TaskType.ACCOUNT_BATCH: execute_account_batch,
     TaskType.IMAGE_IMPORT: execute_image_import,

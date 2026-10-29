@@ -43,6 +43,7 @@ class DiskStatus(models.TextChoices):
     DELETING = 'DELETING', '删除中'
     DELETED = 'DELETED', '已删除'
     FAILED = 'FAILED', '失败'
+    DETACHED = 'DETACHED', '已卸载（保留文件）'
 
 
 class ReservationStatus(models.TextChoices):

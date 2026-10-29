@@ -148,19 +148,14 @@ class InstanceCreateSerializer(serializers.Serializer):
             raise serializers.ValidationError({'additional_networks': '网卡网络重复'})
         for name in names:
             validate_network_for_instance(name)
-        from apps.accounts.roles import is_admin
-        from apps.templates.models import Template
+        from apps.templates.versions import visible_templates
 
         template_id = data.get('template')
         if template_id:
             request = self.context.get('request')
-            template = Template.objects.filter(pk=template_id, is_deleted=False).first()
-            if template is None or (
-                not template.is_public
-                and not (
-                    request
-                    and (is_admin(request.user) or template.created_by_id == request.user.pk)
-                )
+            if (
+                request is None
+                or not visible_templates(request.user).filter(pk=template_id).exists()
             ):
                 raise serializers.ValidationError({'template': '模板不存在或无权访问'})
         image = data['image']

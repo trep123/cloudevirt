@@ -199,6 +199,7 @@ export interface TaskReference {
 }
 
 export interface Template {
+  assigned_users?: number[];
   id: number;
   name: string;
   description: string;

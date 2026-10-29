@@ -159,6 +159,14 @@ def release_cancelled_task(task) -> None:
     instance.current_task = None
     instance.operation_status = 'CANCELLED'
     instance.save(update_fields=['current_task', 'operation_status', 'updated_at'])
+    if task.type == TaskType.INSTANCE_HARDWARE and not task.payload.get('execution_started'):
+        from apps.instances.models import ResourceReservation
+
+        ResourceReservation.objects.filter(task=task, status='HELD').update(status='RELEASED')
+        if task.payload.get('change', {}).get('operation') == 'disk-add':
+            instance.disks.filter(
+                pk=task.payload.get('metadata', {}).get('disk_id'), status='CREATING'
+            ).update(status=DiskStatus.DELETED)
     if task.type == TaskType.INSTANCE_CREATE:
         instance.disks.filter(status=DiskStatus.CREATING).update(
             status=DiskStatus.FAILED, updated_at=timezone.now()

@@ -3,6 +3,7 @@
 from django.urls import path
 
 from apps.accounts.roles import is_admin
+from apps.instances.device_management import InstanceHardwareView
 from apps.instances.display import InstanceDisplayView
 from apps.instances.preflight import CreatePreflightView
 from apps.instances.views import (
@@ -35,6 +36,7 @@ ROUTES = [
     ('vms/<int:pk>/addresses/', InstanceAddressesView),
     ('vms/<int:pk>/interfaces/', InstanceInterfacesView),
     ('vms/<int:pk>/display/', InstanceDisplayView),
+    ('vms/<int:pk>/hardware/', InstanceHardwareView),
     ('vms/<int:pk>/console/', InstanceConsoleView),
     ('vms/<int:pk>/<str:action>/', InstanceActionView),
     ('tasks/', TaskListView),

@@ -17,6 +17,9 @@ class Template(models.Model):
     memory_mib = models.PositiveIntegerField('内存(MiB)')
     disk_gib = models.PositiveIntegerField('系统盘(GiB)')
     is_public = models.BooleanField('公开可用', default=True)
+    assigned_users = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, blank=True, related_name='assigned_templates'
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

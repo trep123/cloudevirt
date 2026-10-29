@@ -30,6 +30,30 @@ func TestHardwareFirmwareTopologyAndLimits(t *testing.T) {
 	}
 }
 
+func TestTemplateDiskBusAndNICModel(t *testing.T) {
+	spec := validSpec()
+	spec.Network = "default"
+	spec.AdditionalNetworks = []NetworkSpec{{Network: "extra"}}
+	spec.AdditionalDiskPaths = []string{"/disks/data.qcow2"}
+	spec.Hardware = Hardware{NICModel: "e1000e", DataDiskBus: "sata"}
+	content, err := Build(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var actual domain
+	if err = xml.Unmarshal([]byte(content), &actual); err != nil {
+		t.Fatal(err)
+	}
+	if actual.Devices.Disks[1].Target.Bus != "sata" || actual.Devices.Disks[1].Target.Dev != "sdc" {
+		t.Fatal("template data disk bus ignored")
+	}
+	for _, nic := range actual.Devices.Interfaces {
+		if nic != nil && nic.Model.Type != "e1000e" {
+			t.Fatal("template NIC model ignored")
+		}
+	}
+}
+
 func TestUEFIAlwaysEnablesACPI(t *testing.T) {
 	for _, secure := range []bool{false, true} {
 		spec := validSpec()

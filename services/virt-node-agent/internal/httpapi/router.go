@@ -74,6 +74,8 @@ func NewRouter(deps Dependencies) http.Handler {
 	api.HandleFunc("GET /api/v1/node/resources", resourcesHandler(deps))
 	api.HandleFunc("GET /api/v1/domains", domainsHandler(deps))
 	api.HandleFunc("GET /api/v1/domains/{name}/display", displayHandler(deps))
+	api.HandleFunc("GET /api/v1/domains/{name}/hardware", hardwareHandler(deps))
+	api.HandleFunc("POST /api/v1/domains/{name}/hardware", hardwareHandler(deps))
 	api.HandleFunc("POST /api/v1/domains/{name}/display", displayHandler(deps))
 	api.HandleFunc("GET /api/v1/domains/{name}/addresses", domainAddressesHandler(deps))
 	api.HandleFunc("GET /api/v1/domains/{name}/interfaces", domainInterfacesHandler(deps))

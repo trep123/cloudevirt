@@ -5,6 +5,8 @@ import (
 )
 
 type Hardware struct {
+	NICModel        string `json:"nic_model"`
+	DataDiskBus     string `json:"data_disk_bus"`
 	Clipboard       bool   `json:"clipboard"`
 	VideoModel      string `json:"video_model"`
 	VideoWidth      int    `json:"video_width"`
@@ -71,6 +73,19 @@ type bandwidthRate struct {
 
 func ApplyHardware(payload *domain, spec Spec) error {
 	h := spec.Hardware
+	if h.NICModel != "" && h.NICModel != "virtio" && h.NICModel != "e1000e" {
+		return apierr.New(apierr.CodeInvalidArgument, "网卡型号无效", nil)
+	}
+	if h.DataDiskBus != "" && h.DataDiskBus != "virtio" && h.DataDiskBus != "sata" {
+		return apierr.New(apierr.CodeInvalidArgument, "数据盘总线无效", nil)
+	}
+	if h.NICModel != "" {
+		for _, nic := range payload.Devices.Interfaces {
+			if nic != nil {
+				nic.Model.Type = h.NICModel
+			}
+		}
+	}
 	video, err := BuildVideo(h.VideoModel, h.VideoWidth, h.VideoHeight)
 	if err != nil {
 		return err

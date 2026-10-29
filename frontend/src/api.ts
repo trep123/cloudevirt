@@ -122,14 +122,21 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return payload as T;
 }
 
-export async function fetchAllOptions<T>(path:string):Promise<T[]> {
-  const result:T[]=[];
-  for(let page=1;page<=100;page++){
-    const data=await request<{results:T[];count?:number}>(`${path}${path.includes('?')?'&':'?'}page=${page}&page_size=100`);
+export async function fetchAllOptions<T>(path: string): Promise<T[]> {
+  const result: T[] = [];
+  for (let page = 1; page <= 100; page++) {
+    const data = await request<{ results: T[]; count?: number }>(
+      `${path}${path.includes("?") ? "&" : "?"}page=${page}&page_size=100`,
+    );
     result.push(...data.results);
-    if(data.count===undefined||result.length>=data.count||!data.results.length)return result;
+    if (
+      data.count === undefined ||
+      result.length >= data.count ||
+      !data.results.length
+    )
+      return result;
   }
-  throw Error('可选资源超过 10000 条，请缩小资源范围');
+  throw Error("可选资源超过 10000 条，请缩小资源范围");
 }
 
 export function uploadImageChunk(
@@ -351,6 +358,7 @@ export const api = {
   templates: () =>
     request<Paginated<import("./types").Template>>("/templates?page_size=100"),
   createTemplate: (body: {
+    assigned_users?: number[];
     name: string;
     vcpu: number;
     memory_mib: number;
@@ -365,6 +373,7 @@ export const api = {
   updateTemplate: (
     id: number,
     body: Partial<{
+      assigned_users: number[];
       name: string;
       vcpu: number;
       memory_mib: number;

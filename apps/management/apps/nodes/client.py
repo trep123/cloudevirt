@@ -169,6 +169,10 @@ class AgentClient:
         path = f'/api/v1/domains/{quote(name, safe="")}/display'
         return self.get_json(path) if config is None else self.request_json(path, 'POST', config)
 
+    def domain_hardware(self, name, payload=None):
+        path = f'/api/v1/domains/{quote(name, safe="")}/hardware'
+        return self.get_json(path) if payload is None else self.request_json(path, 'POST', payload, timeout=90)
+
     def domain_addresses(self, name: str) -> dict:
         """读取域内网卡的 IPv4/IPv6 地址。"""
         return self.get_json(f'/api/v1/domains/{quote(name, safe="")}/addresses')

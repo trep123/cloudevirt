@@ -12,9 +12,10 @@ import {
 import { PageHeader } from "../components/ConsoleUI";
 import { can } from "../permissions";
 import { DeploymentTemplateEditor } from "../features/vms/DeploymentTemplateEditor";
-import type { CurrentUser, Template } from "../types";
+import type { CurrentUser, Template, User } from "../types";
 
 type TemplateForm = {
+  assigned_users: number[];
   name: string;
   description: string;
   vcpu: number;
@@ -24,6 +25,7 @@ type TemplateForm = {
 };
 
 const EMPTY_FORM: TemplateForm = {
+  assigned_users: [],
   name: "",
   description: "",
   vcpu: 2,
@@ -39,8 +41,31 @@ export function TemplatesPage({ user }: { user: CurrentUser }) {
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState<TemplateForm>(EMPTY_FORM);
   const [editing, setEditing] = useState<Template | null>(null);
+  const [users, setUsers] = useState<User[]>([]),
+    [userSearch, setUserSearch] = useState("");
 
-  const canManage = can(user, "templates.add_template");
+  const canManage =
+    user.console_scope === "admin" && can(user, "templates.add_template");
+  useEffect(() => {
+    if (!canManage) return;
+    let alive = true;
+    const timer = setTimeout(() => {
+      api
+        .request<{ results: User[] }>(
+          `/users?page_size=100&search=${encodeURIComponent(userSearch)}`,
+        )
+        .then((v) => {
+          if (alive) setUsers(v.results);
+        })
+        .catch((e) => {
+          if (alive) setError(describeError(e));
+        });
+    }, 250);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [userSearch, canManage]);
 
   const reload = useCallback(async () => {
     try {
@@ -63,6 +88,7 @@ export function TemplatesPage({ user }: { user: CurrentUser }) {
   function startEdit(template: Template) {
     setEditing(template);
     setForm({
+      assigned_users: template.assigned_users || [],
       name: template.name,
       description: template.description,
       vcpu: template.vcpu,
@@ -78,6 +104,7 @@ export function TemplatesPage({ user }: { user: CurrentUser }) {
     setError(null);
     setNotice(null);
     const payload = {
+      assigned_users: form.assigned_users,
       name: form.name,
       description: form.description,
       vcpu: form.vcpu,
@@ -194,6 +221,40 @@ export function TemplatesPage({ user }: { user: CurrentUser }) {
               />{" "}
               公开模板
             </label>
+            <div className="field-wide">
+              <h4>分配给用户</h4>
+              <p className="muted">
+                关闭“公开模板”后，仅所选用户可以查看和使用已发布版本。此分配不会授予硬件修改权限。
+              </p>
+              <input
+                placeholder="搜索授权用户名"
+                value={userSearch}
+                onChange={(e) => setUserSearch(e.target.value)}
+              />
+              <p>已选择用户 ID：{form.assigned_users.join(", ") || "无"}</p>
+              <div className="infra-form">
+                {users.map((u) => (
+                  <label className="check" key={u.id}>
+                    <input
+                      type="checkbox"
+                      checked={form.assigned_users.includes(u.id)}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          assigned_users: e.target.checked
+                            ? [...form.assigned_users, u.id]
+                            : form.assigned_users.filter((id) => id !== u.id),
+                        })
+                      }
+                    />
+                    {u.username} · #{u.id}
+                  </label>
+                ))}
+              </div>
+              <p className="muted">
+                显示当前搜索前 100 项，其他用户可按用户名定位。
+              </p>
+            </div>
             <button className="action primary" type="submit" disabled={busy}>
               {busy ? "提交中…" : editing ? "保存" : "创建"}
             </button>
