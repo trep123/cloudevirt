@@ -1,5 +1,8 @@
 import { Field } from "../../components/ui";
 export type HardwareConfig = {
+  video_model?: string;
+  video_width?: number;
+  video_height?: number;
   cpu_mode?: string;
   sockets?: number;
   cores?: number;
@@ -13,6 +16,7 @@ export type HardwareConfig = {
   network_mbps?: number;
 };
 export type CreationCapabilities = {
+  video_models?: string[];
   static_networks?: boolean;
   policy?: { vcpu: number; memory_mib: number; disk_gib: number };
   cpu_modes?: string[];
@@ -42,13 +46,73 @@ export function HardwareFields({
   const topology = value.sockets !== undefined;
   return (
     <details className="field-wide">
-      <summary>高级硬件与性能控制{locked ? "（模板已锁定）" : ""}</summary>
+      <summary>�߼�Ӳ�������ܿ���{locked ? "��ģ����������" : ""}</summary>
       <p className="muted">
-        选项依据节点实际能力。CPU
-        模式可能影响迁移兼容性；性能限制不代表物理资源独占。
+        ѡ�����ݽڵ�ʵ��������CPU
+        ģʽ����Ӱ��Ǩ�Ƽ����ԣ��������Ʋ�����������Դ��ռ��
       </p>
       <div className="infra-form">
-        <Field label="CPU 模式">
+        <Field label="������Կ�">
+          <select
+            value={value.video_model || ""}
+            disabled={locked || !caps?.video_models?.length}
+            onChange={(e) => {
+              const next = { ...value };
+              if (e.target.value) {
+                next.video_model = e.target.value;
+                next.video_width = 1920;
+                next.video_height = 1080;
+              } else {
+                delete next.video_model;
+                delete next.video_width;
+                delete next.video_height;
+              }
+              onChange(next);
+            }}
+          >
+            <option value="">�ڵ�Ĭ�ϣ���׼ VGA��</option>
+            {caps?.video_models?.map((v) => (
+              <option key={v} value={v}>
+                {v === "virtio"
+                  ? "VirtIO GPU�������������"
+                  : "��׼ VGA��64 MiB��"}
+              </option>
+            ))}
+          </select>
+        </Field>
+        {value.video_model && (
+          <>
+            <Field label="������ʾ����">
+              <input
+                type="number"
+                min={640}
+                max={3840}
+                value={value.video_width || 1920}
+                disabled={locked}
+                onChange={(e) =>
+                  onChange({ ...value, video_width: Number(e.target.value) })
+                }
+              />
+            </Field>
+            <Field label="������ʾ�߶�">
+              <input
+                type="number"
+                min={480}
+                max={2160}
+                value={value.video_height || 1080}
+                disabled={locked}
+                onChange={(e) =>
+                  onChange({ ...value, video_height: Number(e.target.value) })
+                }
+              />
+            </Field>
+            <p className="muted field-wide">
+              �ߴ�д�������Կ����ã����������ʹ���Լ�����ʾ���ã�������ǿ������ֱ��ʡ�Linux
+              ���� VirtIO��Windows ���Ӧ������
+            </p>
+          </>
+        )}
+        <Field label="CPU ģʽ">
           <select
             value={value.cpu_mode || ""}
             disabled={locked || !caps}
@@ -59,7 +123,7 @@ export function HardwareFields({
               onChange(next);
             }}
           >
-            <option value="">节点默认</option>
+            <option value="">�ڵ�Ĭ��</option>
             {caps?.cpu_modes?.map((mode) => (
               <option key={mode} value={mode}>
                 {mode}
@@ -67,7 +131,7 @@ export function HardwareFields({
             ))}
           </select>
         </Field>
-        <Field label="固件">
+        <Field label="�̼�">
           <select
             value={value.firmware || "bios"}
             disabled={locked || !caps}
@@ -105,14 +169,14 @@ export function HardwareFields({
               onChange(next);
             }}
           />
-          指定 CPU 拓扑
+          ָ�� CPU ����
         </label>
         {topology &&
           (["sockets", "cores", "threads"] as const).map((key) => (
             <Field
               key={key}
               label={
-                { sockets: "插槽", cores: "每插槽核心", threads: "每核心线程" }[
+                { sockets: "���", cores: "ÿ��ۺ���", threads: "ÿ�����߳�" }[
                   key
                 ]
               }
@@ -138,7 +202,7 @@ export function HardwareFields({
               onChange({ ...value, secure_boot: e.target.checked })
             }
           />
-          Secure Boot（需要 UEFI 固件和密钥）
+          Secure Boot����Ҫ UEFI �̼�����Կ��
         </label>
         <label className="check">
           <input
@@ -147,7 +211,7 @@ export function HardwareFields({
             disabled={locked || !caps?.tpm_emulator}
             onChange={(e) => onChange({ ...value, tpm: e.target.checked })}
           />
-          TPM 2.0 模拟器
+          TPM 2.0 ģ����
         </label>
         {isAdmin &&
           caps?.performance_limits &&
@@ -163,10 +227,10 @@ export function HardwareFields({
               key={key}
               label={
                 {
-                  cpu_quota_percent: "CPU 总限额（100%=1核，0=不限）",
-                  disk_read_iops: "每盘读取 IOPS（0=不限）",
-                  disk_write_iops: "每盘写入 IOPS（0=不限）",
-                  network_mbps: "每网卡双向 Mbit/s（0=不限，OVS 暂不支持）",
+                  cpu_quota_percent: "CPU ���޶100%=1�ˣ�0=���ޣ�",
+                  disk_read_iops: "ÿ�̶�ȡ IOPS��0=���ޣ�",
+                  disk_write_iops: "ÿ��д�� IOPS��0=���ޣ�",
+                  network_mbps: "ÿ����˫�� Mbit/s��0=���ޣ�OVS �ݲ�֧�֣�",
                 }[key]
               }
             >

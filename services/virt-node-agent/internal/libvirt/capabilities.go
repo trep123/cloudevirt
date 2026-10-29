@@ -25,6 +25,9 @@ type domainCapabilities struct {
 		} `xml:"loader"`
 	} `xml:"os"`
 	Devices struct {
+		Video struct {
+			Enums []capabilityEnum `xml:"enum"`
+		} `xml:"video"`
 		TPM struct {
 			Supported string           `xml:"supported,attr"`
 			Enums     []capabilityEnum `xml:"enum"`
@@ -66,5 +69,15 @@ func (c *Client) CreationCapabilities(ctx context.Context) (map[string]any, erro
 		}
 	}
 	_, swtpmErr := exec.LookPath("swtpm")
-	return map[string]any{"cpu_modes": modes, "firmware": firmware, "secure_boot": secure && parsed.OS.Loader.Supported == "yes", "tpm_emulator": parsed.Devices.TPM.Supported == "yes" && swtpmErr == nil}, nil
+	videoModels := []string{}
+	for _, enum := range parsed.Devices.Video.Enums {
+		if enum.Name == "modelType" {
+			for _, value := range enum.Values {
+				if value == "vga" || value == "virtio" {
+					videoModels = append(videoModels, value)
+				}
+			}
+		}
+	}
+	return map[string]any{"video_models": videoModels, "cpu_modes": modes, "firmware": firmware, "secure_boot": secure && parsed.OS.Loader.Supported == "yes", "tpm_emulator": parsed.Devices.TPM.Supported == "yes" && swtpmErr == nil}, nil
 }

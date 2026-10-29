@@ -1,6 +1,6 @@
-// Package httpapi 提供节点 Agent 的 HTTP 路由、中间件与响应结构。
+// Package httpapi �ṩ�ڵ� Agent �� HTTP ·�ɡ��м������Ӧ�ṹ��
 //
-// 健康检查免认证；/api/v1 下的接口必须携带共享令牌。
+// �����������֤��/api/v1 �µĽӿڱ���Я���������ơ�
 package httpapi
 
 import (
@@ -16,24 +16,24 @@ import (
 	"github.com/tl2004/cloude-virt/services/virt-node-agent/internal/libvirt"
 )
 
-// errNoDomainLister 表示未注入域查询依赖。
-var errNoDomainLister = apierr.New(apierr.CodeInternalError, "域查询依赖未初始化", nil)
+// errNoDomainLister ��ʾδע�����ѯ������
+var errNoDomainLister = apierr.New(apierr.CodeInternalError, "���ѯ����δ��ʼ��", nil)
 
-// errNoVirtualizer 表示未注入域操作依赖。
-var errNoVirtualizer = apierr.New(apierr.CodeInternalError, "域操作依赖未初始化", nil)
+// errNoVirtualizer ��ʾδע�������������
+var errNoVirtualizer = apierr.New(apierr.CodeInternalError, "���������δ��ʼ��", nil)
 
-// healthResponse 是健康检查响应体。
+// healthResponse �ǽ��������Ӧ�塣
 type healthResponse struct {
 	Status  string `json:"status"`
 	Version string `json:"version"`
 }
 
-// DomainLister 是域查询依赖，便于测试替换。
+// DomainLister �����ѯ���������ڲ����滻��
 type DomainLister interface {
 	ListDomains(ctx context.Context) ([]libvirt.Domain, error)
 }
 
-// Dependencies 是路由所需的外部依赖。
+// Dependencies ��·��������ⲿ������
 type Dependencies struct {
 	Version          string
 	Token            string
@@ -47,7 +47,7 @@ type Dependencies struct {
 	Logger           *slog.Logger
 }
 
-// NewRouter 注册全部路由并返回处理器。
+// NewRouter ע��ȫ��·�ɲ����ش�������
 func NewRouter(deps Dependencies) http.Handler {
 	logger := deps.Logger
 	if logger == nil {
@@ -56,7 +56,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(writer http.ResponseWriter, request *http.Request) {
 		writeJSON(writer, http.StatusOK, healthResponse{Status: "ok", Version: deps.Version})
-		logger.Info("健康检查", "remote_addr", request.RemoteAddr, "result", "ok")
+		logger.Info("�������", "remote_addr", request.RemoteAddr, "result", "ok")
 	})
 
 	api := http.NewServeMux()
@@ -73,6 +73,8 @@ func NewRouter(deps Dependencies) http.Handler {
 	api.HandleFunc("POST /api/v1/domains/{name}/snapshots", infrastructureHandler(deps, true))
 	api.HandleFunc("GET /api/v1/node/resources", resourcesHandler(deps))
 	api.HandleFunc("GET /api/v1/domains", domainsHandler(deps))
+	api.HandleFunc("GET /api/v1/domains/{name}/display", displayHandler(deps))
+	api.HandleFunc("POST /api/v1/domains/{name}/display", displayHandler(deps))
 	api.HandleFunc("GET /api/v1/domains/{name}/addresses", domainAddressesHandler(deps))
 	api.HandleFunc("GET /api/v1/domains/{name}/interfaces", domainInterfacesHandler(deps))
 	api.HandleFunc("GET /api/v1/networks", networkListHandler(deps))
@@ -89,19 +91,19 @@ func NewRouter(deps Dependencies) http.Handler {
 	protected := auth.TokenMiddleware(deps.Token, api)
 	mux.Handle("/api/", protected)
 	mux.Handle("/api/v1/", protected)
-	// 控制台 WebSocket 使用短签名凭证，不使用静态令牌头
+	// ����̨ WebSocket ʹ�ö�ǩ��ƾ֤����ʹ�þ�̬����ͷ
 	mux.HandleFunc("GET /vnc", vncProxyHandler(deps))
 	return RequestIDMiddleware(mux)
 }
 
-// storagePayload 是单个路径的存储信息。
+// storagePayload �ǵ���·���Ĵ洢��Ϣ��
 type storagePayload struct {
 	Path       string `json:"path"`
 	TotalBytes uint64 `json:"total_bytes"`
 	FreeBytes  uint64 `json:"free_bytes"`
 }
 
-// resourcesResponse 是资源采集响应体。
+// resourcesResponse ����Դ�ɼ���Ӧ�塣
 type resourcesResponse struct {
 	CPULogical         int              `json:"cpu_logical"`
 	MemoryTotalMiB     int64            `json:"memory_total_mib"`
@@ -110,16 +112,16 @@ type resourcesResponse struct {
 	SampledAt          time.Time        `json:"sampled_at"`
 }
 
-// resourcesHandler 采集宿主机资源。
+// resourcesHandler �ɼ���������Դ��
 func resourcesHandler(deps Dependencies) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		requestID := RequestIDFromContext(request.Context())
 		resources, err := host.Collect(deps.StoragePaths)
 		if err != nil {
-			// 采集失败（如存储目录不存在）记入日志，对外只返回稳定错误码
-			deps.Logger.Error("资源采集失败", "error", err, "request_id", requestID)
+			// �ɼ�ʧ�ܣ���洢Ŀ¼�����ڣ�������־������ֻ�����ȶ�������
+			deps.Logger.Error("��Դ�ɼ�ʧ��", "error", err, "request_id", requestID)
 			writeAPIError(writer, deps.Logger, apierr.New(
-				apierr.CodeOperationFailed, "资源采集失败", err,
+				apierr.CodeOperationFailed, "��Դ�ɼ�ʧ��", err,
 			), requestID)
 			return
 		}
@@ -140,19 +142,19 @@ func resourcesHandler(deps Dependencies) http.HandlerFunc {
 	}
 }
 
-// domainPayload 是单个域的信息。
+// domainPayload �ǵ��������Ϣ��
 type domainPayload struct {
 	Name  string `json:"name"`
 	State string `json:"state"`
 }
 
-// domainsResponse 是域列表响应体。
+// domainsResponse �����б���Ӧ�塣
 type domainsResponse struct {
 	Domains   []domainPayload `json:"domains"`
 	SampledAt time.Time       `json:"sampled_at"`
 }
 
-// domainsHandler 返回域列表与状态。
+// domainsHandler �������б���״̬��
 func domainsHandler(deps Dependencies) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		requestID := RequestIDFromContext(request.Context())
@@ -173,11 +175,11 @@ func domainsHandler(deps Dependencies) http.HandlerFunc {
 	}
 }
 
-// writeJSON 写入 JSON 响应，统一设置 Content-Type。
+// writeJSON д�� JSON ��Ӧ��ͳһ���� Content-Type��
 func writeJSON(writer http.ResponseWriter, status int, payload any) {
 	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 	writer.WriteHeader(status)
 	if err := json.NewEncoder(writer).Encode(payload); err != nil {
-		slog.Error("响应序列化失败", "error", err)
+		slog.Error("��Ӧ���л�ʧ��", "error", err)
 	}
 }

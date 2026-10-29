@@ -1,7 +1,7 @@
-"""节点 Agent HTTP 客户端。
+"""�ڵ� Agent HTTP �ͻ��ˡ�
 
-所有请求带共享令牌并设置超时；异常统一转换为平台错误码，
-禁止把 Agent 返回的堆栈或敏感路径直接透传。
+����������������Ʋ����ó�ʱ���쳣ͳһת��Ϊƽ̨�����룬
+��ֹ�� Agent ���صĶ�ջ������·��ֱ��͸����
 """
 
 import json
@@ -31,43 +31,43 @@ def agent_http_error(exc):
     if code == 'UNAUTHORIZED' or exc.code in {401, 403}:
         code, message = (
             ErrorCode.OPERATION_FAILED,
-            '节点 Agent 认证失败，请检查管理端和节点共享令牌配置',
+            '�ڵ� Agent ��֤ʧ�ܣ���������˺ͽڵ㹲����������',
         )
     elif code not in ErrorCode.values:
-        code, message = ErrorCode.OPERATION_FAILED, '节点 Agent 返回异常响应，请检查节点日志和版本'
+        code, message = ErrorCode.OPERATION_FAILED, '�ڵ� Agent �����쳣��Ӧ������ڵ���־�Ͱ汾'
     if not message:
-        message = '节点 Agent 执行失败，请检查节点日志'
+        message = '�ڵ� Agent ִ��ʧ�ܣ�����ڵ���־'
     return AppError(
         code, message, details={'agent_status': exc.code, 'agent_request_id': request_id}
     )
 
 
 class AgentClient:
-    """节点 Agent 客户端。"""
+    """�ڵ� Agent �ͻ��ˡ�"""
 
     def __init__(self, endpoint: str, token: str = '', timeout: int | None = None) -> None:
-        """初始化客户端。
+        """��ʼ���ͻ��ˡ�
 
         Args:
-            endpoint: Agent 地址，形如 http://host:port。
-            token: 共享令牌，缺省取 settings.AGENT_SHARED_TOKEN。
-            timeout: 超时秒数，缺省取 settings.AGENT_REQUEST_TIMEOUT_SECONDS。
+            endpoint: Agent ��ַ������ http://host:port��
+            token: �������ƣ�ȱʡȡ settings.AGENT_SHARED_TOKEN��
+            timeout: ��ʱ������ȱʡȡ settings.AGENT_REQUEST_TIMEOUT_SECONDS��
         """
         self.endpoint = endpoint.rstrip('/')
         self.token = token or getattr(settings, 'AGENT_SHARED_TOKEN', '')
         self.timeout = timeout or getattr(settings, 'AGENT_REQUEST_TIMEOUT_SECONDS', 30)
 
     def get_json(self, path: str) -> Any:
-        """请求 Agent 的 JSON 接口。
+        """���� Agent �� JSON �ӿڡ�
 
         Args:
-            path: 以 / 开头的路径。
+            path: �� / ��ͷ��·����
 
         Returns:
-            反序列化后的响应内容。
+            �����л������Ӧ���ݡ�
 
         Raises:
-            AppError: 超时、连接失败、非 2xx 或响应不是合法 JSON。
+            AppError: ��ʱ������ʧ�ܡ��� 2xx ����Ӧ���ǺϷ� JSON��
         """
         request = urllib.request.Request(
             f'{self.endpoint}{path}',
@@ -80,28 +80,28 @@ class AgentClient:
         except urllib.error.HTTPError as exc:
             raise agent_http_error(exc) from exc
         except urllib.error.URLError as exc:
-            raise AppError(ErrorCode.NODE_OFFLINE, '无法连接节点 Agent') from exc
+            raise AppError(ErrorCode.NODE_OFFLINE, '�޷����ӽڵ� Agent') from exc
         except TimeoutError as exc:
-            raise AppError(ErrorCode.COMMAND_TIMEOUT, '调用节点 Agent 超时') from exc
+            raise AppError(ErrorCode.COMMAND_TIMEOUT, '���ýڵ� Agent ��ʱ') from exc
 
         try:
             return json.loads(payload)
         except json.JSONDecodeError as exc:
-            logger.warning('Agent 响应不是合法 JSON', extra={'path': path})
-            raise AppError(ErrorCode.OPERATION_FAILED, '节点 Agent 响应格式错误') from exc
+            logger.warning('Agent ��Ӧ���ǺϷ� JSON', extra={'path': path})
+            raise AppError(ErrorCode.OPERATION_FAILED, '�ڵ� Agent ��Ӧ��ʽ����') from exc
 
     def health(self) -> dict:
-        """读取健康检查。"""
+        """��ȡ������顣"""
         return self.get_json('/health')
 
     def resources(self) -> dict:
-        """读取资源采集结果。"""
+        """��ȡ��Դ�ɼ������"""
         return self.get_json('/api/v1/node/resources')
 
     def request_json(
         self, path: str, method: str, body: dict | None = None, *, timeout: int | None = None
     ) -> Any:
-        """发送带 JSON 体的请求（用于写操作）。"""
+        """���ʹ� JSON �����������д��������"""
         payload = (
             json.dumps(body or {}, ensure_ascii=False).encode('utf-8') if body is not None else None
         )
@@ -120,13 +120,13 @@ class AgentClient:
         except urllib.error.HTTPError as exc:
             raise agent_http_error(exc) from exc
         except urllib.error.URLError as exc:
-            raise AppError(ErrorCode.NODE_OFFLINE, '无法连接节点 Agent') from exc
+            raise AppError(ErrorCode.NODE_OFFLINE, '�޷����ӽڵ� Agent') from exc
         except TimeoutError as exc:
-            raise AppError(ErrorCode.COMMAND_TIMEOUT, '调用节点 Agent 超时') from exc
+            raise AppError(ErrorCode.COMMAND_TIMEOUT, '���ýڵ� Agent ��ʱ') from exc
         try:
             return json.loads(raw) if raw else {}
         except json.JSONDecodeError as exc:
-            raise AppError(ErrorCode.OPERATION_FAILED, '节点 Agent 响应格式错误') from exc
+            raise AppError(ErrorCode.OPERATION_FAILED, '�ڵ� Agent ��Ӧ��ʽ����') from exc
 
     def upload_chunk(self, upload_id: str, offset: int, size: int, extension: str, data: bytes):
         query = f'?offset={offset}&size={size}&extension={extension}'
@@ -146,46 +146,50 @@ class AgentClient:
             raise agent_http_error(exc) from exc
         except urllib.error.URLError as exc:
             raise AppError(
-                ErrorCode.NODE_OFFLINE, '无法连接节点 Agent，上传已暂停，可查询进度后继续'
+                ErrorCode.NODE_OFFLINE, '�޷����ӽڵ� Agent���ϴ�����ͣ���ɲ�ѯ���Ⱥ����'
             ) from exc
         except TimeoutError as exc:
             raise AppError(
-                ErrorCode.COMMAND_TIMEOUT, '分片响应超时，请查询已接收进度后继续'
+                ErrorCode.COMMAND_TIMEOUT, '��Ƭ��Ӧ��ʱ�����ѯ�ѽ��ս��Ⱥ����'
             ) from exc
 
     def inspect_image(self, relative_path: str) -> dict:
-        """请求 Agent 检查镜像文件（格式、容量、校验和）。"""
+        """���� Agent ��龵���ļ�����ʽ��������У��ͣ���"""
         return self.request_json('/api/v1/images/inspect', 'POST', {'relative_path': relative_path})
 
     def delete_image(self, relative_path: str) -> dict:
-        """请求 Agent 删除镜像文件（受宿主机破坏性开关约束）。"""
+        """���� Agent ɾ�������ļ������������ƻ��Կ���Լ������"""
         return self.request_json('/api/v1/images', 'DELETE', {'relative_path': relative_path})
 
     def create_domain(self, payload: dict) -> dict:
-        """请求 Agent 创建并启动域。"""
+        """���� Agent ������������"""
         return self.request_json('/api/v1/domains', 'POST', payload, timeout=590)
 
+    def domain_display(self, name, config=None):
+        path = f'/api/v1/domains/{quote(name, safe="")}/display'
+        return self.get_json(path) if config is None else self.request_json(path, 'POST', config)
+
     def domain_addresses(self, name: str) -> dict:
-        """读取域内网卡的 IPv4/IPv6 地址。"""
+        """��ȡ���������� IPv4/IPv6 ��ַ��"""
         return self.get_json(f'/api/v1/domains/{quote(name, safe="")}/addresses')
 
     def domain_interfaces(self, name: str) -> dict:
-        """读取域网卡接口信息。"""
+        """��ȡ�������ӿ���Ϣ��"""
         return self.get_json(f'/api/v1/domains/{quote(name, safe="")}/interfaces')
 
     def domain_action(self, name: str, action: str) -> dict:
-        """执行域操作：start / shutdown / force-stop / reboot。"""
+        """ִ���������start / shutdown / force-stop / reboot��"""
         return self.request_json(f'/api/v1/domains/{name}/{action}', 'POST', {})
 
     def delete_domain(self, name: str, disk_relative_path: str = '') -> dict:
-        """删除域定义，可选删除磁盘文件。"""
+        """ɾ�����壬��ѡɾ�������ļ���"""
         suffix = f'?disk_relative_path={disk_relative_path}' if disk_relative_path else ''
         return self.request_json(f'/api/v1/domains/{name}{suffix}', 'DELETE')
 
     def list_disks(self) -> list[dict]:
-        """列出节点磁盘目录中的文件。"""
+        """�г��ڵ����Ŀ¼�е��ļ���"""
         payload = self.get_json('/api/v1/disks')
-        # 同上：空目录时 Agent 可能返回 null
+        # ͬ�ϣ���Ŀ¼ʱ Agent ���ܷ��� null
         disks = (payload.get('disks') or []) if isinstance(payload, dict) else []
         return [item for item in disks if isinstance(item, dict)]
 
@@ -198,8 +202,8 @@ class AgentClient:
         )
 
     def domains(self) -> list[dict]:
-        """读取域列表。"""
+        """��ȡ���б���"""
         payload = self.get_json('/api/v1/domains')
-        # Agent 在无域时会返回 null（Go nil slice），统一按空列表处理
+        # Agent ������ʱ�᷵�� null��Go nil slice����ͳһ�����б�����
         domains = (payload.get('domains') or []) if isinstance(payload, dict) else []
         return [item for item in domains if isinstance(item, dict)]

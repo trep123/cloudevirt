@@ -1,7 +1,7 @@
-// Package domainxml 生成并校验 libvirt 域定义 XML。
+// Package domainxml ���ɲ�У�� libvirt ���� XML��
 //
-// 所有动态字段通过 encoding/xml 序列化，天然转义，禁止字符串拼接；
-// 生成后必须重新解析校验，失败时不得调用 libvirt。
+// ���ж�̬�ֶ�ͨ�� encoding/xml ���л�����Ȼת�壬��ֹ�ַ���ƴ�ӣ�
+// ���ɺ�������½���У�飬ʧ��ʱ���õ��� libvirt��
 package domainxml
 
 import (
@@ -14,7 +14,7 @@ import (
 	"github.com/tl2004/cloude-virt/services/virt-node-agent/internal/apierr"
 )
 
-// 默认值。
+// Ĭ��ֵ��
 const (
 	DomainType   = "kvm"
 	MachineType  = "q35"
@@ -28,7 +28,7 @@ var (
 	uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 )
 
-// Spec 是创建域所需的全部输入。
+// Spec �Ǵ����������ȫ�����롣
 type Spec struct {
 	MAC                 string
 	SeedPath            string
@@ -55,7 +55,7 @@ type NetworkSpec struct {
 	VLANID        int    `json:"vlan_id"`
 }
 
-// domain 是 XML 结构，字段顺序即输出顺序。
+// domain �� XML �ṹ���ֶ�˳�����˳��
 type domain struct {
 	XMLName  xml.Name      `xml:"domain"`
 	Type     string        `xml:"type,attr"`
@@ -92,6 +92,7 @@ type osType struct {
 }
 
 type devices struct {
+	Video      *Video        `xml:"video,omitempty"`
 	TPM        *tpmSpec      `xml:"tpm,omitempty"`
 	Disks      []disk        `xml:"disk"`
 	Interfaces []*iface      `xml:"interface,omitempty"`
@@ -170,47 +171,47 @@ type graphicsSpec struct {
 	Passwd   string `xml:"passwd,attr,omitempty"`
 }
 
-// ValidName 判断名称是否符合域名规则。
+// ValidName �ж������Ƿ������������
 func ValidName(name string) bool {
 	return namePattern.MatchString(name)
 }
 
-// ValidateSpec 校验输入字段格式与取值范围。
+// ValidateSpec У�������ֶθ�ʽ��ȡֵ��Χ��
 func ValidateSpec(spec Spec) error {
 	if !namePattern.MatchString(spec.Name) {
-		return apierr.New(apierr.CodeInvalidArgument, "域名格式非法", nil)
+		return apierr.New(apierr.CodeInvalidArgument, "������ʽ�Ƿ�", nil)
 	}
 	if !uuidPattern.MatchString(spec.UUID) {
-		return apierr.New(apierr.CodeInvalidArgument, "UUID 格式非法", nil)
+		return apierr.New(apierr.CodeInvalidArgument, "UUID ��ʽ�Ƿ�", nil)
 	}
 	if spec.VCPU <= 0 || spec.VCPU > 128 {
-		return apierr.New(apierr.CodeInvalidArgument, "vCPU 数量超出允许范围", nil)
+		return apierr.New(apierr.CodeInvalidArgument, "vCPU ��������������Χ", nil)
 	}
 	if spec.MemoryMiB < 128 || spec.MemoryMiB > 1048576 {
-		return apierr.New(apierr.CodeInvalidArgument, "内存大小超出允许范围", nil)
+		return apierr.New(apierr.CodeInvalidArgument, "�ڴ��С����������Χ", nil)
 	}
 	if strings.TrimSpace(spec.DiskPath) == "" {
-		return apierr.New(apierr.CodeInvalidArgument, "磁盘路径不能为空", nil)
+		return apierr.New(apierr.CodeInvalidArgument, "����·������Ϊ��", nil)
 	}
 	if spec.Network != "" && !namePattern.MatchString(spec.Network) {
-		return apierr.New(apierr.CodeInvalidArgument, "网络名称格式非法", nil)
+		return apierr.New(apierr.CodeInvalidArgument, "�������Ƹ�ʽ�Ƿ�", nil)
 	}
 	if len(spec.VNCPassword) > 8 {
-		return apierr.New(apierr.CodeInvalidArgument, "VNC 口令不能超过 8 个字符", nil)
+		return apierr.New(apierr.CodeInvalidArgument, "VNC ����ܳ��� 8 ���ַ�", nil)
 	}
 	if spec.NetworkType != "" && spec.NetworkType != "LIBVIRT_NETWORK" && spec.NetworkType != "BRIDGE" && spec.NetworkType != "OVS" {
-		return apierr.New(apierr.CodeInvalidArgument, "网络类型不受支持", nil)
+		return apierr.New(apierr.CodeInvalidArgument, "�������Ͳ���֧��", nil)
 	}
 	if spec.NetworkType == "OVS" && strings.TrimSpace(spec.NetworkBridge) == "" {
-		return apierr.New(apierr.CodeInvalidArgument, "OVS 网络必须指定网桥名称", nil)
+		return apierr.New(apierr.CodeInvalidArgument, "OVS �������ָ����������", nil)
 	}
 	if spec.VLANID < 0 || spec.VLANID > 4094 {
-		return apierr.New(apierr.CodeInvalidArgument, "VLAN ID 超出范围", nil)
+		return apierr.New(apierr.CodeInvalidArgument, "VLAN ID ������Χ", nil)
 	}
 	return nil
 }
 
-// Build 生成域定义 XML。
+// Build �������� XML��
 func Build(spec Spec) (string, error) {
 	if err := ValidateSpec(spec); err != nil {
 		return "", err
@@ -249,11 +250,11 @@ func Build(spec Spec) (string, error) {
 		payload.Devices.Disks = append(payload.Devices.Disks, disk{Type: "file", Device: "cdrom", Driver: diskDrive{Name: "qemu", Type: "raw"}, Source: diskSrc{File: spec.ISOPath}, Target: diskTgt{Dev: "sda", Bus: "sata"}, Readonly: &struct{}{}})
 	}
 	if len(spec.AdditionalDiskPaths) > 8 || len(spec.AdditionalNetworks) > 7 {
-		return "", apierr.New(apierr.CodeInvalidArgument, "设备数量超限", nil)
+		return "", apierr.New(apierr.CodeInvalidArgument, "�豸��������", nil)
 	}
 	for index, path := range spec.AdditionalDiskPaths {
 		if strings.TrimSpace(path) == "" {
-			return "", apierr.New(apierr.CodeInvalidArgument, "数据盘路径为空", nil)
+			return "", apierr.New(apierr.CodeInvalidArgument, "������·��Ϊ��", nil)
 		}
 		payload.Devices.Disks = append(payload.Devices.Disks, disk{Type: "file", Device: "disk", Driver: diskDrive{Name: "qemu", Type: DiskFormat}, Source: diskSrc{File: path}, Target: diskTgt{Dev: fmt.Sprintf("vd%c", 'b'+index), Bus: DiskBus}})
 	}
@@ -295,7 +296,7 @@ func Build(spec Spec) (string, error) {
 	if spec.MAC != "" {
 		mac, err := net.ParseMAC(spec.MAC)
 		if err != nil || len(mac) != 6 || mac[0]&1 != 0 {
-			return "", apierr.New(apierr.CodeInvalidArgument, "MAC 地址无效", err)
+			return "", apierr.New(apierr.CodeInvalidArgument, "MAC ��ַ��Ч", err)
 		}
 		if payload.Devices.Interfaces[0] != nil {
 			payload.Devices.Interfaces[0].MAC = &macSpec{Address: mac.String()}
@@ -319,7 +320,7 @@ func Build(spec Spec) (string, error) {
 			return "", err
 		}
 		if len(parsed.Devices.Interfaces) != 1 || parsed.Devices.Interfaces[0] == nil {
-			return "", apierr.New(apierr.CodeInvalidArgument, "附加网络无效", nil)
+			return "", apierr.New(apierr.CodeInvalidArgument, "����������Ч", nil)
 		}
 		payload.Devices.Interfaces = append(payload.Devices.Interfaces, parsed.Devices.Interfaces[0])
 	}
@@ -328,7 +329,7 @@ func Build(spec Spec) (string, error) {
 	}
 	encoded, err := xml.MarshalIndent(payload, "", "  ")
 	if err != nil {
-		return "", apierr.New(apierr.CodeOperationFailed, "域 XML 生成失败", err)
+		return "", apierr.New(apierr.CodeOperationFailed, "�� XML ����ʧ��", err)
 	}
 	content := xml.Header + string(encoded)
 	if err := Validate(content); err != nil {
@@ -337,28 +338,28 @@ func Build(spec Spec) (string, error) {
 	return content, nil
 }
 
-// Validate 校验 XML 结构完整且关键字段与约定一致。
+// Validate У�� XML �ṹ�����ҹؼ��ֶ���Լ��һ�¡�
 func Validate(content string) error {
 	var parsed domain
 	if err := xml.Unmarshal([]byte(content), &parsed); err != nil {
-		return apierr.New(apierr.CodeOperationFailed, "域 XML 解析失败", err)
+		return apierr.New(apierr.CodeOperationFailed, "�� XML ����ʧ��", err)
 	}
 	if parsed.Name == "" || parsed.UUID == "" {
-		return apierr.New(apierr.CodeOperationFailed, "域 XML 缺少名称或 UUID", nil)
+		return apierr.New(apierr.CodeOperationFailed, "�� XML ȱ�����ƻ� UUID", nil)
 	}
 	if parsed.Memory.Value <= 0 || parsed.VCPU <= 0 {
-		return apierr.New(apierr.CodeOperationFailed, "域 XML 缺少内存或 vCPU", nil)
+		return apierr.New(apierr.CodeOperationFailed, "�� XML ȱ���ڴ�� vCPU", nil)
 	}
 	if len(parsed.Devices.Disks) == 0 || parsed.Devices.Disks[0].Source.File == "" {
-		return apierr.New(apierr.CodeOperationFailed, "域 XML 缺少磁盘定义", nil)
+		return apierr.New(apierr.CodeOperationFailed, "�� XML ȱ�ٴ��̶���", nil)
 	}
 	if parsed.Devices.Disks[0].Target.Bus != DiskBus {
-		return apierr.New(apierr.CodeOperationFailed, "磁盘总线不符合约定", nil)
+		return apierr.New(apierr.CodeOperationFailed, "�������߲�����Լ��", nil)
 	}
 	return nil
 }
 
-// memoryToMiB 按 unit 归一化内存值到 MiB（virsh dumpxml 默认输出 KiB）。
+// memoryToMiB �� unit ��һ���ڴ�ֵ�� MiB��virsh dumpxml Ĭ����� KiB����
 func memoryToMiB(value memory) int {
 	switch value.Unit {
 	case "KiB", "kB", "":
@@ -370,27 +371,27 @@ func memoryToMiB(value memory) int {
 	}
 }
 
-// Describe 返回简短摘要，便于日志与调试。
+// Describe ���ؼ��ժҪ��������־����ԡ�
 func Describe(spec Spec) string {
 	return fmt.Sprintf("%s(%s) vcpu=%d mem=%dMiB", spec.Name, spec.UUID, spec.VCPU, spec.MemoryMiB)
 }
 
-// Parse 从域定义 XML 中提取关键字段，用于创建后核对。
+// Parse ������ XML ����ȡ�ؼ��ֶΣ����ڴ�����˶ԡ�
 //
 // Args:
 //
-//	content: virsh dumpxml 输出的 XML。
+//	content: virsh dumpxml ����� XML��
 //
 // Returns:
 //
-//	提取出的规格；缺少关键字段时返回错误。
+//	��ȡ���Ĺ��ȱ�ٹؼ��ֶ�ʱ���ش���
 func Parse(content string) (Spec, error) {
 	var parsed domain
 	if err := xml.Unmarshal([]byte(content), &parsed); err != nil {
-		return Spec{}, apierr.New(apierr.CodeOperationFailed, "域 XML 解析失败", err)
+		return Spec{}, apierr.New(apierr.CodeOperationFailed, "�� XML ����ʧ��", err)
 	}
 	if parsed.Name == "" || parsed.UUID == "" {
-		return Spec{}, apierr.New(apierr.CodeOperationFailed, "域 XML 缺少名称或 UUID", nil)
+		return Spec{}, apierr.New(apierr.CodeOperationFailed, "�� XML ȱ�����ƻ� UUID", nil)
 	}
 	spec := Spec{
 		Name:      parsed.Name,

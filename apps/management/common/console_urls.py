@@ -3,6 +3,7 @@
 from django.urls import path
 
 from apps.accounts.roles import is_admin
+from apps.instances.display import InstanceDisplayView
 from apps.instances.preflight import CreatePreflightView
 from apps.instances.views import (
     InstanceActionView,
@@ -23,7 +24,7 @@ class ConsoleBoundaryMixin:
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
         if is_admin(request.user) != self.admin_scope:
-            raise AppError(ErrorCode.PERMISSION_DENIED, '账号不属于此控制台的授权范围')
+            raise AppError(ErrorCode.PERMISSION_DENIED, '�˺Ų����ڴ˿���̨����Ȩ��Χ')
 
 
 ROUTES = [
@@ -33,6 +34,7 @@ ROUTES = [
     ('vms/<int:pk>/', InstanceDetailView),
     ('vms/<int:pk>/addresses/', InstanceAddressesView),
     ('vms/<int:pk>/interfaces/', InstanceInterfacesView),
+    ('vms/<int:pk>/display/', InstanceDisplayView),
     ('vms/<int:pk>/console/', InstanceConsoleView),
     ('vms/<int:pk>/<str:action>/', InstanceActionView),
     ('tasks/', TaskListView),

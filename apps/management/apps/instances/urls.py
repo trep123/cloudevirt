@@ -1,8 +1,9 @@
-"""实例路由。"""
+"""ʵ��·�ɡ�"""
 
 from django.urls import path
 
 from apps.instances.preflight import CreatePreflightView
+from apps.instances.display import InstanceDisplayView
 from apps.instances.views import (
     DiskListView,
     InstanceActionView,
@@ -14,6 +15,7 @@ from apps.instances.views import (
 )
 
 urlpatterns = [
+    path('instances/<int:pk>/display', InstanceDisplayView.as_view()),
     path('instances/preflight', CreatePreflightView.as_view()),
     path('instances', InstanceListCreateView.as_view(), name='instance-list'),
     path(
@@ -29,7 +31,7 @@ urlpatterns = [
         InstanceConsoleView.as_view(),
         name='instance-console',
     ),
-    # 动作路由必须在详情路由之前，避免 "start" 等被当作 pk
+    # ����·�ɱ���������·��֮ǰ������ "start" �ȱ����� pk
     path('instances/<int:pk>/<str:action>', InstanceActionView.as_view(), name='instance-action'),
     path('instances/<int:pk>', InstanceDetailView.as_view(), name='instance-detail'),
     path('disks', DiskListView.as_view(), name='disk-list'),

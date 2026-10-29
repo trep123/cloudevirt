@@ -1,7 +1,7 @@
-"""任务执行器注册表。
+"""����ִ����ע�����
 
-各业务模块在此登记自己的执行器；未登记的类型会被明确失败，
-避免“任务入队但没有实现”的静默成功。
+��ҵ��ģ���ڴ˵Ǽ��Լ���ִ������δ�Ǽǵ����ͻᱻ��ȷʧ�ܣ�
+���⡰������ӵ�û��ʵ�֡��ľ�Ĭ�ɹ���
 """
 
 import logging
@@ -9,6 +9,7 @@ import logging
 from apps.accounts.bulk import execute_account_batch
 from apps.images.uploads import execute_image_import
 from apps.infrastructure.executors import execute_infrastructure
+from apps.instances.display import execute_instance_display
 from apps.instances.executors import (
     execute_instance_action,
     execute_instance_create,
@@ -24,28 +25,29 @@ logger = logging.getLogger(__name__)
 
 
 def execute_node_refresh(task: Task) -> dict:
-    """执行节点资源刷新。
+    """ִ�нڵ���Դˢ�¡�
 
     Args:
-        task: 任务对象，resource_id 为节点主键。
+        task: �������resource_id Ϊ�ڵ�������
 
     Returns:
-        执行结果摘要。
+        ִ�н��ժҪ��
 
     Raises:
-        AppError: 节点不存在时抛出 NOT_FOUND。
+        AppError: �ڵ㲻����ʱ�׳� NOT_FOUND��
     """
     node = Node.objects.filter(pk=task.resource_id, is_deleted=False).first()
     if node is None:
-        raise AppError(ErrorCode.NOT_FOUND, '节点不存在')
-    record_event(task, to_status=TaskStatus.PREPARING, message='开始采集节点资源')
+        raise AppError(ErrorCode.NOT_FOUND, '�ڵ㲻����')
+    record_event(task, to_status=TaskStatus.PREPARING, message='��ʼ�ɼ��ڵ���Դ')
     refresh_node(node)
     if node.status == 'OFFLINE':
-        raise AppError(ErrorCode.NODE_OFFLINE, '节点离线，采集未完成')
+        raise AppError(ErrorCode.NODE_OFFLINE, '�ڵ����ߣ��ɼ�δ���')
     return {'node_id': node.pk, 'status': node.status, 'cpu_total': node.cpu_total}
 
 
 EXECUTORS = {
+    TaskType.INSTANCE_DISPLAY: execute_instance_display,
     TaskType.ACCOUNT_BATCH: execute_account_batch,
     TaskType.IMAGE_IMPORT: execute_image_import,
     'STORAGE_POOL_CREATE': execute_infrastructure,
@@ -61,18 +63,18 @@ EXECUTORS = {
 
 
 def execute_task(task: Task) -> dict:
-    """按类型分发执行。
+    """�����ͷַ�ִ�С�
 
     Args:
-        task: 待执行任务。
+        task: ��ִ������
 
     Returns:
-        执行结果字典。
+        ִ�н���ֵ䡣
 
     Raises:
-        AppError: 类型未登记执行器时抛出 OPERATION_FAILED。
+        AppError: ����δ�Ǽ�ִ����ʱ�׳� OPERATION_FAILED��
     """
     executor = EXECUTORS.get(task.type)
     if executor is None:
-        raise AppError(ErrorCode.OPERATION_FAILED, f'任务类型未登记执行器: {task.type}')
+        raise AppError(ErrorCode.OPERATION_FAILED, f'��������δ�Ǽ�ִ����: {task.type}')
     return executor(task)
