@@ -38,7 +38,9 @@ type firmwareFeature struct {
 	Enabled string `xml:"enabled,attr"`
 }
 type featuresSpec struct {
-	SMM *smmSpec `xml:"smm,omitempty"`
+	ACPI *struct{} `xml:"acpi,omitempty"`
+	APIC *struct{} `xml:"apic,omitempty"`
+	SMM  *smmSpec  `xml:"smm,omitempty"`
 }
 type smmSpec struct {
 	State string `xml:"state,attr"`
@@ -89,11 +91,12 @@ func ApplyHardware(payload *domain, spec Spec) error {
 		return apierr.New(apierr.CodeInvalidArgument, "Secure Boot 需要 UEFI", nil)
 	}
 	if h.Firmware == "uefi" {
+		payload.Features = &featuresSpec{ACPI: &struct{}{}, APIC: &struct{}{}}
 		payload.OS.Firmware = "efi"
 		payload.OS.FirmwareConfig = &firmwareSpec{Features: []firmwareFeature{{Name: "secure-boot", Enabled: "no"}}}
 		if h.SecureBoot {
 			payload.OS.FirmwareConfig.Features = []firmwareFeature{{Name: "secure-boot", Enabled: "yes"}, {Name: "enrolled-keys", Enabled: "yes"}}
-			payload.Features = &featuresSpec{SMM: &smmSpec{State: "on"}}
+			payload.Features.SMM = &smmSpec{State: "on"}
 		}
 	}
 	if h.TPM {

@@ -29,3 +29,24 @@ func TestHardwareFirmwareTopologyAndLimits(t *testing.T) {
 		t.Fatal("accepted mismatching topology")
 	}
 }
+
+func TestUEFIAlwaysEnablesACPI(t *testing.T) {
+	for _, secure := range []bool{false, true} {
+		spec := validSpec()
+		spec.Hardware = Hardware{Firmware: "uefi", SecureBoot: secure}
+		content, err := Build(spec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var actual domain
+		if err := xml.Unmarshal([]byte(content), &actual); err != nil {
+			t.Fatal(err)
+		}
+		if actual.Features == nil || actual.Features.ACPI == nil || actual.Features.APIC == nil {
+			t.Fatal("UEFI missing ACPI/APIC")
+		}
+		if secure && (actual.Features.SMM == nil || actual.Features.SMM.State != "on") {
+			t.Fatal("secure boot missing SMM")
+		}
+	}
+}
