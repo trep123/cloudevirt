@@ -37,6 +37,12 @@ class HardwareSerializer(StrictInput):
         return data
 
 
+class StaticNetworkSerializer(StrictInput):
+    pool = serializers.IntegerField(min_value=1)
+    address = serializers.IPAddressField(protocol='IPv4', required=False)
+    default_route = serializers.BooleanField(required=False)
+
+
 class InitializationSerializer(StrictInput):
     hostname = serializers.RegexField(
         r'^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$', required=False
@@ -114,6 +120,10 @@ def validate_hardware_policy(data, user):
 
 
 def validate_creation_capabilities(data, capabilities):
+    if data.get('static_networks') and capabilities.get('static_networks') is not True:
+        raise serializers.ValidationError(
+            {'static_networks': '节点尚未完成静态网络初始化协议，暂不能创建静态地址实例'}
+        )
     hardware = data.get('hardware', {})
     errors = {}
     if data.get('data_disks') and capabilities.get('multi_disk') is not True:

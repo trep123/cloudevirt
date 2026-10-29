@@ -13,7 +13,8 @@ export type HardwareConfig = {
   network_mbps?: number;
 };
 export type CreationCapabilities = {
-  policy?:{vcpu:number;memory_mib:number;disk_gib:number};
+  static_networks?: boolean;
+  policy?: { vcpu: number; memory_mib: number; disk_gib: number };
   cpu_modes?: string[];
   firmware?: string[];
   secure_boot?: boolean;

@@ -30,6 +30,7 @@ type DomainOperator interface {
 
 // createDomainRequest 是创建域请求体。
 type createDomainRequest struct {
+	MAC            string             `json:"mac"`
 	Initialization *storage.CloudInit `json:"initialization"`
 	Hardware       domainxml.Hardware `json:"hardware"`
 	DataDisks      []struct {
@@ -91,6 +92,7 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		spec := domainxml.Spec{
+			MAC:                payload.MAC,
 			Hardware:           payload.Hardware,
 			AdditionalNetworks: payload.AdditionalNetworks,
 			Name:               payload.Name,

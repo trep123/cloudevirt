@@ -4,6 +4,8 @@ MVP 只登记经管理员验证的 libvirt 网络或网桥；实例创建只允�
 非管理网的网络。
 """
 
+import uuid
+
 from django.db import models
 
 
@@ -51,3 +53,69 @@ class Network(models.Model):
     def is_usable(self) -> bool:
         """是否允许实例接入。"""
         return not self.is_deleted and not self.is_management
+
+
+class IPPool(models.Model):
+    network = models.ForeignKey(Network, on_delete=models.PROTECT, related_name='ip_pools')
+    name = models.CharField(max_length=64)
+    first_ip = models.GenericIPAddressField(protocol='IPv4')
+    last_ip = models.GenericIPAddressField(protocol='IPv4')
+    gateway = models.GenericIPAddressField(protocol='IPv4')
+    dns_servers = models.JSONField(default=list)
+    enabled = models.BooleanField(default=True)
+    is_deleted = models.BooleanField(default=False)
+    revision = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['network', 'name'],
+                condition=models.Q(is_deleted=False),
+                name='unique_live_ip_pool_name',
+            )
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class InstanceNIC(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    instance = models.ForeignKey(
+        'instances.Instance', on_delete=models.CASCADE, related_name='network_interfaces'
+    )
+    network = models.ForeignKey(
+        Network, on_delete=models.PROTECT, related_name='instance_interfaces'
+    )
+    device_id = models.CharField(max_length=16)
+    mac = models.CharField(max_length=17, unique=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['instance', 'device_id'], name='unique_instance_nic_device'
+            )
+        ]
+
+    def __str__(self):
+        return f'{self.instance_id}:{self.device_id}'
+
+
+class IPLease(models.Model):
+    pool = models.ForeignKey(IPPool, on_delete=models.PROTECT, related_name='leases')
+    nic = models.OneToOneField(InstanceNIC, on_delete=models.PROTECT, related_name='ip_lease')
+    network = models.ForeignKey(Network, on_delete=models.PROTECT)
+    address = models.GenericIPAddressField(protocol='IPv4')
+    active = models.BooleanField(default=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['network', 'address'],
+                condition=models.Q(active=True),
+                name='unique_active_network_ip',
+            )
+        ]
+
+    def __str__(self):
+        return self.address

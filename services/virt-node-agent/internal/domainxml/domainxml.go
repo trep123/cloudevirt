@@ -7,6 +7,7 @@ package domainxml
 import (
 	"encoding/xml"
 	"fmt"
+	"net"
 	"regexp"
 	"strings"
 
@@ -29,6 +30,7 @@ var (
 
 // Spec 是创建域所需的全部输入。
 type Spec struct {
+	MAC                 string
 	SeedPath            string
 	Hardware            Hardware
 	Name                string
@@ -46,6 +48,7 @@ type Spec struct {
 	AdditionalNetworks  []NetworkSpec
 }
 type NetworkSpec struct {
+	MAC           string `json:"mac"`
 	Network       string `json:"network"`
 	NetworkType   string `json:"network_type"`
 	NetworkBridge string `json:"network_bridge"`
@@ -121,12 +124,17 @@ type diskTgt struct {
 }
 
 type iface struct {
+	MAC         *macSpec       `xml:"mac,omitempty"`
 	Bandwidth   *bandwidthSpec `xml:"bandwidth,omitempty"`
 	Type        string         `xml:"type,attr"`
 	Source      ifaceSrc       `xml:"source"`
 	VirtualPort *virtualPort   `xml:"virtualport,omitempty"`
 	VLAN        *vlanSpec      `xml:"vlan,omitempty"`
 	Model       ifaceModel     `xml:"model"`
+}
+
+type macSpec struct {
+	Address string `xml:"address,attr"`
 }
 
 type ifaceSrc struct {
@@ -284,11 +292,21 @@ func Build(spec Spec) (string, error) {
 		}
 	}
 
+	if spec.MAC != "" {
+		mac, err := net.ParseMAC(spec.MAC)
+		if err != nil || len(mac) != 6 || mac[0]&1 != 0 {
+			return "", apierr.New(apierr.CodeInvalidArgument, "MAC 地址无效", err)
+		}
+		if payload.Devices.Interfaces[0] != nil {
+			payload.Devices.Interfaces[0].MAC = &macSpec{Address: mac.String()}
+		}
+	}
 	for _, network := range spec.AdditionalNetworks {
 		child := spec
 		child.AdditionalNetworks = nil
 		child.AdditionalDiskPaths = nil
 		child.Network = network.Network
+		child.MAC = network.MAC
 		child.NetworkType = network.NetworkType
 		child.NetworkBridge = network.NetworkBridge
 		child.VLANID = network.VLANID

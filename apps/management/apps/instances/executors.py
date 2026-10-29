@@ -111,7 +111,13 @@ def execute_instance_create(task: Task) -> dict:
             raise AppError(ErrorCode.CONFLICT, '节点 Agent 需要升级后才能可靠创建镜像虚拟机')
         payload.update(
             hardware=config.get('hardware', {}),
-            initialization=config.get('initialization'),
+            initialization={
+                **config['initialization'],
+                'networks': config.get('guest_networks', []),
+            }
+            if config.get('initialization')
+            else None,
+            mac=config.get('primary_mac', ''),
             data_disks=[
                 {'relative_path': d.relative_path, 'size_gib': d.size_gib}
                 for d in instance.disks.filter(role='DATA').order_by('target_dev')
@@ -334,6 +340,9 @@ def execute_instance_delete(task: Task) -> dict:
         )
 
     instance.is_deleted = True
+    from apps.networks.models import IPLease
+
+    IPLease.objects.filter(nic__instance=instance, active=True).update(active=False)
     instance.disks_deleted = purge_disk
     instance.operation_status = 'SUCCEEDED'
     instance.save(update_fields=['is_deleted', 'disks_deleted', 'operation_status', 'updated_at'])

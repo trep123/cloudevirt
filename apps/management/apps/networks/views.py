@@ -48,6 +48,33 @@ class NetworkDetailView(generics.RetrieveUpdateDestroyAPIView):
     def perform_update(self, serializer) -> None:
         """保存变更并写审计。"""
         serializer.instance = Network.objects.select_for_update().get(pk=serializer.instance.pk)
+        from apps.networks.models import InstanceNIC, IPPool
+
+        address_fields = {
+            'subnet',
+            'gateway',
+            'dhcp_enabled',
+            'dhcp_start',
+            'dhcp_end',
+            'dns_servers',
+        }
+        changed = {
+            key
+            for key, value in serializer.validated_data.items()
+            if value != getattr(serializer.instance, key)
+        }
+        if (
+            changed & address_fields
+            and IPPool.objects.filter(network=serializer.instance, is_deleted=False).exists()
+        ):
+            raise AppError(ErrorCode.CONFLICT, '网络存在静态地址池，请先解除租约并移除地址池')
+        if (
+            changed & {'name', 'type', 'bridge', 'vlan_id', 'is_management'}
+            and InstanceNIC.objects.filter(
+                network=serializer.instance, instance__is_deleted=False
+            ).exists()
+        ):
+            raise AppError(ErrorCode.CONFLICT, '网络仍被虚拟机网卡引用')
         immutable = {'name', 'type', 'bridge', 'vlan_id', 'subnet', 'gateway'}
         if Instance.objects.filter(
             network_name=serializer.instance.name, is_deleted=False
@@ -77,6 +104,13 @@ class NetworkDetailView(generics.RetrieveUpdateDestroyAPIView):
     def perform_destroy(self, instance) -> None:
         """软删除网络，并提示调用方检查实例引用。"""
         instance = Network.objects.select_for_update().get(pk=instance.pk)
+        from apps.networks.models import InstanceNIC, IPPool
+
+        if (
+            IPPool.objects.filter(network=instance, is_deleted=False).exists()
+            or InstanceNIC.objects.filter(network=instance, instance__is_deleted=False).exists()
+        ):
+            raise AppError(ErrorCode.CONFLICT, '网络仍被地址池或虚拟机网卡引用')
         if Instance.objects.filter(network_name=instance.name, is_deleted=False).exists():
             raise AppError(ErrorCode.CONFLICT, '网络仍被虚拟机引用，不能删除')
         instance.is_deleted = True

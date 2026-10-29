@@ -148,6 +148,7 @@ def create_instance(
     additional_networks: list[str] | None = None,
     hardware: dict | None = None,
     initialization: dict | None = None,
+    static_networks: dict | None = None,
     idempotency_key: str | None = None,
 ) -> tuple[Instance, object]:
     """创建实例记录、磁盘、任务与资源预留。
@@ -182,6 +183,9 @@ def create_instance(
         raise AppError(ErrorCode.INVALID_ARGUMENT, '附加网络无效')
     total_disk_gib = disk_gib + sum(data_disks)
     hardware = hardware or {}
+    static_networks = static_networks or {}
+    if static_networks and not initialization:
+        raise AppError(ErrorCode.INVALID_ARGUMENT, '静态网络需要 cloud-init 初始化')
     from apps.instances.hardware import validate_hardware_policy
 
     validate_hardware_policy(
@@ -272,6 +276,7 @@ def create_instance(
                     or instance.creation_config.get('template') != template
                     or instance.creation_config.get('hardware', {}) != hardware
                     or instance.creation_config.get('initialization') != initialization
+                    or instance.creation_config.get('static_networks', {}) != static_networks
                     or instance.creation_config.get('template_version') != template_version
                     or instance.creation_config.get('data_disks', []) != data_disks
                     or instance.creation_config.get('additional_networks', [])
@@ -328,6 +333,7 @@ def create_instance(
                 'schema_version': 1,
                 'hardware': hardware,
                 'initialization': initialization,
+                'static_networks': static_networks,
                 'data_disks': data_disks,
                 'additional_networks': additional_networks,
                 'network_specs': [
@@ -376,6 +382,9 @@ def create_instance(
                 target_dev='vd' + chr(ord('a') + index),
                 status=DiskStatus.CREATING,
             )
+        from apps.networks.provisioning import provision_interfaces
+
+        provision_interfaces(instance, network, extra_networks, static_networks)
         task = enqueue(
             task_type=TaskType.INSTANCE_CREATE,
             resource_type='instance',

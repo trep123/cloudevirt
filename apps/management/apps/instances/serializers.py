@@ -6,6 +6,7 @@ from apps.images.models import Image
 from apps.instances.hardware import (
     HardwareSerializer,
     InitializationSerializer,
+    StaticNetworkSerializer,
     validate_hardware_policy,
 )
 from apps.instances.models import Disk, Instance
@@ -92,6 +93,9 @@ class InstanceCreateSerializer(serializers.Serializer):
     template_version = serializers.IntegerField(required=False, min_value=1)
     hardware = HardwareSerializer(required=False, default=dict)
     initialization = InitializationSerializer(required=False)
+    static_networks = serializers.DictField(
+        child=StaticNetworkSerializer(), required=False, default=dict
+    )
     data_disks = serializers.ListField(
         child=serializers.IntegerField(min_value=1, max_value=2048),
         max_length=8,
@@ -131,6 +135,15 @@ class InstanceCreateSerializer(serializers.Serializer):
         from apps.networks.services import validate_network_for_instance
 
         names = data.get('additional_networks', [])
+        static = data.get('static_networks', {})
+        if len(static) > 8 or set(static) - set([data.get('network_name', '')] + names):
+            raise serializers.ValidationError(
+                {'static_networks': '静态配置只能引用已选择的网卡网络'}
+            )
+        if static and not data.get('initialization'):
+            raise serializers.ValidationError({'static_networks': '静态网络需要启用 cloud-init'})
+        if sum(bool(value.get('default_route')) for value in static.values()) > 1:
+            raise serializers.ValidationError({'static_networks': '只能配置一条默认路由'})
         if len(set(names)) != len(names) or data.get('network_name') in names:
             raise serializers.ValidationError({'additional_networks': '网卡网络重复'})
         for name in names:

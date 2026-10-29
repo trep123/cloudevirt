@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api,fetchAllOptions } from "../../api";
+import { api, fetchAllOptions } from "../../api";
 import { PageHeader } from "../../components/ConsoleUI";
 import {
   Card,
@@ -55,12 +55,39 @@ export function VmWizard({
         template_name: string;
         version: number;
         configuration: Record<string, unknown>;
-        constraints: { locked?: string[];bounds?:Record<string,{min:number;max:number}> };
+        constraints: {
+          locked?: string[];
+          bounds?: Record<string, { min: number; max: number }>;
+        };
       }[]
     >([]),
     [version, setVersion] = useState("");
   const [startAfter, setStartAfter] = useState(true),
     [autostart, setAutostart] = useState(false);
+  const [pools, setPools] = useState<
+      { id: number; name: string; network: number; enabled: boolean }[]
+    >([]),
+    [pool, setPool] = useState(""),
+    [staticAddress, setStaticAddress] = useState("");
+  useEffect(() => {
+    let alive = true;
+    setPool("");
+    const selected = networks.find((n) => n.name === network);
+    if (selected)
+      void api
+        .request<{ results: typeof pools }>(
+          `/networks/ip-pools?network=${selected.id}`,
+        )
+        .then((data) => {
+          if (alive) setPools(data.results.filter((p) => p.enabled));
+        })
+        .catch((e) => {
+          if (alive) setError(describeError(e));
+        });
+    return () => {
+      alive = false;
+    };
+  }, [network, networks]);
   const [caps, setCaps] = useState<CreationCapabilities | null>(null),
     [hardware, setHardware] = useState<HardwareConfig>({}),
     [dataDisks, setDataDisks] = useState<number[]>([]),
@@ -88,7 +115,7 @@ export function VmWizard({
   useEffect(() => {
     let active = true;
     Promise.all([
-      fetchAllOptions<Template>('/templates').then(results=>({results})),
+      fetchAllOptions<Template>("/templates").then((results) => ({ results })),
       api.request<{ results: typeof versions }>("/templates/deployments"),
     ])
       .then(([t, v]) => {
@@ -122,7 +149,11 @@ export function VmWizard({
     submitting = useRef(false);
   useEffect(() => {
     let alive = true;
-    Promise.all([fetchAllOptions<Image>('/images').then(results=>({results})),fetchAllOptions<Node>('/nodes').then(results=>({results})),fetchAllOptions<Network>('/networks').then(results=>({results}))])
+    Promise.all([
+      fetchAllOptions<Image>("/images").then((results) => ({ results })),
+      fetchAllOptions<Node>("/nodes").then((results) => ({ results })),
+      fetchAllOptions<Network>("/networks").then((results) => ({ results })),
+    ])
       .then(([i, n, w]) => {
         if (alive) {
           setImages(i.results.filter((v) => v.is_ready));
@@ -159,7 +190,15 @@ export function VmWizard({
       setError("请选择节点，vCPU 为 1–64，内存为 0.125–128 GB。");
       return;
     }
-    if (step === 2 && (!Number.isInteger(disk) || disk < 1 || disk > diskLimit ||dataDisks.some(size=>!Number.isInteger(size)||size<1||size>diskLimit))) {
+    if (
+      step === 2 &&
+      (!Number.isInteger(disk) ||
+        disk < 1 ||
+        disk > diskLimit ||
+        dataDisks.some(
+          (size) => !Number.isInteger(size) || size < 1 || size > diskLimit,
+        ))
+    ) {
       setError("系统盘容量须为 1–2048 GB 的整数。");
       return;
     }
@@ -173,7 +212,7 @@ export function VmWizard({
         instances: 1,
         vcpu: cpu,
         memory_mib: Math.round(memory * 1024),
-        disk_gib: disk+dataDisks.reduce((total,size)=>total+size,0),
+        disk_gib: disk + dataDisks.reduce((total, size) => total + size, 0),
       };
       if (
         Object.entries(requested).some(
@@ -189,6 +228,17 @@ export function VmWizard({
     setError(null);
     try {
       const configuration = {
+        ...(pool
+          ? {
+              static_networks: {
+                [network]: {
+                  pool: Number(pool),
+                  ...(staticAddress ? { address: staticAddress } : {}),
+                  default_route: true,
+                },
+              },
+            }
+          : {}),
         hardware,
         data_disks: dataDisks,
         additional_networks: extraNetworks,
@@ -241,11 +291,21 @@ export function VmWizard({
   ];
   const selectedImage = images.find((i) => String(i.id) === image);
   const selectedNode = nodes.find((n) => String(n.id) === node);
-  const selectedVersion=versions.find(v=>v.id===Number(version));
-  const locked=new Set(selectedVersion?.constraints.locked||[]);
-  const cpuLimit=Math.min(caps?.policy?.vcpu||64,selectedVersion?.constraints.bounds?.vcpu?.max||64);
-  const memoryLimit=Math.min(caps?.policy?.memory_mib||131072,selectedVersion?.constraints.bounds?.memory_mib?.max||131072)/1024;
-  const diskLimit=Math.min(caps?.policy?.disk_gib||2048,selectedVersion?.constraints.bounds?.disk_gib?.max||2048);
+  const selectedVersion = versions.find((v) => v.id === Number(version));
+  const locked = new Set(selectedVersion?.constraints.locked || []);
+  const cpuLimit = Math.min(
+    caps?.policy?.vcpu || 64,
+    selectedVersion?.constraints.bounds?.vcpu?.max || 64,
+  );
+  const memoryLimit =
+    Math.min(
+      caps?.policy?.memory_mib || 131072,
+      selectedVersion?.constraints.bounds?.memory_mib?.max || 131072,
+    ) / 1024;
+  const diskLimit = Math.min(
+    caps?.policy?.disk_gib || 2048,
+    selectedVersion?.constraints.bounds?.disk_gib?.max || 2048,
+  );
   const quotaRows: [string, string, number, number, (v: number) => string][] =
     quota?.enforced
       ? [
@@ -258,7 +318,13 @@ export function VmWizard({
             1024,
             (v) => `${(v / 1024).toFixed(v % 1024 ? 1 : 0)} GB`,
           ],
-          ["磁盘", "disk_gib", disk+dataDisks.reduce((total,size)=>total+size,0), 1, (v) => `${v} GiB`],
+          [
+            "磁盘",
+            "disk_gib",
+            disk + dataDisks.reduce((total, size) => total + size, 0),
+            1,
+            (v) => `${v} GiB`,
+          ],
         ]
       : [];
   return (
@@ -325,9 +391,15 @@ export function VmWizard({
                       <select
                         value={version}
                         onChange={(e) => {
-                          if(e.target.value&&!window.confirm('应用部署模板将覆盖当前规格、镜像和硬件配置，是否继续？'))return;
+                          if (
+                            e.target.value &&
+                            !window.confirm(
+                              "应用部署模板将覆盖当前规格、镜像和硬件配置，是否继续？",
+                            )
+                          )
+                            return;
                           setVersion(e.target.value);
-                          setNode('');
+                          setNode("");
                           setTemplate("");
                           const v = versions.find(
                             (v) => v.id === Number(e.target.value),
@@ -375,7 +447,7 @@ export function VmWizard({
                     <Field label="操作系统镜像" hint="仅列出已就绪的镜像">
                       <select
                         value={image}
-                        disabled={locked.has('image')}
+                        disabled={locked.has("image")}
                         onChange={(e) => {
                           setImage(e.target.value);
                           setNode("");
@@ -426,7 +498,7 @@ export function VmWizard({
                         min="1"
                         max={cpuLimit}
                         value={cpu}
-                        disabled={locked.has('vcpu')}
+                        disabled={locked.has("vcpu")}
                         onChange={(e) => setCpu(Number(e.target.value))}
                       />
                     </Field>
@@ -437,7 +509,7 @@ export function VmWizard({
                         max={memoryLimit}
                         step="0.125"
                         value={memory}
-                        disabled={locked.has('memory_mib')}
+                        disabled={locked.has("memory_mib")}
                         onChange={(e) => setMemory(Number(e.target.value))}
                       />
                     </Field>
@@ -460,7 +532,7 @@ export function VmWizard({
                         min="1"
                         max={diskLimit}
                         value={disk}
-                        disabled={locked.has('disk_gib')}
+                        disabled={locked.has("disk_gib")}
                         onChange={(e) => setDisk(Number(e.target.value))}
                       />
                     </Field>
@@ -517,7 +589,7 @@ export function VmWizard({
                     <Field label="虚拟网络">
                       <select
                         value={network}
-                        disabled={locked.has('network_name')}
+                        disabled={locked.has("network_name")}
                         onChange={(e) => {
                           setNetwork(e.target.value);
                           setExtraNetworks(
@@ -533,6 +605,35 @@ export function VmWizard({
                         ))}
                       </select>
                     </Field>
+                    <Field label="主网卡地址配置">
+                      <select
+                        value={pool}
+                        disabled={!caps?.static_networks}
+                        onChange={(e) => {
+                          setPool(e.target.value);
+                          if (e.target.value) setInitialize(true);
+                        }}
+                      >
+                        <option value="">DHCP</option>
+                        {pools.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            静态地址池：{p.name}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    {pool && (
+                      <Field
+                        label="指定静态 IPv4（可选）"
+                        hint="留空由服务端在地址池内分配；需要支持 cloud-init 的镜像和 SSH 公钥"
+                      >
+                        <input
+                          value={staticAddress}
+                          onChange={(e) => setStaticAddress(e.target.value)}
+                          placeholder="自动分配"
+                        />
+                      </Field>
+                    )}
                     <Field label="网卡型号">
                       <input disabled value="virtio" />
                     </Field>
@@ -691,8 +792,13 @@ export function VmWizard({
                 ["节点", selectedNode?.name || "—"],
                 ["规格", `${cpu} vCPU · ${memory} GB`],
                 ["系统盘", `${disk} GB · qcow2`],
-                ["数据盘",dataDisks.length?dataDisks.map(size=>`${size} GiB`).join(' / '):'无'],
-                ["附加网络",extraNetworks.join(' / ')||'无'],
+                [
+                  "数据盘",
+                  dataDisks.length
+                    ? dataDisks.map((size) => `${size} GiB`).join(" / ")
+                    : "无",
+                ],
+                ["附加网络", extraNetworks.join(" / ") || "无"],
                 ["网络", network || "不接入"],
               ]}
             />

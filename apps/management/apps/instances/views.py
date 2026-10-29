@@ -67,6 +67,7 @@ class InstanceListCreateView(InstanceScopeMixin, generics.ListCreateAPIView):
             additional_networks=data.get('additional_networks', []),
             hardware=data.get('hardware', {}),
             initialization=data.get('initialization'),
+            static_networks=data.get('static_networks', {}),
             idempotency_key=request.headers.get('Idempotency-Key') or None,
         )
         record_audit(

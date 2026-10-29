@@ -15,15 +15,19 @@ import (
 )
 
 type CloudInit struct {
-	Hostname      string   `json:"hostname"`
-	Username      string   `json:"username"`
-	SSHPublicKeys []string `json:"ssh_public_keys"`
+	Networks      []GuestNetwork `json:"networks"`
+	Hostname      string         `json:"hostname"`
+	Username      string         `json:"username"`
+	SSHPublicKeys []string       `json:"ssh_public_keys"`
 }
 
 var hostPattern = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$`)
 var userPattern = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,30}$`)
 
 func ValidateCloudInit(config CloudInit) error {
+	if _, err := GuestNetworkConfig(config.Networks); err != nil {
+		return err
+	}
 	if (config.Hostname != "" && !hostPattern.MatchString(config.Hostname)) || !userPattern.MatchString(config.Username) || config.Username == "root" || len(config.SSHPublicKeys) == 0 || len(config.SSHPublicKeys) > 16 {
 		return apierr.New(apierr.CodeInvalidArgument, "初始化主机名、用户或公钥数量无效", nil)
 	}
@@ -85,6 +89,20 @@ func CloudInitISO(ctx context.Context, root, uuid, name string, config CloudInit
 	iso := filepath.Join(temporary, "seed.iso")
 	command := exec.CommandContext(commandCtx, "genisoimage", "-quiet", "-output", iso, "-volid", "cidata", "-joliet", "-rock", "user-data", "meta-data")
 	command.Dir = temporary
+	if len(config.Networks) > 0 {
+		networkConfig, err := GuestNetworkConfig(config.Networks)
+		if err != nil {
+			return "", err
+		}
+		data, err := json.Marshal(networkConfig)
+		if err != nil {
+			return "", err
+		}
+		if err := os.WriteFile(filepath.Join(temporary, "network-config"), data, 0600); err != nil {
+			return "", err
+		}
+		command.Args = append(command.Args, "network-config")
+	}
 	if err := command.Run(); err != nil {
 		return "", apierr.New(apierr.CodeOperationFailed, "初始化介质生成失败，请检查 genisoimage", err)
 	}

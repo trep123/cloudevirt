@@ -23,6 +23,7 @@ func creationCapabilities(deps Dependencies, ctx context.Context) map[string]any
 	}
 	_, err := exec.LookPath("genisoimage")
 	caps["cloud_init"] = err == nil
+	caps["static_networks"] = err == nil
 	return caps
 }
 func creationCapabilitiesHandler(deps Dependencies) http.HandlerFunc {
