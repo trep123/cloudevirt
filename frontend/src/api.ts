@@ -277,8 +277,19 @@ export const api = {
     request<void>(`/images/${id}?purge_file=${purgeFile ? "true" : "false"}`, {
       method: "DELETE",
     }),
-  disks: (filters: { status?: string; instance?: string } = {}) => {
-    const params = new URLSearchParams({ page_size: "100" });
+  disks: (
+    filters: {
+      status?: string;
+      instance?: string;
+      retained?: boolean;
+      page?: number;
+    } = {},
+  ) => {
+    const params = new URLSearchParams({
+      page_size: "20",
+      page: String(filters.page || 1),
+    });
+    if (filters.retained) params.set("retained", "true");
     if (filters.status) params.set("status", filters.status);
     if (filters.instance) params.set("instance", filters.instance);
     return request<Paginated<import("./types").Disk>>(

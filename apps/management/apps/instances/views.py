@@ -328,9 +328,11 @@ class DiskListView(generics.ListAPIView):
 
     def get_queryset(self):
         """按实例或状态过滤。"""
-        queryset = Disk.objects.select_related('instance').filter(
-            instance__in=instances_for(self.request.user)
-        )
+        from apps.instances.disk_cleanup import disks_for
+
+        queryset = disks_for(self.request.user)
+        if self.request.query_params.get('retained') == 'true':
+            queryset = queryset.filter(is_orphan=True).exclude(status='DELETED')
         instance_id = self.request.query_params.get('instance')
         if instance_id:
             queryset = queryset.filter(instance_id=instance_id)

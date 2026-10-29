@@ -72,6 +72,8 @@ type createDomainResponse struct {
 // createDomainHandler 创建并启动域；同名域已存在时按幂等返回现状。
 func createDomainHandler(deps Dependencies) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
+		diskReferenceMutation.RLock()
+		defer diskReferenceMutation.RUnlock()
 		requestID := RequestIDFromContext(request.Context())
 		ctx := request.Context()
 

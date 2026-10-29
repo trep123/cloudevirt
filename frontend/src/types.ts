@@ -91,6 +91,9 @@ export interface Network {
 }
 
 export interface Disk {
+  can_delete?: boolean;
+  instance_deleted?: boolean;
+  node_name?: string;
   id: number;
   instance: number;
   instance_name: string;

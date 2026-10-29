@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,6 +25,8 @@ var infrastructureMutation sync.Mutex
 
 func infrastructureHandler(deps Dependencies, snapshots bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		diskReferenceMutation.RLock()
+		defer diskReferenceMutation.RUnlock()
 		requestID := RequestIDFromContext(r.Context())
 		operator, ok := deps.Virtualizer.(infrastructureOperator)
 		if !ok {
@@ -44,13 +48,18 @@ func infrastructureHandler(deps Dependencies, snapshots bool) http.HandlerFunc {
 					fail(err)
 					return
 				}
-				writeJSON(w, 200, map[string]any{"results": result, "sampled_at": time.Now().UTC(), "creatable_types": []string{"dir"}})
+				roots := deps.StorageRoots
+				if len(roots) == 0 {
+					roots = []string{deps.DiskDir}
+				}
+				writeJSON(w, 200, map[string]any{"results": result, "sampled_at": time.Now().UTC(), "creatable_types": []string{"dir"}, "storage_roots": roots, "default_directory": deps.DiskDir})
 			}
 			return
 		}
 		var body struct {
 			Name   string `json:"name"`
 			Action string `json:"action"`
+			Path   string `json:"path"`
 		}
 		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
 		decoder.DisallowUnknownFields()
@@ -68,7 +77,30 @@ func infrastructureHandler(deps Dependencies, snapshots bool) http.HandlerFunc {
 			}
 			err = operator.SnapshotAction(r.Context(), r.PathValue("name"), body.Name, body.Action, deps.DiskDir)
 		} else {
-			err = operator.CreateDirectoryPool(r.Context(), body.Name, deps.DiskDir)
+			if body.Path == "" {
+				err = operator.CreateDirectoryPool(r.Context(), body.Name, deps.DiskDir)
+			} else {
+				roots := deps.StorageRoots
+				if len(roots) == 0 {
+					roots = []string{deps.DiskDir}
+				}
+				root := ""
+				for _, candidate := range roots {
+					candidate = filepath.Clean(candidate)
+					if filepath.IsAbs(body.Path) && (body.Path == candidate || strings.HasPrefix(filepath.Clean(body.Path), candidate+string(filepath.Separator))) {
+						root = candidate
+						break
+					}
+				}
+				creator, ok := deps.Virtualizer.(interface {
+					CreateDirectoryPoolAt(context.Context, string, string, string) error
+				})
+				if !ok || root == "" {
+					fail(apierr.New(apierr.CodeInvalidArgument, "目录必须位于节点允许的存储根目录内", nil))
+					return
+				}
+				err = creator.CreateDirectoryPoolAt(r.Context(), body.Name, root, body.Path)
+			}
 		}
 		if err != nil {
 			fail(err)

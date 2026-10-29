@@ -49,6 +49,7 @@ func main() {
 		StoragePaths:     []string{cfg.ImageDir, cfg.DiskDir},
 		ImageDir:         cfg.ImageDir,
 		DiskDir:          cfg.DiskDir,
+		StorageRoots:     cfg.StorageRoots,
 		AllowDestructive: cfg.AllowDestructive,
 		Domains:          client,
 		Virtualizer:      client,

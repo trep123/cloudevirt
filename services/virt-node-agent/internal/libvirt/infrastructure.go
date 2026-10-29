@@ -67,6 +67,10 @@ func (c *Client) ListStoragePools(ctx context.Context) ([]StoragePool, error) {
 // CreateDirectoryPool only creates a child of the configured managed disk root.
 // It never accepts a client-supplied host path, device or mount command.
 func (c *Client) CreateDirectoryPool(ctx context.Context, name, root string) error {
+	return c.CreateDirectoryPoolAt(ctx, name, root, filepath.Join(root, name))
+}
+
+func (c *Client) CreateDirectoryPoolAt(ctx context.Context, name, root, target string) error {
 	if !domainxml.ValidName(name) || !strings.HasPrefix(name, "cv-") {
 		return apierr.New(apierr.CodeInvalidArgument, "存储池名称必须以 cv- 开头", nil)
 	}
@@ -74,13 +78,20 @@ func (c *Client) CreateDirectoryPool(ctx context.Context, name, root string) err
 	if err != nil {
 		return err
 	}
-	target := filepath.Join(base, name)
+	relative, err := filepath.Rel(filepath.Clean(root), filepath.Clean(target))
+	if err != nil || !filepath.IsAbs(target) || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return apierr.New(apierr.CodeInvalidArgument, "存储目录越出允许范围", err)
+	}
+	target = filepath.Join(base, relative)
 	pools, err := c.ListStoragePools(ctx)
 	if err != nil {
 		return err
 	}
 	found := false
 	for _, pool := range pools {
+		if pool.Name != name && filepath.Clean(pool.Target.Path) == target {
+			return apierr.New(apierr.CodeConflict, "该目录已被其他存储池使用", nil)
+		}
 		if pool.Name != name {
 			continue
 		}
@@ -90,17 +101,23 @@ func (c *Client) CreateDirectoryPool(ctx context.Context, name, root string) err
 		found = true
 	}
 	if !found {
-		if err := os.Mkdir(target, 0o770); err != nil && !os.IsExist(err) {
+		rooted, err := os.OpenRoot(base)
+		if err != nil {
 			return err
+		}
+		defer rooted.Close()
+		if err = rooted.MkdirAll(relative, 0770); err != nil {
+			return apierr.New(apierr.CodeOperationFailed, "无法创建目录，请检查节点存储权限与路径", err)
+		}
+		resolved, err := filepath.EvalSymlinks(target)
+		if err != nil || resolved != target {
+			return apierr.New(apierr.CodeInvalidArgument, "存储目录不允许符号链接", err)
 		}
 		info, err := os.Lstat(target)
 		if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 			return apierr.New(apierr.CodeOperationFailed, "存储池目录不安全", err)
 		}
 		// Go's FileMode represents setgid separately from Unix permission bits.
-		if err := os.Chmod(target, 0o770|os.ModeSetgid); err != nil {
-			return err
-		}
 		if _, err := c.run(ctx, "pool-define-as", name, "dir", "--target", target); err != nil {
 			return err
 		}

@@ -10,6 +10,7 @@ from apps.accounts.bulk import execute_account_batch
 from apps.images.uploads import execute_image_import
 from apps.infrastructure.executors import execute_infrastructure
 from apps.instances.device_management import execute_hardware_change
+from apps.instances.disk_cleanup import execute_disk_delete
 from apps.instances.display import execute_instance_display
 from apps.instances.executors import (
     execute_instance_action,
@@ -49,6 +50,7 @@ def execute_node_refresh(task: Task) -> dict:
 
 
 EXECUTORS = {
+    'DISK_DELETE': execute_disk_delete,
     'NETWORK_BRIDGE_CREATE': execute_bridge,
     TaskType.INSTANCE_HARDWARE: execute_hardware_change,
     TaskType.INSTANCE_DISPLAY: execute_instance_display,

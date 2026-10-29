@@ -40,6 +40,7 @@ type Dependencies struct {
 	StoragePaths     []string
 	ImageDir         string
 	DiskDir          string
+	StorageRoots     []string
 	AllowDestructive bool
 	Domains          DomainLister
 	Virtualizer      DomainOperator
@@ -83,6 +84,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	api.HandleFunc("GET /api/v1/domains/{name}/interfaces", domainInterfacesHandler(deps))
 	api.HandleFunc("GET /api/v1/networks", networkListHandler(deps))
 	api.HandleFunc("GET /api/v1/disks", diskListHandler(deps))
+	api.HandleFunc("DELETE /api/v1/disks", unusedDiskHandler(deps))
 	api.HandleFunc("POST /api/v1/domains", createDomainHandler(deps))
 	api.HandleFunc("POST /api/v1/domains/{name}/start", domainActionHandler(deps, "start"))
 	api.HandleFunc("POST /api/v1/domains/{name}/shutdown", domainActionHandler(deps, "shutdown"))

@@ -341,16 +341,19 @@ def execute_instance_delete(task: Task) -> dict:
     disk_relative_path = payload.get('disk_relative_path') or (disk.relative_path if disk else '')
 
     client = AgentClient(instance.node.endpoint)
-    if purge_disk and instance.disks.filter(role='DATA').exists():
+    live_disks = instance.disks.exclude(status='DELETED')
+    if purge_disk and live_disks.filter(role='DATA').exists():
         result = client.delete_domain_disks(
             instance.libvirt_domain_name,
-            list(instance.disks.values_list('relative_path', flat=True)),
+            list(live_disks.values_list('relative_path', flat=True)),
         )
     else:
         result = client.delete_domain(
             instance.libvirt_domain_name, disk_relative_path if purge_disk else ''
         )
 
+    if purge_disk and live_disks.exists() and result.get('disk_removed') is not True:
+        raise AppError(ErrorCode.CONFLICT, '节点未确认关联磁盘清理完成，请核对任务后重试')
     instance.is_deleted = True
     from apps.networks.models import IPLease
 
@@ -359,7 +362,7 @@ def execute_instance_delete(task: Task) -> dict:
     instance.operation_status = 'SUCCEEDED'
     instance.save(update_fields=['is_deleted', 'disks_deleted', 'operation_status', 'updated_at'])
 
-    for item in instance.disks.all():
+    for item in live_disks:
         item.status = DiskStatus.DELETED if purge_disk else DiskStatus.READY
         item.is_orphan = not purge_disk
         item.save(update_fields=['status', 'is_orphan', 'updated_at'])

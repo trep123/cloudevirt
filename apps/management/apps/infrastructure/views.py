@@ -234,6 +234,19 @@ class SettingsView(APIView):
 
 class PoolCreateInput(serializers.Serializer):
     name = serializers.RegexField(r'^cv-[A-Za-z0-9][A-Za-z0-9_-]{0,55}$')
+    path = serializers.CharField(max_length=4096, required=False, allow_blank=True)
+
+    def validate_path(self, value):
+        import posixpath
+
+        if value and (
+            not value.startswith('/')
+            or '\\' in value
+            or '\x00' in value
+            or '..' in value.split('/')
+        ):
+            raise serializers.ValidationError('请输入不含路径穿越的 Linux 绝对目录')
+        return posixpath.normpath(value) if value else ''
 
 
 def node_for(pk):
@@ -289,7 +302,7 @@ class StoragePoolsView(APIView):
             task_type='STORAGE_POOL_CREATE',
             resource_type='node',
             resource_id=node.pk,
-            payload={'name': serializer.validated_data['name']},
+            payload=dict(serializer.validated_data),
         )
 
 

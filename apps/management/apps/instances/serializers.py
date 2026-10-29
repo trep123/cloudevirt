@@ -17,6 +17,17 @@ class DiskSerializer(serializers.ModelSerializer):
     """磁盘输出结构。"""
 
     instance_name = serializers.CharField(source='instance.name', read_only=True)
+    instance_deleted = serializers.BooleanField(source='instance.is_deleted', read_only=True)
+    node_name = serializers.CharField(source='instance.node.name', read_only=True)
+    can_delete = serializers.SerializerMethodField()
+
+    def get_can_delete(self, obj):
+        from apps.instances.disk_cleanup import eligible
+
+        request = self.context.get('request')
+        return bool(
+            request and eligible(obj) and request.user.has_perm('instances.delete_disk_instance')
+        )
 
     class Meta:
         model = Disk
@@ -24,6 +35,9 @@ class DiskSerializer(serializers.ModelSerializer):
             'id',
             'instance',
             'instance_name',
+            'instance_deleted',
+            'node_name',
+            'can_delete',
             'role',
             'name',
             'relative_path',

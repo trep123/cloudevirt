@@ -19,6 +19,8 @@ type domainActionResponse struct {
 // domainActionHandler 执行启动/关机/强停/重启，并返回操作后的状态。
 func domainActionHandler(deps Dependencies, action string) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
+		diskReferenceMutation.RLock()
+		defer diskReferenceMutation.RUnlock()
 		requestID := RequestIDFromContext(request.Context())
 		name := request.PathValue("name")
 		if !domainxml.ValidName(name) {
@@ -62,6 +64,8 @@ func domainActionHandler(deps Dependencies, action string) http.HandlerFunc {
 // deleteDomainHandler 删除域定义，并按参数决定是否删除磁盘文件。
 func deleteDomainHandler(deps Dependencies) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
+		diskReferenceMutation.Lock()
+		defer diskReferenceMutation.Unlock()
 		requestID := RequestIDFromContext(request.Context())
 		ctx := request.Context()
 		name := request.PathValue("name")
@@ -76,10 +80,15 @@ func deleteDomainHandler(deps Dependencies) http.HandlerFunc {
 			return
 		}
 
+		present := true
 		state, err := deps.Virtualizer.DomainState(ctx, name)
 		if err != nil {
-			writeAPIError(writer, deps.Logger, err, requestID)
-			return
+			exists, checkErr := deps.Virtualizer.DomainExists(ctx, name)
+			if checkErr != nil || exists {
+				writeAPIError(writer, deps.Logger, err, requestID)
+				return
+			}
+			present = false
 		}
 		paths := request.URL.Query()["disk_relative_path"]
 		if len(paths) > 9 {
@@ -103,17 +112,20 @@ func deleteDomainHandler(deps Dependencies) http.HandlerFunc {
 				return
 			}
 		}
-		var undefineErr error
-		if operator, ok := deps.Virtualizer.(interface {
-			UndefineDomainState(context.Context, string, bool) error
-		}); ok {
-			undefineErr = operator.UndefineDomainState(ctx, name, len(paths) > 0)
-		} else {
-			undefineErr = deps.Virtualizer.UndefineDomain(ctx, name)
-		}
-		if err := undefineErr; err != nil {
-			writeAPIError(writer, deps.Logger, err, requestID)
-			return
+		if present {
+			var undefineErr error
+			if operator, ok := deps.Virtualizer.(interface {
+				UndefineDomainState(context.Context, string, bool) error
+			}); ok {
+				undefineErr = operator.UndefineDomainState(ctx, name, len(paths) > 0)
+			} else {
+				undefineErr = deps.Virtualizer.UndefineDomain(ctx, name)
+			}
+			if err := undefineErr; err != nil {
+				writeAPIError(writer, deps.Logger, err, requestID)
+				return
+			}
+
 		}
 
 		diskRemoved := false
@@ -124,7 +136,14 @@ func deleteDomainHandler(deps Dependencies) http.HandlerFunc {
 				), requestID)
 				return
 			}
-			if err := storage.Remove(deps.DiskDir, relative); err != nil {
+			provider, ok := deps.Virtualizer.(interface {
+				RemoveUnusedDisk(context.Context, string, string) error
+			})
+			if !ok {
+				writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeConflict, "Agent disk cleanup is unavailable", nil), requestID)
+				return
+			}
+			if err := provider.RemoveUnusedDisk(ctx, deps.DiskDir, relative); err != nil {
 				writeAPIError(writer, deps.Logger, err, requestID)
 				return
 			}

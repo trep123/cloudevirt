@@ -32,7 +32,8 @@ type Config struct {
 	// ImageDir 是镜像根目录，所有镜像路径必须位于该目录内。
 	ImageDir string
 	// DiskDir 是虚拟磁盘根目录，所有磁盘路径必须位于该目录内。
-	DiskDir string
+	DiskDir      string
+	StorageRoots []string
 	// DHCPLeaseFile 是 OVS 独立 DHCP 的租约文件，用于补充域 IP。
 	DHCPLeaseFile string
 	// MaxRequestSeconds 是单个请求的最长处理时间。
@@ -73,6 +74,17 @@ func Load() (Config, error) {
 
 	if strings.TrimSpace(cfg.ImageDir) == "" || strings.TrimSpace(cfg.DiskDir) == "" {
 		return Config{}, fmt.Errorf("CLOUDVIRT_IMAGE_DIR 与 CLOUDVIRT_DISK_DIR 不能为空")
+	}
+	cfg.StorageRoots = []string{cfg.DiskDir}
+	for _, root := range strings.Split(os.Getenv("CLOUDVIRT_STORAGE_ROOTS"), ",") {
+		root = strings.TrimSpace(root)
+		if root == "" {
+			continue
+		}
+		if !strings.HasPrefix(root, "/") || root == "/" {
+			return Config{}, fmt.Errorf("CLOUDVIRT_STORAGE_ROOTS 必须为明确的绝对存储目录")
+		}
+		cfg.StorageRoots = append(cfg.StorageRoots, root)
 	}
 
 	return cfg, nil

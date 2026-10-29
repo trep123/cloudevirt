@@ -5,6 +5,7 @@ import {
   TaskProgressDrawer,
 } from "../../components/ConsoleUI";
 import { api } from "../../api";
+import { newRequestId } from "../../utils/requestId";
 import {
   ErrorBanner,
   describeError,
@@ -25,6 +26,8 @@ type StoragePool = {
   active: boolean;
 };
 type PoolResponse = {
+  storage_roots?: string[];
+  default_directory?: string;
   results: StoragePool[];
   sampled_at: string;
   creatable_types: string[];
@@ -42,6 +45,7 @@ export function StoragePoolsPage() {
   const [busy, setBusy] = useState(false),
     [task, setTask] = useState<string | null>(null),
     [refresh, setRefresh] = useState(0);
+  const [directory, setDirectory] = useState("");
   useEffect(() => {
     let live = true;
     Promise.all([allResources<Node>("/nodes"), infra.configuration()])
@@ -88,7 +92,7 @@ export function StoragePoolsPage() {
     <>
       <PageHeader
         title="存储池"
-        description="直接查询节点 libvirt 存储池；当前支持在 Agent 受管磁盘目录内创建目录池"
+        description="查询节点 libvirt 存储池，可在允许的存储范围内指定目录创建目录池"
       >
         <select
           aria-label="所属节点"
@@ -114,7 +118,8 @@ export function StoragePoolsPage() {
           disabled={!data?.creatable_types.includes("dir") || busy}
           onClick={() => {
             setName("cv-");
-            setKey(crypto.randomUUID());
+            setKey(newRequestId());
+            setDirectory("");
             setError(null);
             setCreate(true);
           }}
@@ -136,62 +141,62 @@ export function StoragePoolsPage() {
           <>
             <p className="muted">成功采集时间：{formatTime(data.sampled_at)}</p>
             <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>名称 / UUID</th>
-                  <th>类型</th>
-                  <th>目录</th>
-                  <th>容量</th>
-                  <th>使用率</th>
-                  <th>状态</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.results.map((p) => {
-                  const percent = p.capacity_bytes
-                    ? (p.allocation_bytes * 100) / p.capacity_bytes
-                    : null;
-                  const level =
-                    percent !== null && config
-                      ? percent >= config.storage_critical_percent
-                        ? "高风险"
-                        : percent >= config.storage_warning_percent
-                          ? "警告"
-                          : "正常"
-                      : "—";
-                  return (
-                    <tr key={p.uuid || p.name}>
-                      <td>
-                        <strong>{p.name}</strong>
-                        <p className="muted">{p.uuid}</p>
-                      </td>
-                      <td>{p.type}</td>
-                      <td>{p.target.path || "—"}</td>
-                      <td>
-                        {p.active ? (
-                          <>
-                            {formatBytes(p.allocation_bytes)} /{" "}
-                            {formatBytes(p.capacity_bytes)}
-                            <p className="muted">
-                              剩余 {formatBytes(p.available_bytes)}
-                            </p>
-                          </>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td className={level === "正常" ? "" : "danger-text"}>
-                        {p.active && percent !== null
-                          ? `${percent.toFixed(1)}% · ${level}`
-                          : "—"}
-                      </td>
-                      <td>{p.active ? "运行中" : "未激活"}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+              <table>
+                <thead>
+                  <tr>
+                    <th>名称 / UUID</th>
+                    <th>类型</th>
+                    <th>目录</th>
+                    <th>容量</th>
+                    <th>使用率</th>
+                    <th>状态</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.results.map((p) => {
+                    const percent = p.capacity_bytes
+                      ? (p.allocation_bytes * 100) / p.capacity_bytes
+                      : null;
+                    const level =
+                      percent !== null && config
+                        ? percent >= config.storage_critical_percent
+                          ? "高风险"
+                          : percent >= config.storage_warning_percent
+                            ? "警告"
+                            : "正常"
+                        : "—";
+                    return (
+                      <tr key={p.uuid || p.name}>
+                        <td>
+                          <strong>{p.name}</strong>
+                          <p className="muted">{p.uuid}</p>
+                        </td>
+                        <td>{p.type}</td>
+                        <td>{p.target.path || "—"}</td>
+                        <td>
+                          {p.active ? (
+                            <>
+                              {formatBytes(p.allocation_bytes)} /{" "}
+                              {formatBytes(p.capacity_bytes)}
+                              <p className="muted">
+                                剩余 {formatBytes(p.available_bytes)}
+                              </p>
+                            </>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td className={level === "正常" ? "" : "danger-text"}>
+                          {p.active && percent !== null
+                            ? `${percent.toFixed(1)}% · ${level}`
+                            : "—"}
+                        </td>
+                        <td>{p.active ? "运行中" : "未激活"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
             {!data.results.length ? (
               <p className="empty">此节点暂无 libvirt 存储池。</p>
@@ -236,7 +241,7 @@ export function StoragePoolsPage() {
               try {
                 const result = await infra.save(
                   `/admin/nodes/${node}/storage-pools/`,
-                  { name },
+                  { name, path: directory },
                   key,
                 );
                 setCreate(false);
@@ -259,9 +264,24 @@ export function StoragePoolsPage() {
                 onChange={(e) => setName(e.target.value)}
               />
             </label>
+            <label>
+              存储目录（绝对路径）
+              <input
+                value={directory}
+                onChange={(e) => setDirectory(e.target.value)}
+                placeholder={`${data?.default_directory || "受管目录"}/${name}`}
+              />
+              <small className="muted">
+                留空使用默认目录；填写后将按指定目录创建或登记，不迁移现有磁盘。
+              </small>
+            </label>
             <div className="callout callout-muted">
-              目录由节点 Agent 在受管磁盘根目录中创建。名称必须以 cv-
-              开头，不接受任意宿主机路径、块设备或挂载命令。
+              允许的根目录：
+              {data?.storage_roots?.join("、") ||
+                data?.default_directory ||
+                "节点默认受管磁盘目录"}
+              。不存在的子目录会自动创建；现有目录须已授予 Agent 与 QEMU
+              访问权限。名称必须以 cv- 开头。
             </div>
           </form>
         </Drawer>

@@ -66,6 +66,10 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
     ),
     [busy, setBusy] = useState(false),
     [refresh, setRefresh] = useState(0);
+  const [purgeDisks, setPurgeDisks] = useState(false);
+  useEffect(() => {
+    setPurgeDisks(false);
+  }, [pending?.vm.id, pending?.action]);
   const prefix = path.startsWith("/admin") ? "/admin" : "/app",
     admin = prefix === "/admin",
     rawId = path.split("/")[3],
@@ -124,7 +128,10 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
     try {
       const result =
         pending.action === "delete"
-          ? await api.deleteInstance(pending.vm.id, false)
+          ? await api.deleteInstance(
+              pending.vm.id,
+              purgeDisks && can("instances.delete_disk_instance"),
+            )
           : await api.instanceAction(pending.vm.id, pending.action);
       if (result.task) setTaskId(result.task.id);
       setPending(null);
@@ -590,7 +597,9 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
             pending.action === "force-stop"
               ? "此操作等同断电，未保存的数据可能丢失。"
               : pending.action === "delete"
-                ? "通过后端任务删除 libvirt 实例并保留磁盘文件，可在数据卷中核对。"
+                ? purgeDisks
+                  ? "删除实例及其全部关联磁盘（包括已卸载的数据盘），磁盘数据及内部快照将无法恢复。"
+                  : "通过后端任务删除实例并保留磁盘，之后可在数据卷的“保留 / 已卸载”中清理。"
                 : "操作将提交为异步任务，最终状态以节点观测结果为准。"
           }
           busy={busy}
@@ -600,7 +609,37 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
             setError(null);
           }}
           onConfirm={() => void execute()}
-        />
+        >
+          {pending.action === "delete" && (
+            <>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={purgeDisks}
+                  disabled={busy || !can("instances.delete_disk_instance")}
+                  onChange={(e) => setPurgeDisks(e.target.checked)}
+                />
+                同时删除关联磁盘文件（不可恢复）
+              </label>
+              {!can("instances.delete_disk_instance") && (
+                <p className="muted">
+                  当前账号无磁盘清理权限，删除实例时将保留磁盘。
+                </p>
+              )}
+              <ul>
+                {pending.vm.disks
+                  ?.filter((d) => d.status !== "DELETED")
+                  .map((d) => (
+                    <li key={d.id}>
+                      {d.role === "SYSTEM" ? "系统盘" : "数据盘"} · {d.name} ·{" "}
+                      {d.size_gib} GiB{" "}
+                      {d.status === "DETACHED" ? "（已卸载）" : ""}
+                    </li>
+                  ))}
+              </ul>
+            </>
+          )}
+        </ConfirmOperationModal>
       ) : null}
       {taskId ? (
         <TaskProgressDrawer id={taskId} onClose={() => setTaskId(null)} />

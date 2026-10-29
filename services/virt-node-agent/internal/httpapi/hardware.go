@@ -11,6 +11,8 @@ import (
 
 func hardwareHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		diskReferenceMutation.RLock()
+		defer diskReferenceMutation.RUnlock()
 		id := RequestIDFromContext(r.Context())
 		fail := func(err error) { writeAPIError(w, deps.Logger, err, id) }
 		name := r.PathValue("name")
