@@ -1,5 +1,7 @@
 """Console authorization, single-use claims, source scopes and cleanup boundaries."""
 
+from unittest.mock import patch
+
 from django.test import TestCase, override_settings
 
 from apps.console.models import ConsoleSession
@@ -12,6 +14,35 @@ from apps.instances.tests.helpers import make_image, make_node, make_user
     CONSOLE_REQUIRE_TLS=False, AGENT_SHARED_TOKEN='test-console-secret-that-is-long-enough'
 )
 class ConsoleTests(TestCase):
+    def test_uuid_lease_renews_and_close_frees_quota(self):
+        session = self.create()
+        self.assertEqual(self.authorize(session).status_code, 204)
+        path = f'/api/v1/console/sessions/{session["session_id"]}'
+        with patch('apps.nodes.client.AgentClient.request_json', return_value={'active': True}):
+            self.assertEqual(self.client.post(path).status_code, 200)
+            for _ in range(2):
+                self.create()
+            self.assertEqual(self.client.delete(path).status_code, 204)
+            self.assertEqual(self.client.delete(path).status_code, 204)
+        self.assertTrue(ConsoleSession.objects.get(pk=session['session_id']).revoked)
+        self.create()
+
+    def test_lease_and_close_do_not_accept_other_login_or_user(self):
+        session = self.create()
+        path = f'/api/v1/console/sessions/{session["session_id"]}'
+        self.client.force_login(self.other)
+        with patch('apps.nodes.client.AgentClient.request_json') as agent:
+            self.assertEqual(self.client.post(path).status_code, 404)
+            self.assertEqual(self.client.delete(path).status_code, 404)
+            agent.assert_not_called()
+
+    def test_unclaimed_and_revoked_sessions_cannot_renew(self):
+        session = self.create()
+        path = f'/api/v1/console/sessions/{session["session_id"]}'
+        self.assertEqual(self.client.post(path).status_code, 409)
+        ConsoleSession.objects.filter(pk=session['session_id']).update(revoked=True)
+        self.assertEqual(self.client.post(path).status_code, 409)
+
     def setUp(self):
         self.owner = make_user('console-test-owner', 'Operator')
         self.other = make_user('console-test-other', 'Operator')

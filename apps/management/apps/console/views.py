@@ -12,7 +12,7 @@ from rest_framework.views import APIView
 from apps.audit.services import record_audit
 from apps.nodes.client import AgentClient
 from common.errors import AppError, ErrorCode
-from common.permissions import CanViewInstance, RequiresPasswordChange
+from common.permissions import CanViewInstance, RequiresPasswordChange, check_permission
 from common.scope import instances_for
 
 from .models import ConsoleSession
@@ -46,6 +46,12 @@ def owned_desktop(request, pk, lock=False):
     if not instances_for(request.user).filter(pk=session.instance_id).exists():
         close_desktop(session)
         raise AppError(ErrorCode.PERMISSION_DENIED)
+    check_permission(
+        request.user,
+        'instances.view_instance',
+        target_type='instance',
+        target_id=str(session.instance_id),
+    )
     return session
 
 
@@ -92,12 +98,19 @@ class DesktopAuthorizeView(APIView):
         return response
 
 
-class DesktopLeaseView(APIView):
-    permission_classes = [CanViewInstance, RequiresPasswordChange]
+class CanUseDesktopSession(CanViewInstance):
+    # URL pk is a ConsoleSession UUID. Instance scope is checked after resolving
+    # ownership in owned_desktop(), never by treating this UUID as Instance.pk.
+    target_type = 'console_session'
 
+
+class DesktopLeaseView(APIView):
+    permission_classes = [CanUseDesktopSession, RequiresPasswordChange]
+
+    @transaction.atomic
     def post(self, request, pk):
         require_transport(request)
-        session = owned_desktop(request, pk)
+        session = owned_desktop(request, pk, lock=True)
         if session.revoked or not session.claimed or session.expires_at <= timezone.now():
             raise AppError(ErrorCode.CONFLICT, '会话已结束，请重新连接')
         AgentClient(session.instance.node.endpoint, timeout=5).request_json(
@@ -107,8 +120,9 @@ class DesktopLeaseView(APIView):
         session.save(update_fields=['expires_at'])
         return Response({'expires_at': session.expires_at})
 
+    @transaction.atomic
     def delete(self, request, pk):
-        session = owned_desktop(request, pk)
+        session = owned_desktop(request, pk, lock=True)
         close_desktop(session)
         record_audit(
             action='CONSOLE_CLOSED',

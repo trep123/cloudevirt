@@ -35,6 +35,7 @@ export type DesktopOptions = {
 export class DesktopEngine {
   private client: RFB | null = null;
   private session: string | null = null;
+  private closing: Promise<unknown> = Promise.resolve();
   private generation = 0;
   private disposed = false;
   private stopped = false;
@@ -107,6 +108,9 @@ export class DesktopEngine {
     const current = () =>
       !this.disposed && !this.stopped && generation === this.generation;
     try {
+      // A replacement must not race the server's quota check against DELETE.
+      await this.closing;
+      if (!current()) return;
       const session = await api.request<DesktopSession>(
         `/console/instances/${this.instance}/sessions`,
         { method: "POST" },
@@ -235,10 +239,12 @@ export class DesktopEngine {
       error instanceof ApiError &&
       [401, 403, 404, 409].includes(error.status)
     ) {
+      this.stopped = true;
       this.state("failed", error.message);
       return;
     }
     if (this.retry >= 3) {
+      this.stopped = true;
       this.state("failed", error instanceof Error ? error.message : "连接失败");
       return;
     }
@@ -270,7 +276,10 @@ export class DesktopEngine {
     this.client?.disconnect();
     this.client = null;
     if (this.session) {
-      void this.closeSession(this.session);
+      this.closing = Promise.all([
+        this.closing,
+        this.closeSession(this.session),
+      ]);
       this.session = null;
     }
     this.target.replaceChildren();

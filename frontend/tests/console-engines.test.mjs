@@ -37,6 +37,88 @@ const { DesktopEngine } = await import(
 async function settle() {
   for (let i = 0; i < 30; i++) await Promise.resolve();
 }
+
+test("replacement desktop waits for old session deletion before quota check", async (t) => {
+  const requests = environment(t);
+  const originalFetch = globalThis.fetch;
+  let finishDelete;
+  globalThis.fetch = (url, init) => {
+    if (init.method === "DELETE")
+      return new Promise((resolve) => {
+        finishDelete = resolve;
+      });
+    return originalFetch(url, init);
+  };
+  const engine = new DesktopEngine(
+    {
+      querySelector() {
+        return null;
+      },
+      replaceChildren() {},
+    },
+    1,
+    () => {},
+    () => {},
+    () => {},
+  );
+  try {
+    engine.start();
+    await settle();
+    assert.equal(requests.filter((r) => r.init.method === "POST").length, 1);
+    engine.start();
+    await settle();
+    assert.equal(
+      requests.filter((r) => r.init.method === "POST").length,
+      1,
+      "must wait for DELETE",
+    );
+    finishDelete(new Response(null, { status: 204 }));
+    await settle();
+    assert.equal(requests.filter((r) => r.init.method === "POST").length, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+    engine.dispose();
+  }
+});
+
+test("terminal authorization errors cannot be retriggered by visibility or online", async (t) => {
+  environment(t);
+  let calls = 0;
+  const states = [];
+  globalThis.fetch = async () => {
+    calls++;
+    return new Response(
+      JSON.stringify({ error: { code: "CONFLICT", message: "session limit" } }),
+      { status: 409 },
+    );
+  };
+  const engine = new DesktopEngine(
+    {
+      querySelector() {
+        return null;
+      },
+      replaceChildren() {},
+    },
+    1,
+    (s) => states.push(s),
+    () => {},
+    () => {},
+  );
+  try {
+    engine.start();
+    await settle();
+    assert.equal(states.at(-1), "failed");
+    window.dispatchEvent(new Event("online"));
+    document.dispatchEvent(new Event("visibilitychange"));
+    await settle();
+    assert.equal(calls, 1);
+    engine.start();
+    await settle();
+    assert.equal(calls, 2, "explicit user retry remains available");
+  } finally {
+    engine.dispose();
+  }
+});
 function environment(t) {
   const names = [
     "window",
