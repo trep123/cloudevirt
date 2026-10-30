@@ -50,15 +50,17 @@ export function HardwareFields({
 }) {
   const topology = value.sockets !== undefined;
   return (
-    <details className="field-wide hardware-details">
-      <summary>
-        高级硬件与性能控制{locked ? "（管理员配置，仅查看）" : ""}
-      </summary>
+    <section className="field-wide hardware-details hardware-config" aria-label="虚拟机硬件配置">
+      <header className="hardware-config-header">
+        <h3>硬件配置</h3>
+        <span>{locked ? "只读 · 由管理员或模板控制" : "可配置"}</span>
+      </header>
       <p className="muted">
         选项依据节点实际能力。CPU
         模式可能影响迁移兼容性；性能限制不代表物理资源独占。
       </p>
       <div className="infra-form">
+        <h4 className="field-wide hardware-group-title">设备接口 · 网卡与磁盘</h4>
         <Field label="创建时网卡型号">
           <select
             value={value.nic_model || "virtio"}
@@ -81,6 +83,7 @@ export function HardwareFields({
             <option value="sata">SATA</option>
           </select>
         </Field>
+        <h4 className="field-wide hardware-group-title">显示与交互</h4>
         <label className="check">
           <input
             type="checkbox"
@@ -92,6 +95,7 @@ export function HardwareFields({
           />
           启用客体剪贴板通道（需要 spice-vdagent，仅文本）
         </label>
+        {!caps?.clipboard && <small className="muted field-wide">{caps ? "节点未声明剪贴板通道支持" : "正在读取节点硬件能力"}</small>}
         <Field label="虚拟机显卡">
           <select
             value={value.video_model || ""}
@@ -120,7 +124,7 @@ export function HardwareFields({
             ))}
           </select>
         </Field>
-        {value.video_model && (
+        {(
           <>
             <Field label="启动显示宽度">
               <input
@@ -128,7 +132,7 @@ export function HardwareFields({
                 min={640}
                 max={3840}
                 value={value.video_width || 1920}
-                disabled={locked}
+                disabled={locked || !value.video_model}
                 onChange={(e) =>
                   onChange({ ...value, video_width: Number(e.target.value) })
                 }
@@ -140,18 +144,20 @@ export function HardwareFields({
                 min={480}
                 max={2160}
                 value={value.video_height || 1080}
-                disabled={locked}
+                disabled={locked || !value.video_model}
                 onChange={(e) =>
                   onChange({ ...value, video_height: Number(e.target.value) })
                 }
               />
             </Field>
             <p className="muted field-wide">
+              {!value.video_model && "选择显卡型号后才会写入下面的启动尺寸，当前使用节点默认配置。"}
               尺寸写入虚拟显卡配置；客体桌面可使用自己的显示设置，不等于强制桌面分辨率。Linux
               建议 VirtIO，Windows 需对应驱动。
             </p>
           </>
         )}
+        <h4 className="field-wide hardware-group-title">处理器与系统固件</h4>
         <Field label="CPU 模式">
           <select
             value={value.cpu_mode || ""}
@@ -211,7 +217,7 @@ export function HardwareFields({
           />
           指定 CPU 拓扑
         </label>
-        {topology &&
+        {
           (["sockets", "cores", "threads"] as const).map((key) => (
             <Field
               key={key}
@@ -225,8 +231,8 @@ export function HardwareFields({
                 type="number"
                 min={1}
                 max={128}
-                value={value[key]}
-                disabled={locked}
+                value={value[key] ?? (key === "cores" ? cpu : 1)}
+                disabled={locked || !topology}
                 onChange={(e) =>
                   onChange({ ...value, [key]: Number(e.target.value) })
                 }
@@ -253,8 +259,10 @@ export function HardwareFields({
           />
           TPM 2.0 模拟器
         </label>
-        {isAdmin &&
-          caps?.performance_limits &&
+        <p className="muted field-wide">{value.firmware !== "uefi" ? "Secure Boot 需先选择 UEFI。" : !caps?.secure_boot ? "节点未声明 Secure Boot 支持。" : "Secure Boot 由节点固件能力控制。"} {!caps?.tpm_emulator ? "节点未声明 TPM 模拟器支持。" : "TPM 使用节点支持的模拟器。"}</p>
+        <h4 className="field-wide hardware-group-title">性能限制</h4>
+        <p className="muted field-wide">{!isAdmin ? "仅管理员可修改性能限制。" : !caps?.performance_limits ? "当前节点未声明性能限制支持，选项只读。" : "0 表示不限制；CPU 100% 对应一个逻辑核心。"}</p>
+        {
           (
             [
               "cpu_quota_percent",
@@ -285,7 +293,7 @@ export function HardwareFields({
                       : 1000000
                 }
                 value={value[key] || 0}
-                disabled={locked}
+                disabled={locked || !isAdmin || !caps?.performance_limits}
                 onChange={(e) =>
                   onChange({ ...value, [key]: Number(e.target.value) })
                 }
@@ -293,6 +301,6 @@ export function HardwareFields({
             </Field>
           ))}
       </div>
-    </details>
+    </section>
   );
 }

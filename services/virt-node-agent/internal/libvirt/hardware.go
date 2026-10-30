@@ -63,11 +63,25 @@ type HardwareNIC struct {
 	NetworkName string `json:"source" xml:"-"`
 }
 type HardwareInventory struct {
+	System HardwareSystem `json:"system"`
 	UUID      string         `json:"uuid"`
 	VCPU      int            `json:"vcpu"`
 	MemoryMiB int            `json:"memory_mib"`
 	Disks     []HardwareDisk `json:"disks"`
 	NICs      []HardwareNIC  `json:"nics"`
+}
+type HardwareSystem struct {
+	OS struct {
+		Firmware string `xml:"firmware,attr" json:"firmware"`
+		Loader string `xml:"loader" json:"loader"`
+		Type struct { Machine string `xml:"machine,attr" json:"machine"`; Arch string `xml:"arch,attr" json:"arch"` } `xml:"type" json:"type"`
+		Boot []struct { Device string `xml:"dev,attr" json:"device"` } `xml:"boot" json:"boot"`
+	} `xml:"os" json:"os"`
+	CPU struct {
+		Mode string `xml:"mode,attr" json:"mode"`
+		Model string `xml:"model" json:"model"`
+		Topology *struct { Sockets int `xml:"sockets,attr" json:"sockets"`; Cores int `xml:"cores,attr" json:"cores"`; Threads int `xml:"threads,attr" json:"threads"` } `xml:"topology" json:"topology"`
+	} `xml:"cpu" json:"cpu"`
 }
 type xmlPart struct {
 	start, end int
@@ -155,6 +169,7 @@ func parseHardware(ctx context.Context, content, root string) (HardwareInventory
 		return HardwareInventory{}, apierr.New(apierr.CodeConflict, "未知内存单位", nil)
 	}
 	result := HardwareInventory{UUID: parsed.UUID, VCPU: parsed.VCPU, MemoryMiB: memory, Disks: []HardwareDisk{}, NICs: parsed.Devices.NICs}
+	if err := xml.Unmarshal([]byte(content), &result.System); err != nil { return result, err }
 	if result.NICs == nil {
 		result.NICs = []HardwareNIC{}
 	}

@@ -1822,3 +1822,30 @@ button.action.auth-submit:disabled {
     scroll-behavior: auto !important;
   }
 }
+.hardware-config {
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  background: var(--surface, #fff);
+  padding: 20px;
+}
+.hardware-config-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+.hardware-config-header h3 { margin: 0; font-size: 16px; }
+.hardware-config-header span { color: var(--text-secondary, #64748b); font-size: 12px; }
+.hardware-config > .infra-form { max-width: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.hardware-config .field-wide { grid-column: 1 / -1; }
+.hardware-config .infra-form label.check { display: flex; flex-direction: row; align-items: center; gap: 8px; }
+.hardware-config .infra-form label.check input { width: 16px; margin: 0; flex: 0 0 auto; }
+@media (max-width: 720px) { .hardware-config > .infra-form { grid-template-columns: minmax(0, 1fr); } }
+.hardware-group-title {
+  margin: 16px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--border, #e2e8f0);
+  color: var(--text-primary, #1f2937);
+  font-size: 14px;
+}

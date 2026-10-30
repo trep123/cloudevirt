@@ -18,6 +18,10 @@ type Disk = {
 };
 type NIC = { mac: string; model: string; source: string; type: string };
 type Inventory = {
+  system?: {
+    os: { firmware: string; loader: string; type: { machine: string; arch: string }; boot: { device: string }[] | null };
+    cpu: { mode: string; model: string; topology: { sockets: number; cores: number; threads: number } | null };
+  };
   vcpu: number;
   memory_mib: number;
   disks: Disk[];
@@ -291,6 +295,20 @@ export function DeviceManager({
       )}
       {info && section === "compute" && (
         <>
+          <div className="table-scroll">
+            <table aria-label="节点实际硬件配置">
+              <thead><tr><th>硬件</th><th>节点实际配置</th><th>操作范围</th></tr></thead>
+              <tbody>
+                <tr><td>处理器</td><td>{info.vcpu} vCPU · {info.system?.cpu.mode || info.system?.cpu.model || "节点默认"}</td><td>{admin ? "关机后可修改核数" : "只读"}</td></tr>
+                <tr><td>内存</td><td>{info.memory_mib / 1024} GiB</td><td>{admin ? "关机后可修改" : "只读"}</td></tr>
+                <tr><td>CPU 拓扑</td><td>{info.system?.cpu.topology ? `${info.system.cpu.topology.sockets} 插槽 × ${info.system.cpu.topology.cores} 核 × ${info.system.cpu.topology.threads} 线程` : "未显式配置"}</td><td>创建时配置</td></tr>
+                <tr><td>固件</td><td>{info.system ? info.system.os.firmware || (info.system.os.loader ? "UEFI / pflash" : "BIOS") : "节点未返回"}</td><td>创建时配置</td></tr>
+                <tr><td>机型 / 架构</td><td>{info.system ? `${info.system.os.type.machine || "节点默认"} · ${info.system.os.type.arch || "未返回"}` : "节点未返回"}</td><td>节点实际机型</td></tr>
+                <tr><td>启动设备顺序</td><td>{info.system?.os.boot?.map((item) => item.device).join(" → ") || "节点默认或设备级启动顺序"}</td><td>按节点域定义显示</td></tr>
+                <tr><td>磁盘 / 网卡</td><td>{info.disks.length} 块磁盘 · {info.nics.length} 张网卡</td><td>在磁盘、网络标签管理</td></tr>
+              </tbody>
+            </table>
+          </div>
           <div className="hardware-kpis">
             <div>
               <span>当前处理器</span>
