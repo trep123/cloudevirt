@@ -27,15 +27,22 @@ type Inventory = {
     name: string;
     size_gib: number;
     target_dev: string;
+    role: string;
   }[];
 };
 export function DeviceManager({
   vm,
   admin,
+  manageDataDisks,
+  connectNetworks,
+  deleteDataDisks,
   section,
 }: {
   vm: Instance;
   admin: boolean;
+  manageDataDisks: boolean;
+  connectNetworks: boolean;
+  deleteDataDisks: boolean;
   section: "compute" | "disks" | "nics";
 }) {
   const pendingKeys = useRef(new Map<string, string>());
@@ -59,7 +66,16 @@ export function DeviceManager({
     [networks, setNetworks] = useState<Network[]>([]);
   const stopped =
     vm.observed_state === "SHUTOFF" && !vm.observed_state_is_stale;
+  const running =
+    vm.observed_state === "RUNNING" && !vm.observed_state_is_stale;
+  const canAddDisk = admin || manageDataDisks;
+  const canAddNIC = admin || connectNetworks;
+  const canEdit =
+    admin ||
+    (section === "disks" && canAddDisk) ||
+    (section === "nics" && canAddNIC);
   const locked = busy || !stopped || !info || !!task;
+  const connectLocked = busy || (!stopped && !running) || !info || !!task;
   useEffect(() => {
     let alive = true;
     setInfo(null);
@@ -81,7 +97,7 @@ export function DeviceManager({
     };
   }, [vm.id, revision]);
   useEffect(() => {
-    if (!admin || section !== "nics") return;
+    if (!canAddNIC || section !== "nics") return;
     let alive = true;
     api
       .networks()
@@ -94,13 +110,13 @@ export function DeviceManager({
     return () => {
       alive = false;
     };
-  }, [admin, section]);
+  }, [canAddNIC, section]);
   async function submit(
     payload: Record<string, unknown>,
     description: string,
     confirmed = false,
   ) {
-    if (locked) return;
+    if (payload.operation === "nic-add" ? connectLocked : locked) return;
     if (!confirmed) {
       setError(null);
       setConfirmation({ payload, description });
@@ -143,6 +159,37 @@ export function DeviceManager({
       setBusy(false);
     }
   }
+  async function deleteRetainedDisk(id: number) {
+    if (busy || !info || !!task || !deleteDataDisks) return;
+    setBusy(true);
+    setError(null);
+    const storageKey = `cloudvirt-disk-delete:${id}`;
+    let key = pendingKeys.current.get(storageKey);
+    try {
+      key = key || sessionStorage.getItem(storageKey) || undefined;
+    } catch {}
+    if (!key) key = crypto.randomUUID();
+    pendingKeys.current.set(storageKey, key);
+    try {
+      sessionStorage.setItem(storageKey, key);
+    } catch {}
+    try {
+      const result = await api.request<{ task_id: string }>(`/disks/${id}`, {
+        method: "DELETE",
+        headers: { "Idempotency-Key": key },
+      });
+      pendingKeys.current.delete(storageKey);
+      try {
+        sessionStorage.removeItem(storageKey);
+      } catch {}
+      setTask(result.task_id);
+      setConfirmation(null);
+    } catch (e) {
+      setError(describeError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <section className={`device-manager device-${section}`}>
       <header className="hardware-panel-head">
@@ -175,9 +222,15 @@ export function DeviceManager({
           </div>
         </div>
         <div className="hardware-head-actions">
-          <span className={`hardware-permission ${admin ? "is-admin" : ""}`}>
+          <span
+            className={`hardware-permission ${canEdit ? "is-admin" : ""}`}
+          >
             <Icon name="key" size={13} />
-            {admin ? "管理员管理" : "只读访问"}
+            {admin
+              ? "管理员管理"
+              : canEdit
+                ? "本人资源可操作"
+                : "只读访问"}
           </span>
           <button
             className="action sm"
@@ -191,7 +244,7 @@ export function DeviceManager({
       </header>
       <ErrorBanner message={error} />
       {!info && !error && <p>正在读取节点实际硬件…</p>}
-      {admin && !stopped && (
+      {canEdit && !stopped && section !== "nics" && (
         <div className="hardware-notice">
           <Icon name="info" size={16} />
           <div>
@@ -228,7 +281,9 @@ export function DeviceManager({
           <div>
             <span>{section === "disks" ? "保留磁盘" : "变更方式"}</span>
             <strong>
-              {section === "disks" ? info.retained_disks.length : "关机配置"}
+              {section === "disks"
+                ? info.retained_disks.length
+                : "运行中可热接入"}
               <small>{section === "disks" ? " 个" : ""}</small>
             </strong>
           </div>
@@ -345,29 +400,33 @@ export function DeviceManager({
                     </td>
                     <td>{Math.round(d.size_bytes / 1024 ** 3)} GiB</td>
                     <td>
-                      {admin && d.disk_id && d.managed ? (
+                      {(admin || (manageDataDisks && d.role === "DATA")) &&
+                      d.disk_id &&
+                      d.managed ? (
                         <>
-                          <button
-                            className="action sm"
-                            disabled={locked}
-                            onClick={() => {
-                              const current = Math.round(
-                                d.size_bytes / 1024 ** 3,
-                              );
-                              setResizeSize(Math.min(2048, current + 10));
-                              setError(null);
-                              setConfirmation({
-                                payload: {
-                                  operation: "disk-resize",
-                                  disk_id: d.disk_id,
-                                },
-                                description: `扩容磁盘 ${d.target}，当前容量 ${current} GiB`,
-                                minimum: current,
-                              });
-                            }}
-                          >
-                            扩容
-                          </button>
+                          {admin && (
+                            <button
+                              className="action sm"
+                              disabled={locked}
+                              onClick={() => {
+                                const current = Math.round(
+                                  d.size_bytes / 1024 ** 3,
+                                );
+                                setResizeSize(Math.min(2048, current + 10));
+                                setError(null);
+                                setConfirmation({
+                                  payload: {
+                                    operation: "disk-resize",
+                                    disk_id: d.disk_id,
+                                  },
+                                  description: `扩容磁盘 ${d.target}，当前容量 ${current} GiB`,
+                                  minimum: current,
+                                });
+                              }}
+                            >
+                              扩容
+                            </button>
+                          )}
                           {d.role === "DATA" && (
                             <button
                               className="action sm danger"
@@ -388,7 +447,9 @@ export function DeviceManager({
                         </>
                       ) : (
                         <span className="muted">
-                          {!admin ? "只读" : "未登记或非受管文件，禁止修改"}
+                          {!admin && !manageDataDisks
+                            ? "只读"
+                            : "系统盘或未登记文件，禁止修改"}
                         </span>
                       )}
                     </td>
@@ -397,7 +458,7 @@ export function DeviceManager({
               </tbody>
             </table>
           </div>
-          {admin && (
+          {canAddDisk && (
             <div className="infra-form">
               <label>
                 数据盘容量 GiB
@@ -441,7 +502,7 @@ export function DeviceManager({
               {info.retained_disks.map((d) => (
                 <p key={d.id}>
                   {d.name} · {d.size_gib} GiB{" "}
-                  {admin && (
+                  {(admin || (manageDataDisks && d.role === "DATA")) && (
                     <button
                       className="action sm"
                       disabled={locked}
@@ -453,6 +514,20 @@ export function DeviceManager({
                       }
                     >
                       重新挂载
+                    </button>
+                  )}
+                  {deleteDataDisks && d.role === "DATA" && (
+                    <button
+                      className="action sm danger"
+                      disabled={busy || !info || !!task}
+                      onClick={() =>
+                        setConfirmation({
+                          payload: { operation: "disk-delete", disk_id: d.id },
+                          description: `永久删除已卸载数据盘 ${d.name}（${d.size_gib} GiB）及其文件`,
+                        })
+                      }
+                    >
+                      删除文件
                     </button>
                   )}
                 </p>
@@ -514,13 +589,13 @@ export function DeviceManager({
               </tbody>
             </table>
           </div>
-          {admin && (
+          {canAddNIC && (
             <div className="infra-form">
               <label>
                 业务网络
                 <select
                   value={network}
-                  disabled={locked}
+                  disabled={connectLocked}
                   onChange={(e) => setNetwork(e.target.value)}
                 >
                   <option value="">选择白名单网络</option>
@@ -535,7 +610,7 @@ export function DeviceManager({
                 网卡型号
                 <select
                   value={model}
-                  disabled={locked}
+                  disabled={connectLocked}
                   onChange={(e) => setModel(e.target.value)}
                 >
                   <option value="virtio">VirtIO（需客体驱动）</option>
@@ -544,10 +619,15 @@ export function DeviceManager({
               </label>
               <button
                 className="action"
-                disabled={locked || !network}
+                disabled={connectLocked || !network}
                 onClick={() =>
                   void submit(
-                    { operation: "nic-add", network_name: network, model },
+                    {
+                      operation: "nic-add",
+                      network_name: network,
+                      model,
+                      ...(running ? { live: true } : {}),
+                    },
                     `新增 ${model} 网卡连接 ${network}`,
                   )
                 }
@@ -555,7 +635,7 @@ export function DeviceManager({
                 添加网卡
               </button>
               <p className="muted field-wide">
-                MAC 由后端唯一生成。带静态 IP
+                运行中将热接入网卡；MAC 由后端唯一生成。带静态 IP
                 租约记录的网卡暂不自动移除，以免丢失地址分配。新网卡需在客体配置
                 DHCP / IP。
               </p>
@@ -574,6 +654,7 @@ export function DeviceManager({
                 "disk-detach": "卸载数据盘",
                 "disk-attach": "重新挂载",
                 "disk-resize": "扩容磁盘",
+                "disk-delete": "永久删除数据盘文件",
                 "nic-add": "添加网卡",
                 "nic-remove": "移除网卡",
               } as Record<string, string>
@@ -596,18 +677,22 @@ export function DeviceManager({
               setError("目标容量必须大于当前容量，且不超过 2048 GiB");
               return;
             }
-            void submit(
-              confirmation.minimum === undefined
-                ? confirmation.payload
-                : { ...confirmation.payload, size_gib: resizeSize },
-              confirmation.description,
-              true,
-            );
+            if (confirmation.payload.operation === "disk-delete") {
+              void deleteRetainedDisk(Number(confirmation.payload.disk_id));
+            } else {
+              void submit(
+                confirmation.minimum === undefined
+                  ? confirmation.payload
+                  : { ...confirmation.payload, size_gib: resizeSize },
+                confirmation.description,
+                true,
+              );
+            }
           }}
         >
           <div
             className="hardware-confirm-body"
-            data-danger={["disk-detach", "nic-remove"].includes(
+            data-danger={["disk-detach", "disk-delete", "nic-remove"].includes(
               String(confirmation.payload.operation),
             )}
           >
@@ -624,7 +709,7 @@ export function DeviceManager({
               </label>
             )}
             <p>
-              变更在下次启动时生效。卸载磁盘会保留文件；扩容后需在客体内扩展分区和文件系统。
+              磁盘变更需先关机；卸载后文件仍保留，删除文件不可恢复。运行中新增网卡需客体驱动支持。
             </p>
           </div>
         </ConfirmOperationModal>

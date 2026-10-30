@@ -49,7 +49,7 @@ class PermissionBoundaryTests(TestCase):
         )
 
     def test_student_has_vm_network_image_and_disk_operations(self) -> None:
-        """学员拥有虚拟机、网络、镜像与磁盘操作权限。"""
+        """学员可连接网络及管理数据盘，但不能创建网络。"""
         sync_role_permissions()
         student = get_user_model().objects.create_user(
             username='student01', password='Str0ngPassw0rd'
@@ -64,12 +64,14 @@ class PermissionBoundaryTests(TestCase):
             'instances.force_stop_instance',
             'instances.delete_instance',
             'instances.delete_disk_instance',
-            'networks.manage_network',
+            'instances.connect_network_instance',
+            'instances.manage_data_disk_instance',
             'images.add_image',
             'images.delete_image',
         ):
             self.assertTrue(student.has_perm(codename), codename)
         self.assertFalse(student.has_perm('nodes.add_node'))
+        self.assertFalse(student.has_perm('networks.manage_network'))
 
     def test_general_user_only_has_vm_operations(self) -> None:
         """一般用户可管理自己的虚拟机、保留磁盘和快照，其余模块无写权限。"""
@@ -87,6 +89,8 @@ class PermissionBoundaryTests(TestCase):
             'instances.force_stop_instance',
             'instances.delete_instance',
             'instances.delete_disk_instance',
+            'instances.connect_network_instance',
+            'instances.manage_data_disk_instance',
             'instances.manage_snapshot_instance',
         ):
             self.assertTrue(general.has_perm(codename), codename)

@@ -91,8 +91,10 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
     [connectionTask, setConnectionTask] = useState<string | null>(null),
     [truncated, setTruncated] = useState(false);
   const canConnect =
-    user.console_scope === "admin" && can(user, "instances.change_instance");
-  const canManage = can(user, "networks.manage_network");
+    can(user, "instances.connect_network_instance") ||
+    (user.console_scope === "admin" && can(user, "instances.change_instance"));
+  const canManage =
+    user.console_scope === "admin" && can(user, "networks.manage_network");
 
   const reload = useCallback(async () => {
     try {
@@ -251,8 +253,12 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
   return (
     <>
       <PageHeader
-        title="网络管理"
-        description="创建节点桥接网络，管理已有网络、VLAN 与地址规划"
+        title={canManage ? "网络管理" : "网络连接"}
+        description={
+          canManage
+            ? "创建节点桥接网络，管理已有网络、VLAN 与地址规划"
+            : "查看已授权网络，将自己的虚拟机连接到可用业务网络"
+        }
       >
         {canManage && user.console_scope === "admin" && (
           <button

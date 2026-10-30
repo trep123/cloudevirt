@@ -122,10 +122,21 @@ export default function App() {
     content = <OrganizationPage key={key} kind={key} />;
   else if (key === "storage" && !admin) content = <DisksPage />;
   else if (key === "storage-pools" && admin) content = <StoragePoolsPage />;
-  else if (key === "snapshots") content = <SnapshotsPage canManage={user.permissions.includes("instances.manage_snapshot_instance")} />;
+  else if (key === "snapshots")
+    content = (
+      <SnapshotsPage
+        canManage={user.permissions.includes(
+          "instances.manage_snapshot_instance",
+        )}
+      />
+    );
   else if (key === "settings" && admin) content = <SettingsPage />;
   else if (/^\/(admin|app)\/vms\/\d+\/ssh$/.test(path))
-    content = <Suspense fallback={<p role="status">正在加载 SSH 终端…</p>}><VmSSHPage id={Number(path.split("/")[3])} admin={admin} /></Suspense>;
+    content = (
+      <Suspense fallback={<p role="status">正在加载 SSH 终端…</p>}>
+        <VmSSHPage id={Number(path.split("/")[3])} admin={admin} />
+      </Suspense>
+    );
   else if (/^\/(admin|app)\/vms\/\d+\/console$/.test(path))
     content = <VmConsolePage id={Number(path.split("/")[3])} admin={admin} />;
   else if (key === "vms") content = <VmsPage user={user} path={path} />;
@@ -136,7 +147,7 @@ export default function App() {
       <NodesPage user={user} />
     );
   else if (key === "images" && admin) content = <ImagesPage user={user} />;
-  else if (key === "networks" && admin) content = <NetworksPage user={user} />;
+  else if (key === "networks") content = <NetworksPage user={user} />;
   else if ((key === "users" || key === "roles") && admin)
     content = <UsersAndRolesPage user={user} />;
   else if (key === "audit") content = <AuditPage />;

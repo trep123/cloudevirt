@@ -79,6 +79,8 @@ def permission_dependencies(code):
     dependencies.discard(code)
     if code == 'instances.add_instance':
         dependencies |= {'nodes.view_node', 'images.view_image', 'networks.view_network'}
+    if code == 'instances.connect_network_instance':
+        dependencies.add('networks.view_network')
     return sorted(dependencies)
 
 

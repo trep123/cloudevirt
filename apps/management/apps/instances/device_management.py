@@ -14,6 +14,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.administration import require_admin
+from apps.accounts.roles import is_admin
 from apps.audit.services import record_audit
 from apps.instances.actions import ensure_no_active_task
 from apps.instances.hardware import StrictInput
@@ -78,6 +79,24 @@ def cold_instance(instance):
         raise AppError(ErrorCode.CONFLICT, '请先正常关闭虚拟机，等待节点确认已关机')
 
 
+def authorize_hardware(user, instance, operation):
+    """Grant ordinary users only network attachment and their own data disk changes."""
+    if is_admin(user):
+        require_admin(user, 'instances.change_instance')
+        permission = 'instances.change_instance'
+    else:
+        if instance.created_by_id != user.pk:
+            raise AppError(ErrorCode.PERMISSION_DENIED, '只能操作自己的虚拟机')
+        if operation == 'nic-add':
+            permission = 'instances.connect_network_instance'
+            check_permission(user, 'networks.view_network')
+        elif operation in {'disk-add', 'disk-attach', 'disk-detach'}:
+            permission = 'instances.manage_data_disk_instance'
+        else:
+            raise AppError(ErrorCode.PERMISSION_DENIED, '此硬件操作仅平台管理员可执行')
+    check_permission(user, permission, target_type='instance', target_id=str(instance.pk))
+
+
 class InstanceHardwareView(APIView):
     permission_classes = [CanViewInstance, RequiresPasswordChange]
 
@@ -99,7 +118,6 @@ class InstanceHardwareView(APIView):
 
     @transaction.atomic
     def post(self, request, pk):
-        require_admin(request.user, 'instances.change_instance')
         visible = get_object_or_404(instances_for(request.user), pk=pk)
         node = Node.objects.select_for_update().get(pk=visible.node_id)
         owner = (
@@ -110,12 +128,10 @@ class InstanceHardwareView(APIView):
         instance = (
             Instance.objects.select_for_update().select_related('node').get(pk=pk, is_deleted=False)
         )
-        check_permission(
-            request.user, 'instances.change_instance', target_type='instance', target_id=str(pk)
-        )
         serializer = DeviceInput(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = dict(serializer.validated_data)
+        authorize_hardware(request.user, instance, data['operation'])
         raw_key = request.headers.get('Idempotency-Key', '')
         if len(raw_key) > 128:
             raise AppError(ErrorCode.INVALID_ARGUMENT, '幂等键过长')
@@ -220,6 +236,8 @@ class InstanceHardwareView(APIView):
                     raise AppError(ErrorCode.CONFLICT, '磁盘状态不允许此操作')
                 if op in ['disk-attach', 'disk-detach'] and disk.role == 'SYSTEM':
                     raise AppError(ErrorCode.CONFLICT, '禁止卸载或替换系统盘')
+                if not is_admin(request.user) and disk.role != 'DATA':
+                    raise AppError(ErrorCode.PERMISSION_DENIED, '只能管理自己的数据盘')
                 if op == 'disk-attach' and disk.status != 'DETACHED':
                     raise AppError(ErrorCode.CONFLICT, '磁盘未卸载')
                 if op != 'disk-attach' and disk.status != 'READY':
@@ -262,11 +280,11 @@ class InstanceHardwareView(APIView):
             if network is None or not network.is_usable:
                 raise AppError(ErrorCode.CONFLICT, '网络不可用')
             network = Network.objects.select_for_update().get(pk=network.pk)
-            if data.get('live') and (
+            if (
                 network.is_management
                 or instance.network_interfaces.filter(network=network).exists()
             ):
-                raise AppError(ErrorCode.CONFLICT, '管理网络或已连接网络不能重复热接入')
+                raise AppError(ErrorCode.CONFLICT, '管理网络或已连接网络不能重复接入')
             mac = '02:' + ':'.join(f'{b:02x}' for b in secrets.token_bytes(5))
             payload.update(
                 mac=mac,
@@ -405,13 +423,13 @@ def execute_hardware_change(task):
     change = task.payload['change']
     meta = task.payload['metadata']
     try:
-        require_admin(task.requested_by, 'instances.change_instance')
-        check_permission(
-            task.requested_by,
-            'instances.change_instance',
-            target_type='instance',
-            target_id=str(instance.pk),
-        )
+        authorize_hardware(task.requested_by, instance, change['operation'])
+        if change['operation'] in {'disk-attach', 'disk-detach'} and not is_admin(
+            task.requested_by
+        ):
+            disk = instance.disks.get(pk=meta['disk_id'])
+            if disk.role != 'DATA':
+                raise AppError(ErrorCode.PERMISSION_DENIED, '只能管理自己的数据盘')
         if change['operation'] == 'nic-add':
             network = validate_network_for_instance(change['network']['network'], instance.node)
             if (

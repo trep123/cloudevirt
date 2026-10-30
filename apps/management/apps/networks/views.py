@@ -7,6 +7,7 @@ from apps.audit.models import AuditAction
 from apps.audit.services import record_audit
 from apps.instances.models import Instance
 from apps.networks.models import Network
+from apps.networks.scope import networks_for
 from apps.networks.serializers import NetworkSerializer
 from common.errors import AppError, ErrorCode
 from common.permissions import CanManageNetwork, CanViewNetwork, RequiresPasswordChange
@@ -18,6 +19,9 @@ class NetworkListCreateView(generics.ListCreateAPIView):
     permission_classes = [RequiresPasswordChange]
     queryset = Network.objects.filter(is_deleted=False)
     serializer_class = NetworkSerializer
+
+    def get_queryset(self):
+        return networks_for(self.request.user)
 
     def get_permissions(self):
         """按动作选择权限类。"""

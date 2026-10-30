@@ -120,6 +120,8 @@ class Instance(models.Model):
             ('reboot_instance', '可以重启虚拟机'),
             ('force_stop_instance', '可以强制停止虚拟机'),
             ('delete_disk_instance', '可以在删除实例时删除磁盘'),
+            ('connect_network_instance', '可以为自己的虚拟机连接已授权网络'),
+            ('manage_data_disk_instance', '可以管理自己的虚拟机数据盘'),
         ]
         indexes = [
             models.Index(fields=['node', 'observed_state']),

@@ -104,6 +104,7 @@ const userSections: Section[] = [
         permission: "instances.add_instance",
       },
       { label: "我的数据卷", key: "storage", icon: "storage", permission: "instances.view_instance" },
+      { label: "网络连接", key: "networks", icon: "network", permission: "networks.view_network" },
       { label: "远程控制台", key: "vms?console=1", icon: "console" },
       {
         label: "快照",

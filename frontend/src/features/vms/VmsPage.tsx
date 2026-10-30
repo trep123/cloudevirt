@@ -177,7 +177,14 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
           </button>
         ) : null}
         <RowMenu>
-          {can("instances.ssh_instance") && <button disabled={!running || vm.observed_state_is_stale} onClick={() => navigate(`${prefix}/vms/${vm.id}/ssh`)}>Web SSH</button>}
+          {can("instances.ssh_instance") && (
+            <button
+              disabled={!running || vm.observed_state_is_stale}
+              onClick={() => navigate(`${prefix}/vms/${vm.id}/ssh`)}
+            >
+              Web SSH
+            </button>
+          )}
           {running && can("instances.reboot_instance") ? (
             <button
               disabled={active || busy}
@@ -272,7 +279,18 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
               )
             }
           >
-            {detail && can("instances.ssh_instance") && <button className="action" disabled={detail.observed_state !== "RUNNING" || detail.observed_state_is_stale} onClick={() => navigate(`${prefix}/vms/${detail.id}/ssh`)}>Web SSH</button>}
+            {detail && can("instances.ssh_instance") && (
+              <button
+                className="action"
+                disabled={
+                  detail.observed_state !== "RUNNING" ||
+                  detail.observed_state_is_stale
+                }
+                onClick={() => navigate(`${prefix}/vms/${detail.id}/ssh`)}
+              >
+                Web SSH
+              </button>
+            )}
             {detail ? actions(detail) : null}
           </PageHeader>
           <ErrorBanner message={error} />
@@ -359,6 +377,13 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
                     <DeviceManager
                       vm={detail}
                       admin={admin}
+                      manageDataDisks={can(
+                        "instances.manage_data_disk_instance",
+                      )}
+                      connectNetworks={can(
+                        "instances.connect_network_instance",
+                      )}
+                      deleteDataDisks={can("instances.delete_disk_instance")}
                       section="compute"
                     />
                     <DisplayPanel
@@ -371,9 +396,23 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
                     />
                   </div>
                 ) : tab === "磁盘" ? (
-                  <DeviceManager vm={detail} admin={admin} section="disks" />
+                  <DeviceManager
+                    vm={detail}
+                    admin={admin}
+                    manageDataDisks={can("instances.manage_data_disk_instance")}
+                    connectNetworks={can("instances.connect_network_instance")}
+                    deleteDataDisks={can("instances.delete_disk_instance")}
+                    section="disks"
+                  />
                 ) : tab === "网络" ? (
-                  <DeviceManager vm={detail} admin={admin} section="nics" />
+                  <DeviceManager
+                    vm={detail}
+                    admin={admin}
+                    manageDataDisks={can("instances.manage_data_disk_instance")}
+                    connectNetworks={can("instances.connect_network_instance")}
+                    deleteDataDisks={can("instances.delete_disk_instance")}
+                    section="nics"
+                  />
                 ) : tab === "快照" ? (
                   <SnapshotsPage
                     canManage={can("instances.manage_snapshot_instance")}
@@ -644,7 +683,13 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
         </ConfirmOperationModal>
       ) : null}
       {taskId ? (
-        <TaskProgressDrawer id={taskId} onClose={() => { setTaskId(null); setRefresh(v => v + 1); }} />
+        <TaskProgressDrawer
+          id={taskId}
+          onClose={() => {
+            setTaskId(null);
+            setRefresh((v) => v + 1);
+          }}
+        />
       ) : null}
     </>
   );

@@ -48,3 +48,20 @@ class TopologyTests(TestCase):
         self.assertNotIn(str(theirs.pk), body['interfaces'])
         self.assertNotIn('creation_config', body['instances'][0])
         self.assertFalse(body['truncated'])
+
+    def test_ordinary_user_sees_only_connectable_networks_in_allowed_nodes(self):
+        user = make_user('topology-scoped-user', 'Viewer')
+        own_node = make_node()
+        other_node = make_node(name='other-topology-node')
+        allowed = Network.objects.create(name='topology-allowed', node=own_node)
+        Network.objects.create(name='topology-management', node=own_node, is_management=True)
+        Network.objects.create(name='topology-unready', node=own_node, provisioning_status='FAILED')
+        Network.objects.create(name='topology-other-node', node=other_node)
+        self.client.force_login(user)
+        from apps.nodes.models import NodeAccess
+
+        NodeAccess.objects.create(user=user, node=own_node)
+        response = self.client.get('/api/v1/networks/topology')
+        self.assertEqual([item['id'] for item in response.json()['networks']], [allowed.pk])
+        listed = self.client.get('/api/v1/networks')
+        self.assertEqual([item['id'] for item in listed.json()['results']], [allowed.pk])
