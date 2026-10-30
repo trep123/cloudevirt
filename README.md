@@ -95,3 +95,7 @@ make lint             # 全量静态检查（ruff + gofmt + go vet + tsc）
 ## 7. 许可证
 
 内部项目，暂未对外授权。
+
+## 安装与卸载
+
+Ubuntu 26 一键安装与保留业务数据的卸载说明见 [docs/install-uninstall.md](docs/install-uninstall.md)。`uninstall.sh` 默认仅预览，必须显式传入 `--apply` 才执行。

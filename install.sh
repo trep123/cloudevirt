@@ -77,7 +77,9 @@ done
 [[ "${ID:-}" == ubuntu && "${VERSION_ID:-}" == 26.* ]] || die "Ubuntu 26.x is required; found ${PRETTY_NAME:-unknown}"
 [[ $(uname -m) == x86_64 ]] || die "Current Agent domain XML requires an amd64/x86_64 host"
 [[ -d /run/systemd/system ]] || die "A booted Ubuntu host with systemd is required (not a container/chroot)"
-[[ ! -L "$APP_DIR" && ! -L "$CONFIG_DIR" ]] || die "Application/configuration roots must not be symlinks"
+for install_root in "$APP_DIR" "$CONFIG_DIR" "$WEB_ROOT"; do
+    [[ ! -L "$install_root" && $(realpath -m -- "$install_root") == "$install_root" ]] || die "Deployment roots and ancestors must not be symlinks: $install_root"
+done
 [[ "$PORT" =~ ^[0-9]{1,5}$ ]] && ((10#$PORT >= 1 && 10#$PORT <= 65535)) || die "Invalid web port"
 PORT=$((10#$PORT))
 case "$PORT" in 5432|8000|9100) die "Web port conflicts with an internal service";; esac
@@ -144,8 +146,8 @@ if [[ -f "$CONFIG_DIR/install-secrets.env" ]]; then
         systemctl stop "$legacy_unit"
     done < <(systemctl list-units --all --plain --no-legend 'cloudvirt-workbench-*.service')
     log "Stopping application jobs while deploying (running guests are not stopped)"
-    systemctl stop cloudvirt-collect_node_status.timer cloudvirt-reconcile.timer cloudvirt-cleanup_console_sessions.timer 2>/dev/null || true
-    systemctl stop cloudvirt-collect_node_status.service cloudvirt-reconcile.service cloudvirt-cleanup_console_sessions.service 2>/dev/null || true
+    systemctl stop cloudvirt-collect_node_status.timer cloudvirt-reconcile.timer cloudvirt-cleanup_console_sessions.timer cloudvirt-cleanup_account_batches.timer 2>/dev/null || true
+    systemctl stop cloudvirt-collect_node_status.service cloudvirt-reconcile.service cloudvirt-cleanup_console_sessions.service cloudvirt-cleanup_account_batches.service 2>/dev/null || true
     systemctl stop cloudvirt-worker cloudvirt-management cloudvirt-agent 2>/dev/null || true
 fi
 install -d -m 0755 "$APP_DIR" "$WEB_ROOT"
@@ -392,7 +394,8 @@ for service in management worker agent network; do
     install -m 0644 "$APP_DIR/deploy/systemd/cloudvirt-$service.service" "/etc/systemd/system/cloudvirt-$service.service"
 done
 systemctl daemon-reload
-systemctl enable --now cloudvirt-network.service
+systemctl enable cloudvirt-network.service
+systemctl restart cloudvirt-network.service
 install -d -m 0755 /etc/systemd/system/cloudvirt-agent.service.d
 cat > /etc/systemd/system/cloudvirt-agent.service.d/install.conf <<ENV
 [Service]
