@@ -1,8 +1,18 @@
 from django.urls import path
 
+from .storage_api import (
+    StorageBackendDetailView,
+    StorageBackendListView,
+    StorageBackendProbeView,
+    StorageDriversView,
+)
 from .views import OrganizationView, SettingsView, SnapshotsView, StoragePoolsView
 
 urlpatterns = [
+    path('admin/storage-drivers/', StorageDriversView.as_view()),
+    path('admin/storage-backends/', StorageBackendListView.as_view()),
+    path('admin/storage-backends/<int:pk>/', StorageBackendDetailView.as_view()),
+    path('admin/storage-backends/<int:pk>/probe/', StorageBackendProbeView.as_view()),
     path('admin/clusters/', OrganizationView.as_view(), {'kind': 'clusters'}),
     path('admin/clusters/<int:pk>/', OrganizationView.as_view(), {'kind': 'clusters'}),
     path('admin/resource-pools/', OrganizationView.as_view(), {'kind': 'pools'}),

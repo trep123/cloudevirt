@@ -50,3 +50,19 @@ class ConsoleConfiguration(models.Model):
 
     def __str__(self):
         return f'Console configuration v{self.revision}'
+
+
+class StorageBackend(models.Model):
+    """Draft connection metadata only; never a schedulable runtime storage pool."""
+
+    name = models.CharField(max_length=64, unique=True)
+    driver = models.CharField(max_length=32)
+    usage = models.CharField(max_length=16)
+    configuration = models.JSONField(default=dict)
+    credential_ref = models.CharField(max_length=255, blank=True, default='')
+    revision = models.PositiveIntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.driver}, draft)"
