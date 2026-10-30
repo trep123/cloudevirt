@@ -112,6 +112,8 @@ type storagePayload struct {
 
 // resourcesResponse 是资源采集响应体。
 type resourcesResponse struct {
+	CPUUsagePercent    *float64         `json:"cpu_usage_percent"`
+	CPUSampledAt       *time.Time       `json:"cpu_sampled_at"`
 	CPULogical         int              `json:"cpu_logical"`
 	MemoryTotalMiB     int64            `json:"memory_total_mib"`
 	MemoryAvailableMiB int64            `json:"memory_available_mib"`
@@ -133,6 +135,8 @@ func resourcesHandler(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		payload := resourcesResponse{
+			CPUUsagePercent:    resources.CPUUsagePercent,
+			CPUSampledAt:       resources.CPUSampledAt,
 			CPULogical:         resources.CPULogical,
 			MemoryTotalMiB:     resources.MemoryTotalMiB,
 			MemoryAvailableMiB: resources.MemoryAvailableMiB,

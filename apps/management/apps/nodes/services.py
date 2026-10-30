@@ -7,9 +7,11 @@
 """
 
 import logging
+import math
 from datetime import timedelta
 
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from apps.audit.models import AuditAction
 from apps.audit.services import record_audit
@@ -98,6 +100,22 @@ def refresh_node(node: Node, client: AgentClient | None = None) -> Node:
     if isinstance(health, dict) and health.get('version'):
         node.agent_version = str(health['version'])
     node.cpu_total = resources.get('cpu_logical')
+    cpu = resources.get('cpu_usage_percent')
+    cpu_time = resources.get('cpu_sampled_at')
+    try:
+        cpu_time = parse_datetime(cpu_time) if isinstance(cpu_time, str) else None
+    except ValueError, TypeError:
+        cpu_time = None
+    valid_cpu = (
+        type(cpu) in (float, int)
+        and math.isfinite(cpu)
+        and 0 <= cpu <= 100
+        and cpu_time is not None
+        and timezone.is_aware(cpu_time)
+        and now - timedelta(seconds=60) <= cpu_time <= now + timedelta(seconds=5)
+    )
+    node.cpu_usage_percent = round(cpu, 2) if valid_cpu else None
+    node.cpu_sampled_at = cpu_time if valid_cpu else None
     node.memory_total_mib = resources.get('memory_total_mib')
     node.memory_available_mib = resources.get('memory_available_mib')
     node.storage_total_bytes = storage_total

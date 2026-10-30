@@ -27,6 +27,7 @@ type Dashboard = {
   nodes: { total: number; online: number };
   instances: { total: number; running: number };
   cpu_percent: number | null;
+  cpu_sampled_nodes: number;
   memory_percent: number | null;
   alerts: Alert[];
   tasks: Task[];
@@ -144,7 +145,7 @@ export function DashboardPage({ admin }: { admin: boolean }) {
                   </>
                 )
               }
-              note={data.cpu_percent === null ? "尚未采集 CPU 指标" : "集群平均"}
+              note={data.cpu_percent === null ? "暂无有效 CPU 采样" : `按逻辑核数加权 · ${data.cpu_sampled_nodes} 个节点`}
             >
               <Meter value={data.cpu_percent} />
             </ResourceStatCard>

@@ -1,6 +1,8 @@
 """Console dashboard aggregates only authorized resources and observed metrics."""
 
-from django.db.models import Sum
+from datetime import timedelta
+
+from django.db.models import ExpressionWrapper, F, FloatField, Sum
 from django.utils import timezone
 from rest_framework import generics, serializers
 from rest_framework.permissions import IsAuthenticated
@@ -34,6 +36,24 @@ class DashboardView(APIView):
             else None
         )
         admin = is_admin(request.user)
+        cpu_nodes = nodes.filter(
+            resource_is_stale=False,
+            status__in=['ONLINE', 'DEGRADED'],
+            cpu_total__gt=0,
+            cpu_usage_percent__gte=0,
+            cpu_usage_percent__lte=100,
+            cpu_sampled_at__gte=timezone.now() - timedelta(seconds=60),
+            cpu_sampled_at__lte=timezone.now(),
+        )
+        cpu = cpu_nodes.aggregate(
+            weighted=Sum(
+                ExpressionWrapper(
+                    F('cpu_usage_percent') * F('cpu_total'), output_field=FloatField()
+                )
+            ),
+            cores=Sum('cpu_total'),
+        )
+        cpu_percent = round(cpu['weighted'] / cpu['cores'], 1) if cpu['cores'] else None
         return Response(
             {
                 'scope': 'admin' if admin else 'user',
@@ -43,7 +63,8 @@ class DashboardView(APIView):
                     'total': instances.count(),
                     'running': instances.filter(observed_state='RUNNING').count(),
                 },
-                'cpu_percent': None,
+                'cpu_percent': cpu_percent if admin else None,
+                'cpu_sampled_nodes': cpu_nodes.count() if admin else 0,
                 'memory_percent': memory_percent if admin else None,
                 'trends': [],
                 'alerts': AlertSerializer(

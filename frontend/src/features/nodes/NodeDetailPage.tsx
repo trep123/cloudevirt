@@ -110,7 +110,7 @@ export function NodeDetailPage({ id }: { id: number }) {
                   <span className="stat-unit"> 核</span>
                 </>
               }
-              note="尚未采集 CPU 使用率"
+              note={node.resource_is_stale || !node.cpu_sampled_at || Date.now() - Date.parse(node.cpu_sampled_at) > 60000 || node.cpu_usage_percent == null ? "暂无有效 CPU 采样" : `CPU 使用率 ${node.cpu_usage_percent.toFixed(1)}% · ${formatTime(node.cpu_sampled_at)}`}
             />
             <ResourceStatCard
               label="可用内存"

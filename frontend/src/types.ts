@@ -26,6 +26,8 @@ export interface Node {
   maintenance_note: string;
   agent_version: string;
   cpu_total: number | null;
+  cpu_usage_percent: number | null;
+  cpu_sampled_at: string | null;
   memory_total_mib: number | null;
   memory_available_mib: number | null;
   storage_total_bytes: number | null;

@@ -37,6 +37,8 @@ type Storage struct {
 
 // Resources 是一次完整采集的结果。
 type Resources struct {
+	CPUUsagePercent    *float64
+	CPUSampledAt       *time.Time
 	CPULogical         int
 	MemoryTotalMiB     int64
 	MemoryAvailableMiB int64
@@ -54,6 +56,7 @@ type Resources struct {
 //
 //	采集结果；任一必要字段采集失败时返回错误。
 func Collect(storagePaths []string) (Resources, error) {
+	cpuPercent, cpuSampledAt := CPUUsage()
 	memory, err := ReadMemory()
 	if err != nil {
 		return Resources{}, err
@@ -69,6 +72,8 @@ func Collect(storagePaths []string) (Resources, error) {
 	}
 
 	return Resources{
+		CPUUsagePercent:    cpuPercent,
+		CPUSampledAt:       cpuSampledAt,
 		CPULogical:         runtime.NumCPU(),
 		MemoryTotalMiB:     memory.TotalMiB,
 		MemoryAvailableMiB: memory.AvailableMiB,

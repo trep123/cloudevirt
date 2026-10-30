@@ -32,6 +32,8 @@ class Node(models.Model):
     maintenance_note = models.TextField('维护说明', blank=True, default='')
     agent_version = models.CharField('Agent 版本', max_length=32, blank=True, default='')
 
+    cpu_usage_percent = models.FloatField('CPU 使用率', null=True, blank=True)
+    cpu_sampled_at = models.DateTimeField('CPU 采样时间', null=True, blank=True)
     cpu_total = models.PositiveIntegerField('逻辑 CPU 数', null=True, blank=True)
     memory_total_mib = models.PositiveIntegerField('内存总量(MiB)', null=True, blank=True)
     memory_available_mib = models.PositiveIntegerField('可用内存(MiB)', null=True, blank=True)
