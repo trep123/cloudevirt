@@ -96,6 +96,11 @@ class StoragePlacementTests(TestCase):
         personal.allowed_users.add(self.owner)
         personal.default_users.add(self.owner)
         self.assertEqual(select_storage_pool(self.owner, self.node).pk, personal.pk)
+        with self.assertRaises(AppError):
+            select_storage_pool(self.owner, self.node, 'cv-fast')
+        with self.assertRaises(AppError):
+            select_storage_pool(self.owner, self.node, '__legacy__')
+        self.assertEqual(select_storage_pool(self.admin, self.node, 'cv-fast').pk, self.pool.pk)
         listing = self.listing()
         second = listing['results'][0].copy()
         second['name'] = personal.name

@@ -11,6 +11,11 @@ import (
 
 // diskRootForPool maps an authorized control-plane pool name to an active libvirt
 // directory pool whose target remains beneath an operator-approved storage root.
+func imageRootForPool(ctx context.Context, deps Dependencies, name string) (string, error) {
+	if name == "" { return deps.ImageDir, nil }
+	return diskRootForPool(ctx, deps, name)
+}
+
 func diskRootForPool(ctx context.Context, deps Dependencies, name string) (string, error) {
 	if name == "" {
 		return deps.DiskDir, nil

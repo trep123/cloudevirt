@@ -128,8 +128,12 @@ class AgentClient:
         except json.JSONDecodeError as exc:
             raise AppError(ErrorCode.OPERATION_FAILED, '节点 Agent 响应格式错误') from exc
 
-    def upload_chunk(self, upload_id: str, offset: int, size: int, extension: str, data: bytes):
+    def upload_chunk(
+        self, upload_id: str, offset: int, size: int, extension: str, data: bytes, storage_pool=''
+    ):
         query = f'?offset={offset}&size={size}&extension={extension}'
+        if storage_pool:
+            query += '&storage_pool=' + quote(storage_pool, safe='')
         request = urllib.request.Request(
             f'{self.endpoint}/api/v1/images/uploads/{upload_id}{query}',
             data=data,
@@ -153,13 +157,27 @@ class AgentClient:
                 ErrorCode.COMMAND_TIMEOUT, '分片响应超时，请查询已接收进度后继续'
             ) from exc
 
-    def inspect_image(self, relative_path: str) -> dict:
+    def inspect_image(self, relative_path: str, storage_pool='') -> dict:
         """请求 Agent 检查镜像文件（格式、容量、校验和）。"""
-        return self.request_json('/api/v1/images/inspect', 'POST', {'relative_path': relative_path})
+        return self.request_json(
+            '/api/v1/images/inspect',
+            'POST',
+            {
+                'relative_path': relative_path,
+                **({'storage_pool': storage_pool} if storage_pool else {}),
+            },
+        )
 
-    def delete_image(self, relative_path: str) -> dict:
+    def delete_image(self, relative_path: str, storage_pool='') -> dict:
         """请求 Agent 删除镜像文件（受宿主机破坏性开关约束）。"""
-        return self.request_json('/api/v1/images', 'DELETE', {'relative_path': relative_path})
+        return self.request_json(
+            '/api/v1/images',
+            'DELETE',
+            {
+                'relative_path': relative_path,
+                **({'storage_pool': storage_pool} if storage_pool else {}),
+            },
+        )
 
     def create_domain(self, payload: dict) -> dict:
         """请求 Agent 创建并启动域。"""

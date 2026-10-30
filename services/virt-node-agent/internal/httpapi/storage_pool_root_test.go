@@ -39,6 +39,10 @@ func TestDiskRootForPoolHonorsApprovedRoots(t *testing.T) {
 	if err != nil || path != inside {
 		t.Fatalf("approved root rejected: %q, %v", path, err)
 	}
+	imageRoot, err := imageRootForPool(context.Background(), deps, "cv-tenant")
+	if err != nil || imageRoot != inside { t.Fatalf("image root ignored pool: %q, %v", imageRoot, err) }
+	legacy, err := imageRootForPool(context.Background(), deps, "")
+	if err != nil || legacy != deps.ImageDir { t.Fatal("legacy image root changed") }
 	operator.pools[0].Target.Path = outside
 	if _, err := diskRootForPool(context.Background(), deps, "cv-tenant"); err == nil {
 		t.Fatal("unapproved path accepted")

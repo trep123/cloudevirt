@@ -138,6 +138,14 @@ def execute_instance_create(task: Task) -> dict:
             image_relative_path=source['relative_path'],
             image_format=source['format'],
             image_checksum=source['checksum'],
+            image_storage_pool=source.get(
+                'storage_pool',
+                (
+                    instance.image.storage_pool.name
+                    if instance.image_id and instance.image.storage_pool_id
+                    else ''
+                ),
+            ),
             start_after_create=config.get('start_after_create', True),
             autostart=instance.autostart,
         )
@@ -390,7 +398,8 @@ def execute_instance_delete(task: Task) -> dict:
         )
     else:
         result = client.delete_domain(
-            instance.libvirt_domain_name, disk_relative_path if purge_disk else '',
+            instance.libvirt_domain_name,
+            disk_relative_path if purge_disk else '',
             **pool_kwargs,
         )
 

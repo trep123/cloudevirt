@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { api } from "../api";
 import { BrowserUpload } from "../features/images/BrowserUpload";
+import { StoragePoolField } from "../features/images/StoragePoolField";
 import { allResources } from "../features/infrastructure/client";
 import {
   ConfirmOperationModal,
@@ -29,6 +30,7 @@ export function ImagesPage({ user }: { user: CurrentUser }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [nodeId, setNodeId] = useState("");
+  const [storagePool, setStoragePool] = useState("");
   const [relativePath, setRelativePath] = useState("");
   const [osFamily, setOsFamily] = useState("");
   const [osVersion, setOsVersion] = useState("");
@@ -96,6 +98,7 @@ export function ImagesPage({ user }: { user: CurrentUser }) {
         name,
         node: Number(nodeId),
         relative_path: relativePath,
+        storage_pool: storagePool,
         os_family: osFamily || undefined,
         os_version: osVersion || undefined,
       });
@@ -211,6 +214,7 @@ export function ImagesPage({ user }: { user: CurrentUser }) {
                   ))}
               </select>
             </label>
+            <StoragePoolField node={nodeId} value={storagePool} onChange={setStoragePool} disabled={busy} />
             <label>
               相对路径
               <input
@@ -239,7 +243,7 @@ export function ImagesPage({ user }: { user: CurrentUser }) {
             <button
               className="action primary"
               type="submit"
-              disabled={busy || !nodeId}
+              disabled={busy || !nodeId || !storagePool}
             >
               {busy ? "提交中…" : "登记并校验"}
             </button>
@@ -364,6 +368,7 @@ export function ImagesPage({ user }: { user: CurrentUser }) {
                       >
                         {image.relative_path}
                       </span>
+                      <small className="muted">{image.storage_pool_name || "节点原有镜像目录"}</small>
                     </td>
                     <td>
                       <div

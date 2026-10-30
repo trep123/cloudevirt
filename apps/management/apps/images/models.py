@@ -41,6 +41,13 @@ class Image(models.Model):
         verbose_name='所属节点',
     )
     format = models.CharField('格式', max_length=16, choices=ImageFormat.choices)
+    storage_pool = models.ForeignKey(
+        'infrastructure.ManagedStoragePool',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='images',
+    )
     relative_path = models.CharField('相对路径', max_length=255)
     size_bytes = models.BigIntegerField('文件大小(字节)', default=0)
     virtual_size_bytes = models.BigIntegerField('虚拟容量(字节)', null=True, blank=True)
@@ -80,9 +87,19 @@ class Image(models.Model):
                 name='uniq_image_name_when_active',
             ),
             models.UniqueConstraint(
-                fields=['relative_path'],
-                condition=models.Q(is_deleted=False),
+                fields=['node', 'storage_pool', 'relative_path'],
+                condition=models.Q(is_deleted=False, storage_pool__isnull=False),
                 name='uniq_image_path_when_active',
+            ),
+            models.UniqueConstraint(
+                fields=['node', 'relative_path'],
+                condition=models.Q(is_deleted=False, storage_pool__isnull=True, node__isnull=False),
+                name='uniq_legacy_node_image_path',
+            ),
+            models.UniqueConstraint(
+                fields=['relative_path'],
+                condition=models.Q(is_deleted=False, storage_pool__isnull=True, node__isnull=True),
+                name='uniq_unbound_image_path',
             ),
         ]
 

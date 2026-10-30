@@ -79,6 +79,14 @@ def inspect_file(user, node, path, check_registered=True, storage_pool=''):
     from apps.infrastructure.placement import select_storage_pool
 
     pool = select_storage_pool(user, node, storage_pool)
+    from apps.images.models import Image
+
+    if Image.objects.filter(
+        node=node, storage_pool=pool, relative_path=path, is_deleted=False
+    ).exists():
+        raise AppError(
+            ErrorCode.CONFLICT, '文件已登记为镜像，请通过镜像克隆创建，不能直接作为可写系统盘'
+        )
     if (
         check_registered
         and Disk.objects.filter(
@@ -137,6 +145,13 @@ class SystemDiskSourcesView(APIView):
             Disk.objects.filter(instance__node=node, instance__storage_pool=pool)
             .exclude(status='DELETED')
             .values_list('relative_path', flat=True)
+        )
+        from apps.images.models import Image
+
+        registered.update(
+            Image.objects.filter(node=node, storage_pool=pool, is_deleted=False).values_list(
+                'relative_path', flat=True
+            )
         )
         return Response(
             {

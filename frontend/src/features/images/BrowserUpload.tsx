@@ -8,6 +8,7 @@ import {
 } from "../../components/ui";
 import type { Node } from "../../types";
 import { newUploadId } from "./uploadId";
+import { StoragePoolField } from "./StoragePoolField";
 
 type Upload = {
   id: string;
@@ -30,6 +31,7 @@ export function BrowserUpload({
   const [file, setFile] = useState<File | null>(null),
     [name, setName] = useState(""),
     [node, setNode] = useState("");
+  const [storagePool, setStoragePool] = useState("");
   const [family, setFamily] = useState(""),
     [version, setVersion] = useState("");
   const [caps, setCaps] = useState<{
@@ -94,6 +96,7 @@ export function BrowserUpload({
             id: id.current,
             name,
             node: Number(targetNode),
+            storage_pool: storagePool,
             original_name: file.name,
             size_bytes: file.size,
             os_family: family,
@@ -230,6 +233,7 @@ export function BrowserUpload({
               ))}
           </select>
         </label>
+        <StoragePoolField node={targetNode} value={storagePool} onChange={setStoragePool} disabled={attempted || busy} />
         <label>
           系统系列
           <input
@@ -250,7 +254,7 @@ export function BrowserUpload({
         </label>
         <button
           className="action primary"
-          disabled={busy || !file || !caps || !targetNode}
+          disabled={busy || !file || !caps || !targetNode || !storagePool}
         >
           {attempted ? "查询进度并继续" : "开始上传"}
         </button>

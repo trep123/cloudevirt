@@ -17,6 +17,13 @@ def select_storage_pool(user, node, name=''):
     rows = ManagedStoragePool.objects.filter(node=node)
     if not is_admin(user):
         rows = rows.filter(allowed_users=user)
+        personal = rows.filter(default_users=user).first()
+        if personal:
+            if name and name != personal.name:
+                raise AppError(
+                    ErrorCode.PERMISSION_DENIED, '当前账号必须使用管理员指定的默认存储池'
+                )
+            return personal
     if name == '__legacy__':
         if not is_admin(user) and rows.exists():
             raise AppError(ErrorCode.PERMISSION_DENIED, '当前账号已分配专用存储池')
@@ -26,10 +33,6 @@ def select_storage_pool(user, node, name=''):
         if pool is None:
             raise AppError(ErrorCode.PERMISSION_DENIED, '存储池不存在或无权使用')
         return pool
-    if not is_admin(user):
-        personal = rows.filter(default_users=user).first()
-        if personal:
-            return personal
     preferred = rows.filter(is_default=True).first()
     if preferred:
         return preferred

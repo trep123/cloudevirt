@@ -46,6 +46,8 @@ export interface Node {
 }
 
 export interface Image {
+  storage_pool?: number | null;
+  storage_pool_name?: string | null;
   supports_cloud_init?: boolean;
   node: number | null;
   node_name: string;

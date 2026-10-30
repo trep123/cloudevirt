@@ -440,6 +440,7 @@ def create_instance(
                     'relative_path': image.relative_path,
                     'format': image.format,
                     'checksum': image.checksum_sha256,
+                    'storage_pool': image.storage_pool.name if image.storage_pool_id else '',
                 }
                 if image
                 else {},

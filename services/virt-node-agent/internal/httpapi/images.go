@@ -13,6 +13,7 @@ import (
 // inspectRequest 是镜像检查请求体。
 type inspectRequest struct {
 	RelativePath string `json:"relative_path"`
+	StoragePool string `json:"storage_pool,omitempty"`
 }
 
 // inspectImageHandler 检查镜像文件：路径校验、格式解析与校验和。
@@ -31,7 +32,9 @@ func inspectImageHandler(deps Dependencies) http.HandlerFunc {
 		_ = http.NewResponseController(writer).SetWriteDeadline(deadline)
 		ctx, cancel := context.WithDeadline(request.Context(), deadline)
 		defer cancel()
-		info, err := storage.InspectContext(ctx, deps.ImageDir, payload.RelativePath)
+		root, err := imageRootForPool(ctx, deps, payload.StoragePool)
+		if err != nil { writeAPIError(writer, deps.Logger, err, requestID); return }
+		info, err := storage.InspectContext(ctx, root, payload.RelativePath)
 		if err != nil {
 			writeAPIError(writer, deps.Logger, err, requestID)
 			return
@@ -57,7 +60,9 @@ func deleteImageHandler(deps Dependencies) http.HandlerFunc {
 			), requestID)
 			return
 		}
-		if err := storage.Remove(deps.ImageDir, payload.RelativePath); err != nil {
+		root, err := imageRootForPool(request.Context(), deps, payload.StoragePool)
+		if err != nil { writeAPIError(writer, deps.Logger, err, requestID); return }
+		if err := storage.Remove(root, payload.RelativePath); err != nil {
 			writeAPIError(writer, deps.Logger, err, requestID)
 			return
 		}

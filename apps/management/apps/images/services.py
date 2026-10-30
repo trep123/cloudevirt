@@ -68,6 +68,7 @@ def import_image(
     name: str,
     node: Node,
     relative_path: str,
+    storage_pool: str = '',
     created_by=None,
     os_family: str = '',
     os_version: str = '',
@@ -91,6 +92,9 @@ def import_image(
         AppError: 参数非法、节点不可用或格式不受支持。
     """
     path = validate_relative_path(relative_path)
+    from apps.infrastructure.placement import select_storage_pool
+
+    pool = select_storage_pool(created_by, node, storage_pool) if created_by else None
     if node.status == 'OFFLINE':
         raise AppError(ErrorCode.NODE_OFFLINE, '节点离线，无法导入镜像')
 
@@ -99,6 +103,7 @@ def import_image(
         node=node,
         format=ImageFormat.QCOW2,
         relative_path=path,
+        storage_pool=pool,
         status=ImageStatus.VERIFYING,
         os_family=os_family,
         os_version=os_version,
@@ -107,7 +112,7 @@ def import_image(
 
     agent = client or AgentClient(node.endpoint)
     try:
-        info = agent.inspect_image(path)
+        info = agent.inspect_image(path, **({'storage_pool': pool.name} if pool else {}))
         detected = str(info.get('format') or '').upper()
         if detected not in allowed_formats():
             raise AppError(
@@ -193,7 +198,10 @@ def delete_image(
             raise AppError(ErrorCode.NODE_OFFLINE, '镜像所属节点不可用')
         agent = client or AgentClient(target.endpoint)
         try:
-            agent.delete_image(image.relative_path)
+            agent.delete_image(
+                image.relative_path,
+                **({'storage_pool': image.storage_pool.name} if image.storage_pool_id else {}),
+            )
         except AppError as exc:
             image.status = ImageStatus.FAILED
             image.error_code = exc.code

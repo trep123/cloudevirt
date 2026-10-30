@@ -31,6 +31,7 @@ type DomainOperator interface {
 // createDomainRequest 是创建域请求体。
 type createDomainRequest struct {
 	StoragePool            string             `json:"storage_pool,omitempty"`
+	ImageStoragePool       string             `json:"image_storage_pool,omitempty"`
 	StoragePoolPath        string             `json:"storage_pool_path,omitempty"`
 	CloneMode              string             `json:"clone_mode,omitempty"`
 	UseExistingDisk        bool               `json:"use_existing_disk,omitempty"`
@@ -310,8 +311,10 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 				diskErr = storage.CloneRetainedDisk(ctx, diskRoot, payload.SourceDiskRelativePath, diskPath, payload.DiskGiB)
 			}
 		} else if payload.ImageRelativePath != "" {
+			imageRoot, rootErr := imageRootForPool(ctx, deps, payload.ImageStoragePool)
+			if rootErr != nil { writeAPIError(writer, deps.Logger, rootErr, requestID); return }
 			if payload.ImageFormat == "ISO" {
-				info, inspectErr := storage.InspectContext(ctx, deps.ImageDir, payload.ImageRelativePath)
+				info, inspectErr := storage.InspectContext(ctx, imageRoot, payload.ImageRelativePath)
 				if inspectErr != nil {
 					writeAPIError(writer, deps.Logger, inspectErr, requestID)
 					return
@@ -320,14 +323,14 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 					writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeConflict, "ISO 格式或摘要不匹配", nil), requestID)
 					return
 				}
-				spec.ISOPath, diskErr = storage.SafePath(deps.ImageDir, payload.ImageRelativePath)
+				spec.ISOPath, diskErr = storage.SafePath(imageRoot, payload.ImageRelativePath)
 				if diskErr == nil {
 					diskErr = storage.CreateDisk(ctx, diskPath, payload.DiskGiB)
 				}
 			} else if !diskReady && payload.CloneMode == "linked" {
-				diskErr = storage.CloneLinked(ctx, deps.ImageDir, payload.ImageRelativePath, payload.ImageChecksum, payload.ImageFormat, diskPath, payload.DiskGiB)
+				diskErr = storage.CloneLinked(ctx, imageRoot, payload.ImageRelativePath, payload.ImageChecksum, payload.ImageFormat, diskPath, payload.DiskGiB)
 			} else if !diskReady {
-				diskErr = storage.CloneImage(ctx, deps.ImageDir, payload.ImageRelativePath, payload.ImageChecksum, payload.ImageFormat, diskPath, payload.DiskGiB)
+				diskErr = storage.CloneImage(ctx, imageRoot, payload.ImageRelativePath, payload.ImageChecksum, payload.ImageFormat, diskPath, payload.DiskGiB)
 			}
 		} else {
 			diskErr = storage.CreateDisk(ctx, diskPath, payload.DiskGiB)

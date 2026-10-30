@@ -12,6 +12,9 @@ class ImageSerializer(serializers.ModelSerializer):
     is_ready = serializers.BooleanField(read_only=True)
     node_name = serializers.CharField(source='node.name', read_only=True, default='')
     upload_id = serializers.UUIDField(source='upload.pk', read_only=True, default=None)
+    storage_pool_name = serializers.CharField(
+        source='storage_pool.name', read_only=True, allow_null=True
+    )
 
     class Meta:
         model = Image
@@ -23,6 +26,8 @@ class ImageSerializer(serializers.ModelSerializer):
             'upload_id',
             'format',
             'relative_path',
+            'storage_pool',
+            'storage_pool_name',
             'size_bytes',
             'virtual_size_bytes',
             'checksum_sha256',
@@ -72,6 +77,9 @@ class ImageImportSerializer(serializers.ModelSerializer):
         queryset=Node.objects.filter(is_deleted=False), help_text='执行检查的节点'
     )
     relative_path = serializers.CharField(max_length=255)
+    storage_pool = serializers.CharField(
+        max_length=64, required=False, default='', allow_blank=True
+    )
 
     class Meta:
         model = Image
@@ -80,6 +88,7 @@ class ImageImportSerializer(serializers.ModelSerializer):
             'name',
             'node',
             'relative_path',
+            'storage_pool',
             'os_family',
             'os_version',
             'format',

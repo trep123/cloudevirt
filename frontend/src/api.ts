@@ -254,6 +254,7 @@ export const api = {
     name: string;
     node: number;
     relative_path: string;
+    storage_pool?: string;
     os_family?: string;
     os_version?: string;
   }) =>

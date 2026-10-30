@@ -27,6 +27,20 @@ from common.permissions import CanImportImage, RequiresPasswordChange
 CHUNK_BYTES = 8 * 1024 * 1024
 
 
+def pool_query(image, prefix='&'):
+    from urllib.parse import quote
+
+    return (
+        prefix + 'storage_pool=' + quote(image.storage_pool.name, safe='')
+        if image.storage_pool_id
+        else ''
+    )
+
+
+def pool_kwargs(image):
+    return {'storage_pool': image.storage_pool.name} if image.storage_pool_id else {}
+
+
 def check_node(user, node, permission='images.add_image'):
     from apps.accounts.administration import limit_nodes
 
@@ -73,12 +87,24 @@ def register_image(data, user):
     node = data['node']
     check_node(user, node)
     path = validate_relative_path(data['relative_path'])
+    from apps.infrastructure.placement import select_storage_pool
+
+    pool = select_storage_pool(user, node, data.get('storage_pool', ''))
+    from apps.instances.models import Disk
+
+    if (
+        Disk.objects.filter(instance__node=node, instance__storage_pool=pool, relative_path=path)
+        .exclude(status='DELETED')
+        .exists()
+    ):
+        raise AppError(ErrorCode.CONFLICT, '文件已登记为虚拟机磁盘，不能重复登记为镜像')
     try:
         with transaction.atomic():
             image = Image.objects.create(
                 name=data['name'],
                 node=node,
                 relative_path=path,
+                storage_pool=pool,
                 format='QCOW2',
                 created_by=user,
                 os_family=data.get('os_family', ''),
@@ -90,6 +116,9 @@ def register_image(data, user):
 
 
 class UploadInput(serializers.Serializer):
+    storage_pool = serializers.CharField(
+        max_length=64, required=False, default='', allow_blank=True
+    )
     id = serializers.UUIDField()
     name = serializers.CharField(min_length=2, max_length=128)
     node = serializers.PrimaryKeyRelatedField(queryset=Node.objects.filter(is_deleted=False))
@@ -138,6 +167,7 @@ def owned_upload(request, pk, *, lock=False):
 def progress_from_agent(upload):
     return AgentClient(upload.image.node.endpoint).get_json(
         f'/api/v1/images/uploads/{upload.pk.hex}?extension={upload.extension}'
+        + pool_query(upload.image)
     )
 
 
@@ -158,10 +188,17 @@ class UploadCreateView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         check_node(request.user, data['node'])
+        from apps.infrastructure.placement import select_storage_pool
+
+        selected_pool = select_storage_pool(
+            request.user, data['node'], data.get('storage_pool', '')
+        )
         get_user_model().objects.select_for_update().get(pk=request.user.pk)
         existing = ImageUpload.objects.filter(pk=data['id']).select_related('image').first()
         if existing:
             image = existing.image
+            if image.storage_pool_id != (selected_pool.pk if selected_pool else None):
+                raise AppError(ErrorCode.CONFLICT, '上传 ID 已绑定其他存储池')
             if image.created_by_id != request.user.pk:
                 raise AppError(ErrorCode.NOT_FOUND)
             if image.is_deleted or (
@@ -195,6 +232,7 @@ class UploadCreateView(APIView):
                 image = Image.objects.create(
                     name=data['name'],
                     node=data['node'],
+                    storage_pool=selected_pool,
                     created_by=request.user,
                     relative_path=f'upload-{data["id"].hex}{data["extension"]}',
                     format='QCOW2',
@@ -238,7 +276,9 @@ class UploadDetailView(APIView):
         ).exists():
             raise AppError(ErrorCode.OPERATION_IN_PROGRESS, '镜像任务仍在执行')
         AgentClient(upload.image.node.endpoint).request_json(
-            f'/api/v1/images/uploads/{upload.pk.hex}?extension={upload.extension}', 'DELETE'
+            f'/api/v1/images/uploads/{upload.pk.hex}?extension={upload.extension}'
+            + pool_query(upload.image),
+            'DELETE',
         )
         upload.image.is_deleted = True
         upload.image.status = ImageStatus.FAILED
@@ -278,7 +318,12 @@ class UploadChunkView(APIView):
         if int(offset) + len(data) > upload.size_bytes:
             raise AppError(ErrorCode.INVALID_ARGUMENT, '分片超出文件总大小')
         result = AgentClient(upload.image.node.endpoint, timeout=120).upload_chunk(
-            upload.pk.hex, int(offset), upload.size_bytes, upload.extension, data
+            upload.pk.hex,
+            int(offset),
+            upload.size_bytes,
+            upload.extension,
+            data,
+            **pool_kwargs(upload.image),
         )
         upload.save(update_fields=['updated_at'])
         return Response(result)
@@ -344,11 +389,11 @@ def execute_image_import(task):
         upload = ImageUpload.objects.filter(image=image).first()
         if upload:
             client.request_json(
-                f'/api/v1/images/uploads/{upload.pk.hex}/complete',
+                f'/api/v1/images/uploads/{upload.pk.hex}/complete' + pool_query(image, '?'),
                 'POST',
                 {'size_bytes': upload.size_bytes, 'extension': upload.extension},
             )
-        info = client.inspect_image(image.relative_path)
+        info = client.inspect_image(image.relative_path, **pool_kwargs(image))
         detected = str(info.get('format', '')).upper()
         if detected not in allowed_formats() or int(info.get('size_bytes', 0)) <= 0:
             raise AppError(ErrorCode.VALIDATION_ERROR, '镜像格式不受支持或文件为空')

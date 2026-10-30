@@ -373,6 +373,7 @@ class StoragePoolAccessView(APIView):
 
         if (
             pool.instances.filter(is_deleted=False).exists()
+            or pool.images.filter(is_deleted=False).exists()
             or Disk.objects.filter(instance__storage_pool=pool).exclude(status='DELETED').exists()
             or pool.reservations.filter(status='HELD').exists()
         ):
@@ -387,6 +388,7 @@ class StoragePoolAccessView(APIView):
         if result.get('deleted') is not True:
             raise AppError(ErrorCode.CONFLICT, '节点未确认存储池删除')
         pool.instances.update(storage_pool=None)
+        pool.images.update(storage_pool=None)
         ResourceReservation.objects.filter(storage_pool=pool).update(storage_pool=None)
         audit(
             request,
@@ -456,7 +458,12 @@ class AvailableStoragePoolsView(APIView):
     permission_classes = [IsAuthenticated, RequiresPasswordChange]
 
     def get(self, request):
-        check_permission(request.user, 'instances.add_instance')
+        permission = (
+            'images.add_image'
+            if request.query_params.get('purpose') == 'images'
+            else 'instances.add_instance'
+        )
+        check_permission(request.user, permission)
         node_id = request.query_params.get('node')
         if not node_id or not node_id.isdecimal():
             raise AppError(ErrorCode.INVALID_ARGUMENT, '请指定节点 ID')
@@ -465,20 +472,24 @@ class AvailableStoragePoolsView(APIView):
         from apps.nodes.access import user_can_access
         from apps.nodes.models import NodePermission
 
-        if node.pk not in limit_nodes(
-            request.user, [node.pk], 'instances.add_instance'
-        ) or not user_can_access(request.user, node, NodePermission.OPERATE):
+        if node.pk not in limit_nodes(request.user, [node.pk], permission) or not user_can_access(
+            request.user, node, NodePermission.OPERATE
+        ):
             raise AppError(ErrorCode.PERMISSION_DENIED)
         pools = ManagedStoragePool.objects.filter(node=node)
         if not is_admin(request.user):
             pools = pools.filter(allowed_users=request.user)
+            if pools.filter(default_users=request.user).exists():
+                pools = pools.filter(default_users=request.user)
         listing = AgentClient(node.endpoint).get_json('/api/v1/storage-pools')
         live = {
             item.get('name')
             for item in listing.get('results', [])
             if item.get('active') and item.get('type') == 'dir'
         }
-        rows = list(pools.filter(name__in=live).order_by('name').values('name', 'is_default'))
+        rows = list(
+            pools.filter(name__in=live).order_by('name').values('name', 'path', 'is_default')
+        )
         if not is_admin(request.user):
             personal = set(pools.filter(default_users=request.user).values_list('name', flat=True))
             if personal:
