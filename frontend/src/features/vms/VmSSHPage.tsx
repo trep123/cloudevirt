@@ -116,7 +116,7 @@ export default function VmSSHPage({ id, admin }: { id: number; admin: boolean })
       {!addresses.length&&<p className="muted">请启动虚拟机、启用 SSH 服务并获取 DHCP 地址。静态 IP 暂不开放手工填写，可先通过 noVNC 配置网络。</p>}
     </form>}
     <div className="ssh-terminal-shell"><header><span>SSH · {address || "未选择地址"}</span><button className="action sm" onClick={()=>terminal.current?.clear()}>清空本地显示</button></header><div className="ssh-terminal" ref={mount}/></div>
-    <p className="muted">Ctrl+C 发送终止信号；复制可使用 Ctrl+Shift+C，粘贴使用浏览器快捷键。关闭页面会断开 SSH，不自动重连；不提供文件管理或自动提权。</p>
+    <p className="muted">Ctrl+C 发送终止信号；选中文字后右键复制，粘贴使用浏览器快捷键。关闭页面会断开 SSH，不自动重连；不提供文件管理或自动提权。</p>
     {hostKey&&<ConfirmOperationModal target={`${hostKey.address}:22`} operation="确认 SSH 主机指纹" busy={false} error={null} description="请通过可信渠道核对此指纹。确认后才会向 SSH 服务进行登录认证；本次信任不会写入持久配置。" onCancel={()=>void disconnect()} onConfirm={()=>{send({type:"trust",fingerprint:hostKey.fingerprint});setHostKey(null);setState("connecting");}}><pre className="ssh-fingerprint">{hostKey.algorithm}{"\n"}{hostKey.fingerprint}</pre></ConfirmOperationModal>}
   </section>;
 }
