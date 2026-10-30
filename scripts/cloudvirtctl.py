@@ -84,6 +84,8 @@ def main():
         update('agent.env', 'CLOUDVIRT_ALLOW_DESTRUCTIVE', str(args.command == 'enable').lower())
         run('systemctl', 'try-restart', 'cloudvirt-agent')
     else:
+        update('network.env', 'CLOUDVIRT_NETWORK_BRIDGE_ENABLED',
+               str(args.command == 'enable').lower())
         run('systemctl', args.command, '--now', 'cloudvirt-network')
     print('配置已应用；已有虚拟机、网桥和磁盘不会被删除。')
 

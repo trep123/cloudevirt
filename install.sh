@@ -499,8 +499,12 @@ for service in management worker agent network; do
     install -m 0644 "$APP_DIR/deploy/systemd/cloudvirt-$service.service" "/etc/systemd/system/cloudvirt-$service.service"
 done
 systemctl daemon-reload
-systemctl enable cloudvirt-network.service
-systemctl restart cloudvirt-network.service
+if grep -qx 'CLOUDVIRT_NETWORK_BRIDGE_ENABLED=false' "$CONFIG_DIR/network.env"; then
+    systemctl disable --now cloudvirt-network.service
+else
+    systemctl enable cloudvirt-network.service
+    systemctl restart cloudvirt-network.service
+fi
 install -d -m 0755 /etc/systemd/system/cloudvirt-agent.service.d
 cat > /etc/systemd/system/cloudvirt-agent.service.d/install.conf <<ENV
 [Service]
@@ -688,6 +692,9 @@ fi
 systemctl enable --now cloudvirt-collect_node_status.timer cloudvirt-reconcile.timer cloudvirt-cleanup_console_sessions.timer
 systemctl enable --now cloudvirt-cleanup_account_batches.timer
 for service in cloudvirt-agent cloudvirt-management cloudvirt-worker cloudvirt-network nginx postgresql; do
+    if [[ "$service" == cloudvirt-network ]] && grep -qx 'CLOUDVIRT_NETWORK_BRIDGE_ENABLED=false' "$CONFIG_DIR/network.env"; then
+        continue
+    fi
     systemctl is-active --quiet "$service" || die "Service is not active: $service"
 done
 log "Deployment completed"
