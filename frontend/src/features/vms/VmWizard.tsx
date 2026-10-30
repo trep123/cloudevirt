@@ -189,15 +189,16 @@ export function VmWizard({
       alive = false;
     };
   }, []);
-  fileIdentity.current = `${node}:${sourceDisk}`;
+  fileIdentity.current = `${node}:${storagePool}:${sourceDisk}`;
   useEffect(() => {
     if (!isAdmin || !useFile || !node) return;
     let alive = true;
     setDiskDirectory("");
     setDiskSources([]);
+    setFileChecked(false);
     api
       .request<{ results: typeof diskSources; directory: string }>(
-        `/instances/system-disk-sources?node=${node}`,
+        `/instances/system-disk-sources?node=${node}&storage_pool=${encodeURIComponent(storagePool || "__legacy__")}`,
       )
       .then((v) => {
         if (alive) {
@@ -211,7 +212,7 @@ export function VmWizard({
     return () => {
       alive = false;
     };
-  }, [isAdmin, useFile, node]);
+  }, [isAdmin, useFile, node, storagePool]);
   async function checkFile() {
     if (!node || !sourceDisk || fileBusy) return;
     const identity = fileIdentity.current;
@@ -219,7 +220,7 @@ export function VmWizard({
     setError(null);
     try {
       const v = await api.request<{ virtual_size_bytes: number }>(
-        `/instances/system-disk-sources?node=${node}&path=${encodeURIComponent(sourceDisk)}`,
+        `/instances/system-disk-sources?node=${node}&storage_pool=${encodeURIComponent(storagePool || "__legacy__")}&path=${encodeURIComponent(sourceDisk)}`,
       );
       if (fileIdentity.current === identity) {
         setDisk(Math.ceil(v.virtual_size_bytes / 1024 ** 3));
@@ -334,7 +335,7 @@ export function VmWizard({
         vcpu: cpu,
         memory_mib: Math.round(memory * 1024),
         disk_gib: disk,
-        storage_pool: sourceDisk ? "__legacy__" : storagePool,
+        storage_pool: storagePool,
         network_name: network,
         autostart,
         start_after_create: startAfter,
@@ -558,6 +559,12 @@ export function VmWizard({
                                 </option>
                               ))}
                             </select>
+                            <select aria-label="系统盘所在存储池" value={storagePool} onChange={(e) => {
+                              setStoragePool(e.target.value); setSourceDisk(""); setFileChecked(false);
+                            }}>
+                              <option value="__legacy__">节点原有磁盘目录</option>
+                              {storagePools.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}
+                            </select>
                             <small>
                               节点允许目录：{diskDirectory || "选择节点后读取"}
                             </small>
@@ -700,7 +707,7 @@ export function VmWizard({
                 ) : step === 2 ? (
                   <>
                     <Field label="存储池" hint="仅列出当前账号在所选节点可使用的目录池">
-                      <select value={sourceDisk ? "__legacy__" : storagePool}
+                      <select value={storagePool}
                         disabled={Boolean(sourceDisk)}
                         onChange={(e) => setStoragePool(e.target.value)}>
                         {!legacyStorage && <option value="">请选择存储池</option>}

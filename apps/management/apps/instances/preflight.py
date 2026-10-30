@@ -41,8 +41,6 @@ class CreatePreflightView(APIView):
         resources = available_resources(node)
         selected_pool = select_storage_pool(request.user, node, data.get('storage_pool', ''))
         if selected_pool:
-            if data.get('existing_system_file'):
-                raise AppError(ErrorCode.INVALID_ARGUMENT, '直接使用已有系统盘仅支持默认磁盘目录')
             resources['disk_bytes'] = pool_available_bytes(node, selected_pool)
         requested = {
             'vcpu': data['vcpu'],

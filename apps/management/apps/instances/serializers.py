@@ -225,7 +225,10 @@ class InstanceCreateSerializer(serializers.Serializer):
         if data.get('existing_system_file'):
             from apps.instances.disk_sources import inspect_file
 
-            info = inspect_file(request.user, data['node'], data['existing_system_file'])
+            info = inspect_file(
+                request.user, data['node'], data['existing_system_file'],
+                storage_pool=data.get('storage_pool', ''),
+            )
             minimum = (info['virtual_size_bytes'] + 1024**3 - 1) // 1024**3
             if data['disk_gib'] < minimum or (mode == 'direct' and data['disk_gib'] != minimum):
                 raise serializers.ValidationError({'disk_gib': '请检查磁盘并使用实际容量'})

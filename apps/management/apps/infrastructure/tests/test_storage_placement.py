@@ -14,6 +14,19 @@ from common.errors import AppError
 
 
 class StoragePlacementTests(TestCase):
+    @patch('apps.nodes.client.AgentClient')
+    def test_existing_file_inspection_uses_selected_pool(self, client):
+        from apps.instances.disk_sources import inspect_file
+
+        client.return_value.request_json.return_value = {
+            'format': 'QCOW2', 'virtual_size_bytes': 20 * 1024**3,
+        }
+        inspect_file(self.admin, self.node, 'vm-106-disk-0.qcow2', storage_pool='cv-fast')
+        client.return_value.request_json.assert_called_once_with(
+            '/api/v1/disks/inspect', 'POST',
+            {'relative_path': 'vm-106-disk-0.qcow2', 'storage_pool': 'cv-fast'},
+        )
+
     def setUp(self):
         self.admin = make_user('storage-admin', 'Admin')
         self.owner = make_user('storage-owner', 'Operator')

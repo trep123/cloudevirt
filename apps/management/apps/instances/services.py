@@ -222,8 +222,6 @@ def create_instance(
     from apps.infrastructure.placement import pool_available_bytes, select_storage_pool
 
     selected_pool = select_storage_pool(user, node, storage_pool)
-    if selected_pool and existing_system_file:
-        raise AppError(ErrorCode.INVALID_ARGUMENT, '直接使用节点已有系统盘仅支持默认磁盘目录')
     pool_listing = (
         AgentClient(node.endpoint).get_json('/api/v1/storage-pools') if selected_pool else None
     )
@@ -335,7 +333,7 @@ def create_instance(
 
             if image is not None or existing_system_disk or template_version or initialization:
                 raise AppError(ErrorCode.CONFLICT, '直接挂载来源配置冲突')
-            info = inspect_file(user, locked_node, existing_system_file)
+            info = inspect_file(user, locked_node, existing_system_file, storage_pool=storage_pool)
             minimum = (info['virtual_size_bytes'] + GIB - 1) // GIB
             if disk_gib < minimum or (clone_mode == 'direct' and disk_gib != minimum):
                 raise AppError(ErrorCode.CONFLICT, '系统盘容量已变化')

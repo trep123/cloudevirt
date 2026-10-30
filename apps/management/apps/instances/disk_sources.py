@@ -52,7 +52,7 @@ def cloning(disk_id):
     )
 
 
-def inspect_file(user, node, path, check_registered=True):
+def inspect_file(user, node, path, check_registered=True, storage_pool=''):
     from pathlib import PurePosixPath
 
     from apps.accounts.administration import limit_nodes
@@ -76,10 +76,25 @@ def inspect_file(user, node, path, check_registered=True):
         user, node, NodePermission.OPERATE
     ):
         raise AppError(ErrorCode.PERMISSION_DENIED)
-    if check_registered and Disk.objects.filter(relative_path=path).exists():
+    from apps.infrastructure.placement import select_storage_pool
+
+    pool = select_storage_pool(user, node, storage_pool)
+    if (
+        check_registered
+        and Disk.objects.filter(
+            relative_path=path, instance__node=node, instance__storage_pool=pool
+        )
+        .exclude(status='DELETED')
+        .exists()
+    ):
         raise AppError(ErrorCode.CONFLICT, '文件已登记为数据卷，不能重复直接挂载')
     info = AgentClient(node.endpoint).request_json(
-        '/api/v1/disks/inspect', 'POST', {'relative_path': path}
+        '/api/v1/disks/inspect',
+        'POST',
+        {
+            'relative_path': path,
+            **({'storage_pool': pool.name} if pool else {}),
+        },
     )
     if (
         info.get('format') != 'QCOW2'
@@ -108,10 +123,21 @@ class SystemDiskSourcesView(APIView):
         if node.pk not in limit_nodes(request.user, [node.pk], 'instances.add_instance'):
             raise AppError(ErrorCode.PERMISSION_DENIED)
         path = request.query_params.get('path')
+        from urllib.parse import urlencode
+
+        from apps.infrastructure.placement import select_storage_pool
+
+        pool_name = request.query_params.get('storage_pool', '')
+        pool = select_storage_pool(request.user, node, pool_name)
         if path:
-            return Response(inspect_file(request.user, node, path))
-        listing = AgentClient(node.endpoint).get_json('/api/v1/disks')
-        registered = set(Disk.objects.values_list('relative_path', flat=True))
+            return Response(inspect_file(request.user, node, path, storage_pool=pool_name))
+        query = '?' + urlencode({'storage_pool': pool.name}) if pool else ''
+        listing = AgentClient(node.endpoint).get_json('/api/v1/disks' + query)
+        registered = set(
+            Disk.objects.filter(instance__node=node, instance__storage_pool=pool)
+            .exclude(status='DELETED')
+            .values_list('relative_path', flat=True)
+        )
         return Response(
             {
                 'directory': listing.get('directory', ''),
