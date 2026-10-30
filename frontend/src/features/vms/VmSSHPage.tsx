@@ -1,122 +1,102 @@
-import { useEffect, useRef, useState } from "react";
-import { Terminal } from "@xterm/xterm";
-import { FitAddon } from "@xterm/addon-fit";
-import "@xterm/xterm/css/xterm.css";
-import "./ssh.css";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../../api";
 import { navigate } from "../../app/router";
-import { PageHeader, ConfirmOperationModal } from "../../components/ConsoleUI";
-import { ErrorBanner, describeError } from "../../components/ui";
-import type { Instance } from "../../types";
+import { PageHeader, Drawer, ConfirmOperationModal } from "../../components/ConsoleUI";
+import { ErrorBanner, describeError, Pagination } from "../../components/ui";
+import type { Instance, Paginated } from "../../types";
+import { SSHConnectionPane } from "./SSHConnectionPane";
+import { addSSHTab, closeSSHTab } from "./sshTabs";
 
-type SSHSession = { session_id: string; path: string; address: string; port: number };
-type HostKey = { fingerprint: string; algorithm: string; address: string };
-export default function VmSSHPage({ id, admin }: { id: number; admin: boolean }) {
-  const [vm,setVm] = useState<Instance|null>(null), [addresses,setAddresses] = useState<string[]>([]);
-  const [address,setAddress] = useState(""), [user,setUser] = useState("");
-  const [mode,setMode] = useState("password"), [password,setPassword] = useState(""),
-    [privateKey,setPrivateKey] = useState(""), [passphrase,setPassphrase] = useState("");
-  const [state,setState] = useState("idle"), [error,setError] = useState<string|null>(null),
-    [hostKey,setHostKey] = useState<HostKey|null>(null), [full,setFull] = useState(false);
-  const mount = useRef<HTMLDivElement>(null), terminal = useRef<Terminal|null>(null), fit = useRef<FitAddon|null>(null);
-  const socket = useRef<WebSocket|null>(null), session = useRef<SSHSession|null>(null),
-    renewal = useRef<number|undefined>(undefined), generation = useRef(0), busy = useRef(false), ready = useRef(false);
-  const prefix = admin ? "/admin" : "/app";
-  const active = !["idle","closed","error"].includes(state);
-  const labels: Record<string,string> = { idle:"未连接",authorizing:"正在授权",connecting:"正在连接 SSH",hostkey:"等待确认主机指纹",ready:"已连接",closed:"连接已结束",error:"连接失败" };
-  function send(message: unknown) { if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(JSON.stringify(message)); }
-  async function release() {
-    clearInterval(renewal.current); renewal.current=undefined;
-    const previous=session.current;session.current=null;
-    if(previous) await api.request(`/console/sessions/${previous.session_id}`,{method:"DELETE"}).catch(()=>{});
-  }
-  async function disconnect() {
-    generation.current++; ready.current=false;busy.current=true;
-    socket.current?.close();socket.current=null;setHostKey(null);setState("closed");
-    await release(); busy.current=false;
-  }
-  useEffect(()=>{
-    const term = new Terminal({cursorBlink:true,fontSize:14,scrollback:3000,
-      fontFamily:'"Cascadia Code", "SFMono-Regular", Consolas, monospace',theme:{background:"#101828",foreground:"#e2e8f0"}});
-    const addon=new FitAddon();term.loadAddon(addon);term.open(mount.current!);addon.fit();
-    terminal.current=term;fit.current=addon;
-    const input=term.onData(data=>{ if(ready.current) send({type:"input",data}); });
-    const resize=new ResizeObserver(()=>{addon.fit();if(ready.current)send({type:"resize",cols:Math.max(20,Math.min(512,term.cols)),rows:Math.max(5,Math.min(200,term.rows))});});resize.observe(mount.current!);
-    return ()=>{generation.current++;ready.current=false;socket.current?.close();socket.current=null;void release();input.dispose();resize.disconnect();term.dispose();terminal.current=null;};
-  },[id]);
+type TabInfo={state:string;name?:string};
+const liveStates=["authorizing","connecting","hostkey","ready"];
+const names:Record<string,string>={idle:"未连接",authorizing:"授权中",connecting:"连接中",hostkey:"待确认指纹",ready:"已连接",closed:"已断开",error:"失败"};
+export default function VmSSHPage({id,admin}:{id:number;admin:boolean}) {
+  const [tabs,setTabs]=useState<number[]>([id]),[active,setActive]=useState(id),[info,setInfo]=useState<Record<number,TabInfo>>({});
+  const [limit,setLimit]=useState(8),[picker,setPicker]=useState(false),[error,setError]=useState<string|null>(null),
+    [full,setFull]=useState(false),[disconnectEpoch,setDisconnectEpoch]=useState(0);
+  const [search,setSearch]=useState(""),[page,setPage]=useState(1),[total,setTotal]=useState(0),
+    [items,setItems]=useState<Instance[]>([]),[loading,setLoading]=useState(false);
+  const [pending,setPending]=useState<{kind:"close"|"all"|"leave";id?:number}|null>(null);
+  const workspace=useRef<HTMLElement>(null),tablist=useRef<HTMLDivElement>(null);
+  const prefix=admin?"/admin":"/app";
+  const connected=Object.values(info).filter(value=>liveStates.includes(value.state)).length;
+  const report=useCallback((vmId:number,state:string,name?:string)=>{
+    setInfo(previous=>previous[vmId]?.state===state && previous[vmId]?.name===name?previous:{...previous,[vmId]:{state,name}});
+  },[]);
   useEffect(()=>{
     let alive=true;
-    setVm(null);setState("idle");setHostKey(null);setUser("");
-    setPassword("");setPrivateKey("");setPassphrase("");busy.current=false;
-    setError(null);setAddresses([]);setAddress("");
-    Promise.allSettled([api.instance(id),api.request<{addresses:string[]}>(`/console/instances/${id}/ssh`)])
-      .then(([instance,result])=>{if(!alive)return;
-        if(instance.status === "fulfilled") setVm(instance.value);
-        else setError(describeError(instance.reason));
-        if(result.status === "fulfilled") {setAddresses(result.value.addresses);setAddress(result.value.addresses[0]||"");}
-        else setError(describeError(result.reason));
-      });
+    api.request<{max_sessions:number}>("/console/ssh-policy").then(policy=>{if(alive)setLimit(policy.max_sessions);})
+      .catch(e=>{if(alive)setError(describeError(e));});
     return ()=>{alive=false;};
+  },[]);
+  useEffect(()=>{
+    if(tabs.includes(id)){setActive(id);return;}
+    if(tabs.length>=limit){setError(`最多打开 ${limit} 个标签，请先关闭不需要的标签`);return;}
+    setTabs(previous=>addSSHTab(previous,id,limit));setActive(id);
   },[id]);
-  async function connect(event: React.FormEvent) {
-    event.preventDefault(); if(busy.current || active || !address)return;
-    busy.current=true;const current=++generation.current;
-    setError(null);setState("authorizing");terminal.current?.reset();
-    let created:SSHSession|null=null;
-    try {
-      await release();
-      created=await api.request<SSHSession>(`/console/instances/${id}/ssh`,{method:"POST",body:JSON.stringify({address})});
-      if(current!==generation.current){await api.request(`/console/sessions/${created.session_id}`,{method:"DELETE"}).catch(()=>{});return;}
-      session.current=created;setState("connecting");
-      const url=new URL(created.path,location.href);url.protocol=location.protocol==="https:"?"wss:":"ws:";
-      const ws=new WebSocket(url);socket.current=ws;ws.binaryType="arraybuffer";
-      ws.onopen=()=>{
-        if(current!==generation.current){ws.close();return;}
-        const term=terminal.current!;
-        send({type:"auth",user,password:mode==="password"?password:"",private_key:mode==="key"?privateKey:"",passphrase:mode==="key"?passphrase:"",cols:Math.max(20,Math.min(512,term.cols)),rows:Math.max(5,Math.min(200,term.rows))});
-        setPassword("");setPrivateKey("");setPassphrase("");
-        let renewing=false;
-        renewal.current=window.setInterval(()=>{
-          if(renewing || !session.current)return;renewing=true;
-          void api.request(`/console/sessions/${session.current.session_id}`,{method:"POST",body:"{}"})
-            .catch(e=>{if(current===generation.current){setError(describeError(e));setState("error");ws.close();}}).finally(()=>{renewing=false;});
-        },25000);
-      };
-      ws.onmessage=event=>{
-        if(current!==generation.current)return;
-        if(event.data instanceof ArrayBuffer){terminal.current?.write(new Uint8Array(event.data));return;}
-        try {
-          const message=JSON.parse(String(event.data));
-          if(message.type==="hostkey"){setHostKey(message);setState("hostkey");}
-          if(message.type==="ready"){ready.current=true;busy.current=false;setState("ready");terminal.current?.focus();}
-          if(message.type==="error"){setError(message.message||"SSH 连接失败");setState("error");}
-          if(message.type==="exit"){terminal.current?.writeln("\r\n[远程终端已结束]");}
-        } catch { setError("SSH 协议响应无效");ws.close(); }
-      };
-      ws.onerror=()=>{if(current===generation.current){setError("SSH 通道连接失败，请检查节点代理和 HTTPS 反向代理");setState("error");}};
-      ws.onclose=()=>{if(current===generation.current){ready.current=false;busy.current=false;setHostKey(null);setState(previous=>previous==="error"?previous:"closed");void release();}};
-    } catch(e){if(current===generation.current){setError(describeError(e));setState("error");busy.current=false;await release();}}
+  useEffect(()=>{
+    if(!connected)return;
+    const warn=(event:BeforeUnloadEvent)=>{event.preventDefault();event.returnValue="";};
+    window.addEventListener("beforeunload",warn);return()=>window.removeEventListener("beforeunload",warn);
+  },[connected]);
+  useEffect(()=>{
+    if(!picker)return;
+    const controller=new AbortController();setLoading(true);
+    const timer=window.setTimeout(()=>{
+      const query=new URLSearchParams({status:"RUNNING",search,page:String(page),page_size:"20"});
+      api.request<Paginated<Instance>>(`/instances?${query}`,{signal:controller.signal})
+        .then(result=>{if(!controller.signal.aborted){setItems(result.results);setTotal(result.count);setError(null);}})
+        .catch(e=>{if(!controller.signal.aborted)setError(describeError(e));})
+        .finally(()=>{if(!controller.signal.aborted)setLoading(false);});
+    },200);
+    return()=>{clearTimeout(timer);controller.abort();};
+  },[picker,search,page]);
+  function activate(vmId:number){setActive(vmId);navigate(`${prefix}/vms/${vmId}/ssh`);}
+  function open(vm:Instance){
+    const next=addSSHTab(tabs,vm.id,limit);
+    if(next===tabs && !tabs.includes(vm.id)){setError(`最多打开 ${limit} 个标签`);return;}
+    setTabs(next);setInfo(previous=>({...previous,[vm.id]:previous[vm.id]||{state:"idle",name:vm.name}}));
+    activate(vm.id);setPicker(false);
   }
-  return <section className={"ssh-page"+(active?" ssh-session-active":"")+(full?" ssh-page-full":"")}>
-    <PageHeader title={`${vm?.name || "虚拟机"} · Web SSH`} description="通过加密终端配置客体系统；使用虚拟机内的账号权限" back={{label:"返回虚拟机",onClick:()=>navigate(`${prefix}/vms/${id}`)}}>
-      <span className="ssh-state">{labels[state]}</span>
+  function close(vmId:number){
+    if(liveStates.includes(info[vmId]?.state)){setPending({kind:"close",id:vmId});return;}
+    performClose(vmId);
+  }
+  function performClose(vmId:number){
+    const next=closeSSHTab(tabs,active,vmId);setTabs(next.tabs);setActive(next.active);
+    setInfo(previous=>{const copy={...previous};delete copy[vmId];return copy;});
+    if(next.active && active===vmId)navigate(`${prefix}/vms/${next.active}/ssh`);
+  }
+  function leave(){if(connected)setPending({kind:"leave"});else navigate(`${prefix}/vms`);}
+  return <section ref={workspace} className={"ssh-workspace"+(full?" ssh-workspace-full":"")}>
+    <PageHeader title="SSH 多标签终端" description={`切换标签保持连接 · 每个账号最多 ${limit} 个 SSH 会话 · 离开终端页将断开所有连接`} back={{label:"返回虚拟机列表",onClick:leave}}>
+      <button className="action" disabled={!connected} onClick={()=>setPending({kind:"all"})}>断开全部</button>
       <button className="action" onClick={()=>setFull(!full)}>{full?"退出页面全屏":"页面全屏"}</button>
-      <button className="action" onClick={()=>void mount.current?.closest(".ssh-page")?.requestFullscreen().catch(()=>setError("浏览器未允许全屏"))}>浏览器全屏</button>
-      <button className="action danger" disabled={!active} onClick={()=>void disconnect()}>断开连接</button>
+      <button className="action" onClick={()=>void workspace.current?.requestFullscreen().catch(()=>setError("浏览器未允许全屏"))}>浏览器全屏</button>
+      <button className="action primary" disabled={tabs.length>=limit} onClick={()=>{setSearch("");setPage(1);setPicker(true);}}>＋ 添加连接</button>
     </PageHeader>
     <ErrorBanner message={error}/>
-    {!active && <form className="ssh-connect card" onSubmit={connect}>
-      <div className="ssh-connect-grid">
-        <label>虚拟机地址<select value={address} onChange={e=>setAddress(e.target.value)} required>{!addresses.length&&<option value="">暂无已验证的 DHCP 地址</option>}{addresses.map(ip=><option key={ip} value={ip}>{ip}:22</option>)}</select></label>
-        <label>SSH 用户名<input value={user} onChange={e=>setUser(e.target.value)} required maxLength={128} autoComplete="off" /></label>
-        <label>认证方式<select value={mode} onChange={e=>setMode(e.target.value)}><option value="password">密码</option><option value="key">私钥</option></select></label>
-        {mode==="password"?<label>SSH 密码<input type="password" value={password} onChange={e=>setPassword(e.target.value)} required autoComplete="off" maxLength={4096}/></label>:<><label className="ssh-key">SSH 私钥<textarea value={privateKey} onChange={e=>setPrivateKey(e.target.value)} required maxLength={65536} rows={5} autoComplete="off"/></label><label>私钥口令（可选）<input type="password" value={passphrase} onChange={e=>setPassphrase(e.target.value)} maxLength={4096} autoComplete="off"/></label></>}
-      </div>
-      <div className="ssh-connect-foot"><span>凭据仅用于本次连接，不保存；首次连接需核对主机指纹。</span><button type="submit" className="action primary" disabled={!address || !!vm?.observed_state_is_stale}>连接终端</button></div>
-      {!addresses.length&&<p className="muted">请启动虚拟机、启用 SSH 服务并获取 DHCP 地址。静态 IP 暂不开放手工填写，可先通过 noVNC 配置网络。</p>}
-    </form>}
-    <div className="ssh-terminal-shell"><header><span>SSH · {address || "未选择地址"}</span><button className="action sm" onClick={()=>terminal.current?.clear()}>清空本地显示</button></header><div className="ssh-terminal" ref={mount}/></div>
-    <p className="muted">Ctrl+C 发送终止信号；选中文字后右键复制，粘贴使用浏览器快捷键。关闭页面会断开 SSH，不自动重连；不提供文件管理或自动提权。</p>
-    {hostKey&&<ConfirmOperationModal target={`${hostKey.address}:22`} operation="确认 SSH 主机指纹" busy={false} error={null} description="请通过可信渠道核对此指纹。确认后才会向 SSH 服务进行登录认证；本次信任不会写入持久配置。" onCancel={()=>void disconnect()} onConfirm={()=>{send({type:"trust",fingerprint:hostKey.fingerprint});setHostKey(null);setState("connecting");}}><pre className="ssh-fingerprint">{hostKey.algorithm}{"\n"}{hostKey.fingerprint}</pre></ConfirmOperationModal>}
+    <div className="ssh-tab-strip" ref={tablist} role="tablist" aria-label="SSH 虚拟机连接">
+      {tabs.map(vmId=><div className={"ssh-tab-item"+(active===vmId?" active":"")} key={vmId}>
+        <button role="tab" id={`ssh-tab-${vmId}`} aria-selected={active===vmId} aria-controls={`ssh-panel-${vmId}`} tabIndex={active===vmId?0:-1}
+          onClick={()=>activate(vmId)} onKeyDown={event=>{if(!["ArrowLeft","ArrowRight","Home","End"].includes(event.key))return;event.preventDefault();const index=tabs.indexOf(vmId);const target=event.key==="Home"?tabs[0]:event.key==="End"?tabs[tabs.length-1]:tabs[(index+(event.key==="ArrowRight"?1:tabs.length-1))%tabs.length];activate(target);tablist.current?.querySelector<HTMLButtonElement>(`#ssh-tab-${target}`)?.focus();}}>
+          <span className={`ssh-tab-dot ssh-tab-${info[vmId]?.state||"idle"}`}/><span>{info[vmId]?.name||`虚拟机 #${vmId}`}<small>{names[info[vmId]?.state||"idle"]}</small></span>
+        </button><button className="ssh-tab-close" aria-label={`关闭 ${info[vmId]?.name||vmId} 标签`} onClick={()=>close(vmId)}>×</button>
+      </div>)}
+    </div>
+    {!tabs.length&&<div className="card empty">所有标签已关闭，点击“添加连接”选择自己的虚拟机。</div>}
+    {tabs.map(vmId=><div role="tabpanel" id={`ssh-panel-${vmId}`} aria-labelledby={`ssh-tab-${vmId}`} hidden={active!==vmId} key={vmId}>
+      <SSHConnectionPane id={vmId} admin={admin} visible={active===vmId} disconnectEpoch={disconnectEpoch} onChange={report}/>
+    </div>)}
+    {pending&&<ConfirmOperationModal target={pending.kind==="close"?(info[pending.id!]?.name||`虚拟机 #${pending.id}`):"全部 SSH 连接"}
+      operation={pending.kind==="close"?"关闭标签并断开连接":pending.kind==="all"?"断开全部连接":"离开 SSH 终端页"}
+      description={pending.kind==="close"?"将断开此标签的 SSH，前台命令可能中断。其他标签保持连接。":"将关闭所有 SSH 连接，前台命令可能中断；不会关闭虚拟机。"}
+      busy={false} error={null} onCancel={()=>setPending(null)} onConfirm={()=>{const action=pending;setPending(null);if(action.kind==="close")performClose(action.id!);else if(action.kind==="all")setDisconnectEpoch(value=>value+1);else navigate(`${prefix}/vms`);}}/>}
+    {picker&&<Drawer wide title="添加虚拟机 SSH 标签" onClose={()=>setPicker(false)}>
+      <p className="muted">仅列出当前账号有权访问的运行中虚拟机；每个标签单独登录，凭据不共享。</p>
+      <ErrorBanner message={error}/><input aria-label="搜索运行中的虚拟机" placeholder="按虚拟机名称或 UUID 搜索" value={search} onChange={event=>{setSearch(event.target.value);setPage(1);}}/>
+      {loading?<p role="status">正在读取虚拟机…</p>:!items.length?<p className="empty">暂无匹配的运行中虚拟机。</p>:<div className="table-scroll"><table className="data-table"><thead><tr><th>虚拟机</th><th>节点</th><th>操作</th></tr></thead><tbody>{items.map(vm=><tr key={vm.id}><td><strong>{vm.name}</strong><small className="muted">{vm.uuid.slice(0,8)}</small></td><td>{vm.node_name}</td><td><button className="action sm" disabled={vm.observed_state_is_stale} onClick={()=>open(vm)}>{tabs.includes(vm.id)?"切换到标签":"打开标签"}</button></td></tr>)}</tbody></table></div>}
+      <Pagination page={page} pageSize={20} total={total} onChange={setPage}/>
+    </Drawer>}
   </section>;
 }

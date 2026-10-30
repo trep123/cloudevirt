@@ -67,11 +67,14 @@ class SSHCreateView(APIView):
         get_user_model().objects.select_for_update().get(pk=request.user.pk)
         if (
             ConsoleSession.objects.filter(
-                user=request.user, revoked=False, expires_at__gt=timezone.now()
+                user=request.user, protocol='ssh', revoked=False, expires_at__gt=timezone.now()
             ).count()
-            >= settings.CONSOLE_MAX_SESSIONS
+            >= settings.SSH_MAX_SESSIONS
         ):
-            raise AppError(ErrorCode.CONFLICT, '控制台会话数达到上限，请先关闭旧会话')
+            raise AppError(
+                ErrorCode.CONFLICT,
+                f'SSH 会话数达到上限（{settings.SSH_MAX_SESSIONS}），请关闭旧标签或旧会话',
+            )
         session = ConsoleSession.objects.create(
             user=request.user,
             instance=instance,
@@ -97,5 +100,15 @@ class SSHCreateView(APIView):
             },
             status=201,
         )
+        response['Cache-Control'] = 'no-store'
+        return response
+
+
+class SSHPolicyView(APIView):
+    permission_classes = [CanViewInstance, RequiresPasswordChange]
+
+    def get(self, request):
+        check_permission(request.user, 'instances.ssh_instance')
+        response = Response({'max_sessions': settings.SSH_MAX_SESSIONS})
         response['Cache-Control'] = 'no-store'
         return response

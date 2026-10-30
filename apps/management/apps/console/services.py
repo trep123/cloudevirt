@@ -84,7 +84,7 @@ def create_desktop(request, instance):
         raise AppError(ErrorCode.CONFLICT, '实例未启用图形控制台')
     if (
         ConsoleSession.objects.filter(
-            user=request.user, revoked=False, expires_at__gt=timezone.now()
+            user=request.user, protocol='vnc', revoked=False, expires_at__gt=timezone.now()
         ).count()
         >= settings.CONSOLE_MAX_SESSIONS
     ):

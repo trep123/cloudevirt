@@ -105,3 +105,25 @@ class WebSSHTests(TestCase):
         self.node.save()
         self.assertEqual(self.create().status_code, 409)
         self.assertFalse(ConsoleSession.objects.exists())
+
+    @override_settings(SSH_MAX_SESSIONS=2, CONSOLE_MAX_SESSIONS=1)
+    def test_ssh_budget_is_independent_from_vnc_and_close_releases_one_slot(self):
+        self.assertEqual(self.client.get('/api/v1/console/ssh-policy').json()['max_sessions'], 2)
+        first = self.create()
+        self.assertEqual(first.status_code, 201)
+        self.assertEqual(self.create().status_code, 201)
+        self.assertEqual(self.create().status_code, 409)
+        self.vm.vnc_password = 'temp-vnc'
+        self.vm.save()
+        desktop = f'/api/v1/console/instances/{self.vm.pk}/sessions'
+        self.assertEqual(self.client.post(desktop).status_code, 201)
+        self.assertEqual(self.client.post(desktop).status_code, 409)
+        with patch('apps.nodes.client.AgentClient.request_json', return_value={'active': False}):
+            self.assertEqual(
+                self.client.delete(
+                    f'/api/v1/console/sessions/{first.json()["session_id"]}'
+                ).status_code,
+                204,
+            )
+        self.assertEqual(self.create().status_code, 201)
+        self.assertEqual(ConsoleSession.objects.filter(protocol='ssh', revoked=False).count(), 2)
