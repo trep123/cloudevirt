@@ -432,9 +432,11 @@ export function UsersPage() {
       </Card>
       {editing !== undefined && (
         <Drawer wide title={editing === null ? "创建用户" : `编辑 ${form.username}`}
-          onClose={() => { if (!busy) setEditing(undefined); }}>
+          onClose={() => { if (!busy) setEditing(undefined); }}
+          footer={<><button className="action" disabled={busy} onClick={() => setEditing(undefined)}>取消</button>
+            <button className="action primary" disabled={busy || !form.roles.length} type="submit" form="account-editor">{busy ? "保存中…" : "保存用户"}</button></>}>
           <ErrorBanner message={error} />
-          <form className="account-editor" onSubmit={save}>
+          <form id="account-editor" className="account-editor" onSubmit={save}>
             <div className="inline">
               <label>
                 用户名
@@ -550,17 +552,6 @@ export function UsersPage() {
                 </label>
               ))}
             </div>
-            <button className="action primary" disabled={busy || !form.roles.length} type="submit">
-              {busy ? "保存中…" : "保存用户"}
-            </button>
-            <button
-              className="action"
-              disabled={busy}
-              type="button"
-              onClick={() => setEditing(undefined)}
-            >
-              取消
-            </button>
           </form>
         </Drawer>
       )}

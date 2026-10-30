@@ -29,9 +29,10 @@ type Memory struct {
 
 // Storage 是单个路径的存储采集结果。
 type Storage struct {
-	Path       string
-	TotalBytes uint64
-	FreeBytes  uint64
+	FilesystemID string
+	Path         string
+	TotalBytes   uint64
+	FreeBytes    uint64
 }
 
 // Resources 是一次完整采集的结果。
@@ -146,9 +147,14 @@ func ReadStorage(path string) (Storage, error) {
 	if err := syscall.Statfs(path, &stat); err != nil {
 		return Storage{}, fmt.Errorf("统计存储容量失败: path=%s: %w", path, err)
 	}
+	var device syscall.Stat_t
+	if err := syscall.Stat(path, &device); err != nil {
+		return Storage{}, fmt.Errorf("读取文件系统标识失败: %w", err)
+	}
 	return Storage{
-		Path:       path,
-		TotalBytes: stat.Blocks * uint64(stat.Bsize),
-		FreeBytes:  stat.Bavail * uint64(stat.Bsize),
+		FilesystemID: strconv.FormatUint(uint64(device.Dev), 10),
+		Path:         path,
+		TotalBytes:   stat.Blocks * uint64(stat.Bsize),
+		FreeBytes:    stat.Bavail * uint64(stat.Bsize),
 	}, nil
 }

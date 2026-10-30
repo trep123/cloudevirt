@@ -98,3 +98,18 @@ func TestCollectReturnsRealValues(t *testing.T) {
 		t.Error("采样时间不能为空")
 	}
 }
+
+func TestStorageFilesystemIdentity(t *testing.T) {
+	root := t.TempDir()
+	first, err := ReadStorage(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := ReadStorage(root + "/.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.FilesystemID == "" || first.FilesystemID != second.FilesystemID {
+		t.Fatal("same filesystem must have stable nonempty identity")
+	}
+}

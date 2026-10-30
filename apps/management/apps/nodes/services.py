@@ -76,9 +76,24 @@ def refresh_node(node: Node, client: AgentClient | None = None) -> Node:
 
     storage_total = 0
     storage_free = 0
-    for item in resources.get('storage') or []:
-        storage_total += int(item.get('total_bytes') or 0)
-        storage_free += int(item.get('free_bytes') or 0)
+    filesystems = {}
+    for index, item in enumerate(resources.get('storage') or []):
+        # New Agents identify the actual filesystem, preserving each path in the API.
+        # Old Agents without identity retain their previous per-path accounting.
+        key = (
+            ('filesystem', str(item['filesystem_id']))
+            if item.get('filesystem_id')
+            else ('legacy', index)
+        )
+        total = int(item.get('total_bytes') or 0)
+        free = int(item.get('free_bytes') or 0)
+        if key in filesystems:
+            previous_total, previous_free = filesystems[key]
+            filesystems[key] = (min(total, previous_total), min(free, previous_free))
+        else:
+            filesystems[key] = (total, free)
+    storage_total = sum(total for total, _ in filesystems.values())
+    storage_free = sum(free for _, free in filesystems.values())
 
     if isinstance(health, dict) and health.get('version'):
         node.agent_version = str(health['version'])

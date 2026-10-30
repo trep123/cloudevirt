@@ -111,9 +111,8 @@ export function DisksPage({ embedded = false }: { embedded?: boolean }) {
           </button>
       </Toolbar>
       <ErrorBanner message={error} />
-      <div className="banner banner-info">
-        默认仅显示现有磁盘；已删除磁盘仅在选择“已删除（历史记录）”时显示，不计入分配容量。虚拟机删除后保留的磁盘、硬件页面卸载的数据盘均可在此清理。删除会永久移除磁盘及其内部快照；使用中或仍有依赖的磁盘由后端拒绝删除。
-      </div>
+      <details className="volume-guidance"><summary>数据卷清理与历史记录说明</summary><p>默认仅显示现有磁盘；已删除磁盘仅在选择“已删除（历史记录）”时显示，不计入分配容量。虚拟机删除后保留的磁盘、硬件页面卸载的数据盘均可在此清理。删除会永久移除磁盘及其内部快照；使用中或仍有依赖的磁盘由后端拒绝删除。</p>
+      </details>
       <Card flush title={`数据卷 · ${total}`} description={`当前页：就绪 ${readyCount} · 失败 ${failedCount} · 分配 ${totalSize} GiB`}>
         {loading ? (
           <Empty text="加载中…" />
@@ -131,14 +130,13 @@ export function DisksPage({ embedded = false }: { embedded?: boolean }) {
                   <th>容量</th>
                   <th>虚拟容量</th>
                   <th>设备</th>
-                  <th>路径</th>
                   <th className="col-actions">操作</th>
                 </tr>
               </thead>
               <tbody>
                 {disks.map((disk) => (
                   <tr key={disk.id}>
-                    <td className="mono">{disk.name}</td>
+                    <td><div className="volume-name mono" title={`${disk.name} · ${disk.relative_path}`}>{disk.name}</div>{disk.relative_path !== disk.name && <small className="muted">{disk.relative_path}</small>}</td>
                     <td>
                       {disk.instance_name || `#${disk.instance}`}
                       <div className="muted">
@@ -146,7 +144,7 @@ export function DisksPage({ embedded = false }: { embedded?: boolean }) {
                         {disk.instance_deleted ? " · 实例已删除" : ""}
                       </div>
                     </td>
-                    <td>{disk.role}</td>
+                    <td>{disk.role === "SYSTEM" ? "系统盘" : disk.role === "DATA" ? "数据盘" : disk.role}</td>
                     <td>
                       <StatusBadge status={disk.status} />
                       {disk.status === "DELETED" && <div className="muted">已清理 · 历史记录</div>}
@@ -161,7 +159,6 @@ export function DisksPage({ embedded = false }: { embedded?: boolean }) {
                     <td>{disk.status === "DELETED" ? "—" : `${disk.size_gib} GiB`}</td>
                     <td>{disk.status === "DELETED" ? "—" : formatBytes(disk.virtual_size_bytes)}</td>
                     <td className="mono">{disk.target_dev}</td>
-                    <td className="mono muted">{disk.relative_path}</td>
                     <td className="col-actions">
                       <button
                         className="action danger sm"

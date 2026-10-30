@@ -104,9 +104,10 @@ func NewRouter(deps Dependencies) http.Handler {
 
 // storagePayload 是单个路径的存储信息。
 type storagePayload struct {
-	Path       string `json:"path"`
-	TotalBytes uint64 `json:"total_bytes"`
-	FreeBytes  uint64 `json:"free_bytes"`
+	FilesystemID string `json:"filesystem_id,omitempty"`
+	Path         string `json:"path"`
+	TotalBytes   uint64 `json:"total_bytes"`
+	FreeBytes    uint64 `json:"free_bytes"`
 }
 
 // resourcesResponse 是资源采集响应体。
@@ -139,9 +140,10 @@ func resourcesHandler(deps Dependencies) http.HandlerFunc {
 		}
 		for _, item := range resources.Storage {
 			payload.Storage = append(payload.Storage, storagePayload{
-				Path:       item.Path,
-				TotalBytes: item.TotalBytes,
-				FreeBytes:  item.FreeBytes,
+				FilesystemID: item.FilesystemID,
+				Path:         item.Path,
+				TotalBytes:   item.TotalBytes,
+				FreeBytes:    item.FreeBytes,
 			})
 		}
 		writeJSON(writer, http.StatusOK, payload)

@@ -31,3 +31,12 @@
 .resource-import>summary>span { margin-left:12px; font-weight:400; color:var(--text-secondary,#64748b); font-size:12px; }
 .shell .resource-import>.card { margin:0; border:0; box-shadow:none; border-top:1px solid var(--border,#e2e8f0); border-radius:0; }
 @media(max-width:720px) { .account-editor>.inline { grid-template-columns:1fr; } }
+
+.account-editor>.inline>label { display:flex; flex-direction:column; align-items:stretch; gap:8px; }
+.account-editor>.inline>label:has(input[type=checkbox]) { flex-direction:row; align-items:center; }
+.account-editor>.inline { margin-bottom:24px; }
+.account-editor input:not([type=checkbox]) { width:100%; min-width:0; }
+.volume-name { width:240px; max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.volume-guidance { color:var(--text-secondary,#64748b); margin-bottom:16px; font-size:12px; }
+.volume-guidance>summary { cursor:pointer; }
+.volume-guidance>p { max-width:100ch; line-height:1.7; }
