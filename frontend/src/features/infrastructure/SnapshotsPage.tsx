@@ -27,10 +27,10 @@ type Operation = {
   key: string;
 };
 export function SnapshotsPage({
-  admin,
+  canManage,
   instance,
 }: {
-  admin: boolean;
+  canManage: boolean;
   instance?: Instance;
 }) {
   const [vms, setVms] = useState<Instance[]>(instance ? [instance] : []),
@@ -90,7 +90,7 @@ export function SnapshotsPage({
   }, [selected, refresh]);
   const vm = instance || vms.find((v) => v.id === selected);
   const canWrite =
-    admin &&
+    canManage &&
     vm?.observed_state === "SHUTOFF" &&
     !vm.observed_state_is_stale &&
     !busy &&
@@ -127,7 +127,7 @@ export function SnapshotsPage({
         >
           刷新快照
         </button>
-        {admin ? (
+        {canManage ? (
           <button
             className="action primary"
             disabled={!canWrite}
@@ -142,9 +142,9 @@ export function SnapshotsPage({
       </PageHeader>
       <ErrorBanner message={error} />
       <p className="banner banner-info">
-        {admin
+        {canManage
           ? "请先正常关闭虚拟机。恢复和删除需节点开启破坏性操作；恢复会丢失快照之后的磁盘变更。"
-          : "可查看自己虚拟机的快照；创建、恢复与删除由管理员执行。"}
+          : "当前账号无快照管理权限，仅可查看授权虚拟机的快照。"}
       </p>
       <section className="card table-wrap">
         {loading ? (
@@ -165,7 +165,7 @@ export function SnapshotsPage({
                   <th>创建时间</th>
                   <th>父快照</th>
                   <th>类型</th>
-                  {admin ? <th className="col-actions">操作</th> : null}
+                  {canManage ? <th className="col-actions">操作</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -177,7 +177,7 @@ export function SnapshotsPage({
                     <td>
                       {s.supported ? "关机内部快照" : "仅查看 · 其他类型"}
                     </td>
-                    {admin ? (
+                    {canManage ? (
                       <td className="actions">
                         <button
                           className="action danger"

@@ -5,6 +5,7 @@ import { canEnterRoute } from "./app/permission";
 import { AppLayout } from "./layouts/AppLayout";
 import { OrganizationPage } from "./features/infrastructure/OrganizationPage";
 import { StoragePoolsPage } from "./features/infrastructure/StoragePoolsPage";
+import { DisksPage } from "./pages/DisksPage";
 import { SnapshotsPage } from "./features/infrastructure/SnapshotsPage";
 import { SettingsPage } from "./features/infrastructure/SettingsPage";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
@@ -117,8 +118,9 @@ export default function App() {
   else if (key === "dashboard") content = <DashboardPage admin={admin} />;
   else if ((key === "clusters" || key === "pools") && admin)
     content = <OrganizationPage key={key} kind={key} />;
+  else if (key === "storage" && !admin) content = <DisksPage />;
   else if (key === "storage-pools" && admin) content = <StoragePoolsPage />;
-  else if (key === "snapshots") content = <SnapshotsPage admin={admin} />;
+  else if (key === "snapshots") content = <SnapshotsPage canManage={user.permissions.includes("instances.manage_snapshot_instance")} />;
   else if (key === "settings" && admin) content = <SettingsPage />;
   else if (/^\/(admin|app)\/vms\/\d+\/console$/.test(path))
     content = <VmConsolePage id={Number(path.split("/")[3])} admin={admin} />;

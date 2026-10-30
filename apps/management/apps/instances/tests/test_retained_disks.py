@@ -104,3 +104,13 @@ class RetainedDiskTests(TestCase):
         self.assertFalse(history['results'][0]['can_delete'])
         self.client.force_login(self.other)
         self.assertEqual(self.client.get('/api/v1/disks?status=DELETED').json()['count'], 0)
+
+    def test_viewer_can_delete_own_retained_disk_only(self):
+        viewer = make_user('disk-viewer', 'Viewer')
+        self.instance.created_by = viewer
+        self.instance.save()
+        self.client.force_login(viewer)
+        self.assertTrue(self.client.get('/api/v1/disks').json()['results'][0]['can_delete'])
+        self.assertEqual(self.delete().status_code, 202)
+        self.client.force_login(self.other)
+        self.assertEqual(self.delete('other-request').status_code, 404)

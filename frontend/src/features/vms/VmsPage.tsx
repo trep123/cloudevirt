@@ -374,7 +374,7 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
                   <DeviceManager vm={detail} admin={admin} section="nics" />
                 ) : tab === "快照" ? (
                   <SnapshotsPage
-                    admin={user.console_scope === "admin"}
+                    canManage={can("instances.manage_snapshot_instance")}
                     instance={detail}
                   />
                 ) : tab === "任务日志" ? (

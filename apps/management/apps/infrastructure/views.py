@@ -271,6 +271,10 @@ def task_response(request, *, task_type, resource_type, resource_id, payload):
             raise AppError(ErrorCode.CONFLICT, '幂等键已用于不同请求')
         task = previous
     else:
+        if task_type == 'INSTANCE_SNAPSHOT':
+            from apps.instances.actions import ensure_no_active_task
+
+            ensure_no_active_task(Instance.objects.get(pk=resource_id))
         task = enqueue(
             task_type=task_type,
             resource_type=resource_type,
@@ -325,11 +329,14 @@ class SnapshotsView(APIView):
 
     @transaction.atomic
     def post(self, request, instance_id):
-        # Snapshot rollback can replace disk contents; keep all writes administrator-only.
-        if not is_admin(request.user):
-            raise AppError(ErrorCode.PERMISSION_DENIED, '快照变更需要管理员授权')
-        instance = get_object_or_404(
-            Instance.objects.select_for_update(), pk=instance_id, is_deleted=False
+        visible = get_object_or_404(instances_for(request.user), pk=instance_id)
+        Node.objects.select_for_update().get(pk=visible.node_id)
+        instance = Instance.objects.select_for_update().get(pk=visible.pk, is_deleted=False)
+        check_permission(
+            request.user,
+            'instances.manage_snapshot_instance',
+            target_type='instance',
+            target_id=str(instance.pk),
         )
         node_for(instance.node_id)
         serializer = SnapshotInput(data=request.data)

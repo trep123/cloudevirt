@@ -72,7 +72,7 @@ class PermissionBoundaryTests(TestCase):
         self.assertFalse(student.has_perm('nodes.add_node'))
 
     def test_general_user_only_has_vm_operations(self) -> None:
-        """一般用户只保留虚拟机操作，其他模块无写权限。"""
+        """一般用户可管理自己的虚拟机、保留磁盘和快照，其余模块无写权限。"""
         sync_role_permissions()
         general = get_user_model().objects.create_user(
             username='general01', password='Str0ngPassw0rd'
@@ -86,10 +86,11 @@ class PermissionBoundaryTests(TestCase):
             'instances.reboot_instance',
             'instances.force_stop_instance',
             'instances.delete_instance',
+            'instances.delete_disk_instance',
+            'instances.manage_snapshot_instance',
         ):
             self.assertTrue(general.has_perm(codename), codename)
         for codename in (
-            'instances.delete_disk_instance',
             'networks.manage_network',
             'images.add_image',
             'images.delete_image',

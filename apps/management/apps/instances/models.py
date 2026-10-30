@@ -108,6 +108,7 @@ class Instance(models.Model):
         verbose_name_plural = '虚拟机实例'
         ordering = ['-created_at']
         permissions = [
+            ('manage_snapshot_instance', '可以管理虚拟机快照'),
             ('start_instance', '可以启动虚拟机'),
             ('shutdown_instance', '可以关闭虚拟机'),
             ('reboot_instance', '可以重启虚拟机'),

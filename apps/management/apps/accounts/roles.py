@@ -36,6 +36,7 @@ ROLE_PERMISSIONS: dict[str, tuple[str, ...]] = {
         'instances.reboot_instance',
         'instances.force_stop_instance',
         'instances.delete_instance',
+        'instances.manage_snapshot_instance',
         'instances.delete_disk_instance',
         'templates.view_template',
         'tasks.view_task',
@@ -45,7 +46,7 @@ ROLE_PERMISSIONS: dict[str, tuple[str, ...]] = {
         'monitoring.view_reconciliationdiff',
         'monitoring.view_reconciliationrun',
     ),
-    # 一般用户：仅虚拟机操作，其余模块只读
+    # 一般用户：自己的虚拟机、保留数据卷与快照操作
     ROLE_VIEWER: (
         'nodes.view_node',
         'images.view_image',
@@ -57,6 +58,8 @@ ROLE_PERMISSIONS: dict[str, tuple[str, ...]] = {
         'instances.reboot_instance',
         'instances.force_stop_instance',
         'instances.delete_instance',
+        'instances.delete_disk_instance',
+        'instances.manage_snapshot_instance',
         'templates.view_template',
         'tasks.view_task',
         'monitoring.view_alert',

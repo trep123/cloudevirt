@@ -144,7 +144,7 @@ class InfrastructureAPITests(TestCase):
             self.post(path, body, HTTP_IDEMPOTENCY_KEY='different-key').status_code, 409
         )
 
-    def test_snapshot_write_requires_admin_even_for_owner(self):
+    def test_snapshot_owner_can_manage(self):
         self.client.force_login(self.owner)
         self.assertEqual(
             self.post(
@@ -152,7 +152,7 @@ class InfrastructureAPITests(TestCase):
                 {'action': 'create'},
                 HTTP_IDEMPOTENCY_KEY='owner-key',
             ).status_code,
-            403,
+            202,
         )
 
     def test_failed_snapshot_cannot_be_replayed_from_task_center(self):
@@ -164,3 +164,66 @@ class InfrastructureAPITests(TestCase):
             requested_by=self.admin,
         )
         self.assertEqual(self.post(f'tasks/{task.pk}/retry', {}).status_code, 409)
+
+    def test_snapshot_other_owner_cannot_write(self):
+        self.client.force_login(self.other)
+        for action in ['create', 'revert', 'delete']:
+            result = self.post(
+                f'snapshots/instances/{self.vm.pk}/',
+                {'action': action, 'name': 'cv-test'},
+                HTTP_IDEMPOTENCY_KEY=action,
+            )
+            self.assertEqual(result.status_code, 404)
+        self.assertFalse(Task.objects.exists())
+
+    def test_viewer_can_manage_own_snapshots(self):
+        viewer = make_user('snapshot-viewer', 'Viewer')
+        self.vm.created_by = viewer
+        self.vm.save()
+        self.client.force_login(viewer)
+        for action in ['create', 'revert', 'delete']:
+            result = self.post(
+                f'snapshots/instances/{self.vm.pk}/',
+                {'action': action, 'name': 'cv-test'},
+                HTTP_IDEMPOTENCY_KEY=action,
+            )
+            self.assertEqual(result.status_code, 202, result.content)
+            Task.objects.update(status='SUCCEEDED')
+
+    @patch('apps.infrastructure.executors.AgentClient')
+    def test_snapshot_worker_rechecks_owner_and_permission(self, agent):
+        from apps.infrastructure.executors import execute_infrastructure
+        from common.errors import AppError
+
+        self.client.force_login(self.owner)
+        self.post(
+            f'snapshots/instances/{self.vm.pk}/',
+            {'action': 'create'},
+            HTTP_IDEMPOTENCY_KEY='worker-check',
+        )
+        task = Task.objects.get(type='INSTANCE_SNAPSHOT')
+        self.vm.created_by = self.other
+        self.vm.save()
+        with self.assertRaises(AppError):
+            execute_infrastructure(task)
+        self.vm.created_by = self.owner
+        self.vm.save()
+        self.owner.groups.clear()
+        with self.assertRaises(AppError):
+            execute_infrastructure(task)
+        agent.assert_not_called()
+
+    def test_snapshot_conflicts_with_active_vm_task(self):
+        Task.objects.create(
+            type='INSTANCE_START',
+            resource_type='instance',
+            resource_id=str(self.vm.pk),
+            requested_by=self.owner,
+        )
+        self.client.force_login(self.owner)
+        result = self.post(
+            f'snapshots/instances/{self.vm.pk}/',
+            {'action': 'create'},
+            HTTP_IDEMPOTENCY_KEY='active-check',
+        )
+        self.assertEqual(result.status_code, 409)
