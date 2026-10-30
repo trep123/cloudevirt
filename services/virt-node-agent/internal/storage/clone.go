@@ -20,6 +20,20 @@ func CloneImage(ctx context.Context, imageRoot, relative, checksum, format, targ
 	if len(checksum) != 64 || !strings.EqualFold(info.ChecksumSHA256, checksum) || !strings.EqualFold(info.Format, format) {
 		return apierr.New(apierr.CodeConflict, "源镜像格式或摘要已变化，请重新登记", nil)
 	}
+	return cloneInspected(ctx, imageRoot, relative, info, target, sizeGiB)
+}
+
+// CloneRetainedDisk creates an independent copy without changing the retained source.
+func CloneRetainedDisk(ctx context.Context, root, relative, target string, sizeGiB int) error {
+	info, err := InspectContext(ctx, root, relative)
+	if err != nil {
+		return err
+	}
+	return cloneInspected(ctx, root, relative, info, target, sizeGiB)
+}
+
+func cloneInspected(ctx context.Context, imageRoot, relative string, info FileInfo, target string, sizeGiB int) error {
+	format := info.Format
 	if info.Format != "QCOW2" && info.Format != "RAW" {
 		return apierr.New(apierr.CodeInvalidArgument, "仅支持独立 QCOW2/RAW 系统镜像", nil)
 	}

@@ -145,6 +145,7 @@ def create_instance(
     start_after_create: bool = True,
     template: int | None = None,
     template_version: int | None = None,
+    existing_system_disk: int | None = None,
     data_disks: list[int] | None = None,
     additional_networks: list[str] | None = None,
     hardware: dict | None = None,
@@ -213,7 +214,13 @@ def create_instance(
         else None
     )
 
-    if image.status != ImageStatus.READY or image.is_deleted:
+    if existing_system_disk:
+        from apps.instances.disk_sources import source_disk
+
+        source_disk(user, existing_system_disk, node.pk)
+        if template_version or initialization:
+            raise AppError(ErrorCode.CONFLICT, '已有系统盘不能与模板或初始化混用')
+    if not existing_system_disk and (image.status != ImageStatus.READY or image.is_deleted):
         raise AppError(
             ErrorCode.CONFLICT,
             '镜像不可用',
@@ -240,9 +247,9 @@ def create_instance(
         # Also serialize cross-node requests and idempotency lookup for this account.
         quota_user = get_user_model().objects.select_for_update().get(pk=user.pk)
         image = type(image).objects.select_for_update().get(pk=image.pk)
-        if image.is_deleted or image.status != ImageStatus.READY:
+        if not existing_system_disk and (image.is_deleted or image.status != ImageStatus.READY):
             raise AppError(ErrorCode.CONFLICT, '镜像已删除或尚未校验完成')
-        if image.node_id and image.node_id != locked_node.pk:
+        if not existing_system_disk and image.node_id and image.node_id != locked_node.pk:
             raise AppError(ErrorCode.CONFLICT, '镜像文件位于其他节点，请选择镜像所属节点')
         if scoped_key:
             previous = Task.objects.filter(
@@ -280,6 +287,8 @@ def create_instance(
                     or instance.creation_config.get('hardware', {}) != hardware
                     or instance.creation_config.get('initialization') != initialization
                     or instance.creation_config.get('static_networks', {}) != static_networks
+                    or instance.creation_config.get('source_disk', {}).get('id')
+                    != existing_system_disk
                     or instance.creation_config.get('template_version') != template_version
                     or instance.creation_config.get('data_disks', []) != data_disks
                     or instance.creation_config.get('additional_networks', [])
@@ -287,6 +296,11 @@ def create_instance(
                 ):
                     raise AppError(ErrorCode.CONFLICT, '幂等键已用于其他配置，请先核对原任务')
                 return instance, previous
+        source = None
+        if existing_system_disk:
+            source = source_disk(user, existing_system_disk, locked_node.pk, lock=True)
+            if image.pk != source.instance.image_id or disk_gib < source.size_gib:
+                raise AppError(ErrorCode.CONFLICT, '源磁盘或容量不匹配')
         enforce_quota(quota_user, vcpu=vcpu, memory_mib=memory_mib, disk_gib=total_disk_gib)
         if network is not None:
             network = (
@@ -334,6 +348,11 @@ def create_instance(
             initialization_status='PENDING' if initialization else 'NOT_CONFIGURED',
             creation_config={
                 'schema_version': 1,
+                **(
+                    {'source_disk': {'id': source.pk, 'relative_path': source.relative_path}}
+                    if source
+                    else {}
+                ),
                 'hardware': hardware,
                 'initialization': initialization,
                 'static_networks': static_networks,

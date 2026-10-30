@@ -35,8 +35,11 @@ def disks_for(user):
 
 
 def eligible(disk):
+    from apps.instances.disk_sources import cloning
+
     return (
-        disk.status != 'DELETED'
+        not cloning(disk.pk)
+        and disk.status != 'DELETED'
         and disk.is_orphan
         and (disk.instance.is_deleted or disk.status == 'DETACHED')
     )

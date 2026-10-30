@@ -8,7 +8,7 @@ import (
 )
 
 func creationCapabilities(deps Dependencies, ctx context.Context) map[string]any {
-	caps := map[string]any{"creation_schema": 1, "image_clone": true, "iso_install": true, "start_control": true, "multi_disk": true, "multi_nic": true, "cloud_init": false, "pci_passthrough": false, "cpu_modes": []string{}, "firmware": []string{"bios"}, "secure_boot": false, "tpm_emulator": false, "performance_limits": true, "numa": false, "hugepages": false}
+	caps := map[string]any{"creation_schema": 1, "image_clone": true, "retained_disk_clone": true, "iso_install": true, "start_control": true, "multi_disk": true, "multi_nic": true, "cloud_init": false, "pci_passthrough": false, "cpu_modes": []string{}, "firmware": []string{"bios"}, "secure_boot": false, "tpm_emulator": false, "performance_limits": true, "numa": false, "hugepages": false}
 	if provider, ok := deps.Virtualizer.(interface {
 		CreationCapabilities(context.Context) (map[string]any, error)
 	}); ok {

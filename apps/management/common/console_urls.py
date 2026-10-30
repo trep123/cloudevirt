@@ -4,6 +4,7 @@ from django.urls import path
 
 from apps.accounts.roles import is_admin
 from apps.instances.device_management import InstanceHardwareView
+from apps.instances.disk_sources import SystemDiskSourcesView
 from apps.instances.display import InstanceDisplayView
 from apps.instances.preflight import CreatePreflightView
 from apps.instances.views import (
@@ -30,6 +31,7 @@ class ConsoleBoundaryMixin:
 
 ROUTES = [
     ('vms/preflight/', CreatePreflightView),
+    ('vms/system-disk-sources/', SystemDiskSourcesView),
     ('dashboard/', DashboardView),
     ('vms/', InstanceListCreateView),
     ('vms/<int:pk>/', InstanceDetailView),

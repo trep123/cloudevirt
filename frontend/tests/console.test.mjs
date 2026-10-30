@@ -266,10 +266,30 @@ test("upload chunks send raw binary with CSRF, offset, cookies and progress", as
   }
 });
 
-test("Web SSH route requires separate permission and preserves admin/user route boundaries",()=>{
-  const user={console_scope:"user",permissions:["instances.view_instance"]};
-  assert.equal(canEnterRoute(user,"/app/vms/4/ssh"),false);
+test("Web SSH route requires separate permission and preserves admin/user route boundaries", () => {
+  const user = {
+    console_scope: "user",
+    permissions: ["instances.view_instance"],
+  };
+  assert.equal(canEnterRoute(user, "/app/vms/4/ssh"), false);
   user.permissions.push("instances.ssh_instance");
-  assert.equal(canEnterRoute(user,"/app/vms/4/ssh"),true);
-  assert.equal(canEnterRoute(user,"/admin/vms/4/ssh"),false);
+  assert.equal(canEnterRoute(user, "/app/vms/4/ssh"), true);
+  assert.equal(canEnterRoute(user, "/admin/vms/4/ssh"), false);
+});
+
+const { HardwareFields } = await moduleFrom(
+  "src/features/vms/HardwareFields.tsx",
+);
+test("administrator hardware controls remain editable while capabilities load; user view stays locked", () => {
+  const base = { value: {}, onChange: () => {}, caps: null, cpu: 2 };
+  const admin = renderToStaticMarkup(
+    createElement(HardwareFields, { ...base, isAdmin: true }),
+  );
+  assert.doesNotMatch(admin, /管理员配置，仅查看/);
+  assert.doesNotMatch(admin.match(/<select[^>]*>/)[0], /disabled/);
+  const user = renderToStaticMarkup(
+    createElement(HardwareFields, { ...base, isAdmin: false, locked: true }),
+  );
+  assert.match(user, /管理员配置，仅查看/);
+  assert.match(user.match(/<select[^>]*>/)[0], /disabled/);
 });

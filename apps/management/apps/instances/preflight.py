@@ -35,7 +35,7 @@ class CreatePreflightView(APIView):
         enforce_quota(
             request.user, vcpu=data['vcpu'], memory_mib=data['memory_mib'], disk_gib=total_disk
         )
-        if len(image.checksum_sha256) != 64:
+        if not data.get('existing_system_disk') and len(image.checksum_sha256) != 64:
             raise AppError(ErrorCode.CONFLICT, '镜像摘要缺失，请重新登记校验')
         resources = available_resources(node)
         requested = {
@@ -50,6 +50,8 @@ class CreatePreflightView(APIView):
                 details={'available': resources, 'requested': requested},
             )
         capabilities = AgentClient(node.endpoint).get_json('/api/v1/node/capabilities')
+        if data.get('existing_system_disk') and capabilities.get('retained_disk_clone') is not True:
+            raise AppError(ErrorCode.CONFLICT, '节点需升级以支持已有系统盘克隆')
         validate_creation_capabilities(data, capabilities)
         if not all(
             capabilities.get(key) is True for key in ['image_clone', 'iso_install', 'start_control']

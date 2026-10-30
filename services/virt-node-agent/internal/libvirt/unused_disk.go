@@ -34,7 +34,7 @@ func diskSources(raw string) ([]string, error) {
 		}
 	}
 }
-func (c *Client) RemoveUnusedDisk(ctx context.Context, root, relative string) error {
+func (c *Client) CheckUnusedDisk(ctx context.Context, root, relative string) error {
 	path, err := storage.SafePath(root, relative)
 	if err != nil {
 		var e *apierr.Error
@@ -139,16 +139,9 @@ func (c *Client) RemoveUnusedDisk(ctx context.Context, root, relative string) er
 			}
 		}
 	}
-	rooted, err := os.OpenRoot(root)
-	if err != nil {
-		return err
-	}
-	defer rooted.Close()
-	if err = rooted.Remove(relative); err != nil && !os.IsNotExist(err) {
-		return err
-	}
 	return nil
 }
+
 func collectDiskReferences(raw string, same func(string) bool, inspect map[string]bool) error {
 	refs, err := diskSources(raw)
 	if err != nil {
@@ -159,6 +152,21 @@ func collectDiskReferences(raw string, same func(string) bool, inspect map[strin
 			return apierr.New(apierr.CodeConflict, "磁盘仍被虚拟机、持久配置或快照引用", nil)
 		}
 		inspect[ref] = true
+	}
+	return nil
+}
+
+func (c *Client) RemoveUnusedDisk(ctx context.Context, root, relative string) error {
+	if err := c.CheckUnusedDisk(ctx, root, relative); err != nil {
+		return err
+	}
+	rooted, err := os.OpenRoot(root)
+	if err != nil {
+		return err
+	}
+	defer rooted.Close()
+	if err = rooted.Remove(relative); err != nil && !os.IsNotExist(err) {
+		return err
 	}
 	return nil
 }

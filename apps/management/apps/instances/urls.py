@@ -4,6 +4,7 @@ from django.urls import path
 
 from apps.instances.device_management import InstanceHardwareView
 from apps.instances.disk_cleanup import DiskDeleteView
+from apps.instances.disk_sources import SystemDiskSourcesView
 from apps.instances.display import InstanceDisplayView
 from apps.instances.preflight import CreatePreflightView
 from apps.instances.views import (
@@ -17,6 +18,7 @@ from apps.instances.views import (
 )
 
 urlpatterns = [
+    path('instances/system-disk-sources', SystemDiskSourcesView.as_view()),
     path('disks/<int:pk>', DiskDeleteView.as_view()),
     path('instances/<int:pk>/hardware', InstanceHardwareView.as_view()),
     path('instances/<int:pk>/display', InstanceDisplayView.as_view()),

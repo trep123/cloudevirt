@@ -30,10 +30,11 @@ type DomainOperator interface {
 
 // createDomainRequest 是创建域请求体。
 type createDomainRequest struct {
-	MAC            string             `json:"mac"`
-	Initialization *storage.CloudInit `json:"initialization"`
-	Hardware       domainxml.Hardware `json:"hardware"`
-	DataDisks      []struct {
+	SourceDiskRelativePath string             `json:"source_disk_relative_path,omitempty"`
+	MAC                    string             `json:"mac"`
+	Initialization         *storage.CloudInit `json:"initialization"`
+	Hardware               domainxml.Hardware `json:"hardware"`
+	DataDisks              []struct {
 		RelativePath string `json:"relative_path"`
 		SizeGiB      int    `json:"size_gib"`
 	} `json:"data_disks"`
@@ -229,7 +230,26 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 			format, size, err := storage.DiskInfo(ctx, diskPath)
 			diskReady = err == nil && format == "QCOW2" && size == int64(payload.DiskGiB)*1024*1024*1024
 		}
-		if payload.ImageRelativePath != "" {
+		if payload.SourceDiskRelativePath != "" {
+			if payload.ImageRelativePath != "" || payload.Initialization != nil || payload.SourceDiskRelativePath == payload.DiskRelativePath {
+				writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeInvalidArgument, "源磁盘参数冲突", nil), requestID)
+				return
+			}
+			checker, ok := deps.Virtualizer.(interface {
+				CheckUnusedDisk(context.Context, string, string) error
+			})
+			if !ok {
+				writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeConflict, "节点不支持源磁盘引用校验", nil), requestID)
+				return
+			}
+			if err := checker.CheckUnusedDisk(ctx, deps.DiskDir, payload.SourceDiskRelativePath); err != nil {
+				writeAPIError(writer, deps.Logger, err, requestID)
+				return
+			}
+			if !diskReady {
+				diskErr = storage.CloneRetainedDisk(ctx, deps.DiskDir, payload.SourceDiskRelativePath, diskPath, payload.DiskGiB)
+			}
+		} else if payload.ImageRelativePath != "" {
 			if payload.ImageFormat == "ISO" {
 				info, inspectErr := storage.InspectContext(ctx, deps.ImageDir, payload.ImageRelativePath)
 				if inspectErr != nil {

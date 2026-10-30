@@ -375,7 +375,6 @@ export function DeploymentTemplateEditor({
           caps={caps}
           cpu={vcpu}
           isAdmin={true}
-          locked={!caps}
         />
         <div className="field-wide">
           <h4>数据盘（最多 8 块）</h4>

@@ -42,3 +42,35 @@ func TestCloneIndependentImageAndRefusesOverwrite(t *testing.T) {
 		t.Fatal("accepted changed image")
 	}
 }
+
+func TestCloneRetainedDiskIsIndependent(t *testing.T) {
+	if _, err := exec.LookPath("qemu-img"); err != nil {
+		t.Skip("requires qemu-img")
+	}
+	root := t.TempDir()
+	source := filepath.Join(root, "old.qcow2")
+	if out, err := exec.Command("qemu-img", "create", "-f", "qcow2", source, "1G").CombinedOutput(); err != nil {
+		t.Fatalf("%s: %v", out, err)
+	}
+	before, err := Inspect(root, "old.qcow2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(root, "new.qcow2")
+	if err := CloneRetainedDisk(context.Background(), root, "old.qcow2", target, 2); err != nil {
+		t.Fatal(err)
+	}
+	after, err := Inspect(root, "old.qcow2")
+	if err != nil || after.ChecksumSHA256 != before.ChecksumSHA256 {
+		t.Fatal("source changed", err)
+	}
+	if _, err := Inspect(root, "new.qcow2"); err != nil {
+		t.Fatal("clone not standalone", err)
+	}
+	if err := CloneRetainedDisk(context.Background(), root, "../escape", target, 2); err == nil {
+		t.Fatal("accepted traversal")
+	}
+	if err := CloneRetainedDisk(context.Background(), root, "old.qcow2", target, 2); err == nil {
+		t.Fatal("accepted overwrite")
+	}
+}

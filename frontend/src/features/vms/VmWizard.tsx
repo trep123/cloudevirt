@@ -34,6 +34,35 @@ export function VmWizard({
   onCreated: (id: string) => void;
   onCancel: () => void;
 }) {
+  const [diskSources, setDiskSources] = useState<
+      {
+        id: number;
+        name: string;
+        instance_name: string;
+        node: number;
+        node_name: string;
+        size_gib: number;
+        image: number;
+      }[]
+    >([]),
+    [sourceDisk, setSourceDisk] = useState("");
+  useEffect(() => {
+    if (!isAdmin) return;
+    let alive = true;
+    api
+      .request<{ results: typeof diskSources }>(
+        "/instances/system-disk-sources",
+      )
+      .then((v) => {
+        if (alive) setDiskSources(v.results);
+      })
+      .catch((e) => {
+        if (alive) setError(describeError(e));
+      });
+    return () => {
+      alive = false;
+    };
+  }, [isAdmin]);
   const [step, setStep] = useState(0),
     [images, setImages] = useState<Image[]>([]),
     [nodes, setNodes] = useState<Node[]>([]),
@@ -170,7 +199,8 @@ export function VmWizard({
   function next() {
     if (
       step === 0 &&
-      (!/^[A-Za-z0-9][A-Za-z0-9-]{1,62}[A-Za-z0-9]$/.test(name) || !image)
+      (!/^[A-Za-z0-9][A-Za-z0-9-]{1,62}[A-Za-z0-9]$/.test(name) ||
+        (!image && !sourceDisk))
     ) {
       setError("请选择镜像，并填写 3–64 位字母、数字或连字符名称。");
       return;
@@ -253,7 +283,9 @@ export function VmWizard({
             }
           : {}),
         name,
-        image: Number(image),
+        ...(sourceDisk
+          ? { existing_system_disk: Number(sourceDisk) }
+          : { image: Number(image) }),
         node: Number(node),
         vcpu: cpu,
         memory_mib: Math.round(memory * 1024),
@@ -381,6 +413,7 @@ export function VmWizard({
                       <select
                         value={version}
                         onChange={(e) => {
+                          setSourceDisk("");
                           setVersion(e.target.value);
                           setNode("");
                           const v = versions.find(
@@ -426,10 +459,42 @@ export function VmWizard({
                         placeholder="vm-web-01"
                       />
                     </Field>
+                    {isAdmin && (
+                      <Field
+                        label="已有系统磁盘（仅管理员）"
+                        hint="仅显示保留且未占用的系统盘；克隆为独立磁盘，原盘保留，不与部署模板或初始化混用。"
+                      >
+                        <select
+                          value={sourceDisk}
+                          onChange={(e) => {
+                            setSourceDisk(e.target.value);
+                            setPool("");
+                            setVersion("");
+                            setInitialize(false);
+                            const d = diskSources.find(
+                              (d) => d.id === Number(e.target.value),
+                            );
+                            if (d) {
+                              setImage("");
+                              setNode(String(d.node));
+                              setDisk(d.size_gib);
+                            }
+                          }}
+                        >
+                          <option value="">不使用已有系统盘</option>
+                          {diskSources.map((d) => (
+                            <option key={d.id} value={d.id}>
+                              {d.instance_name} · {d.size_gib} GiB ·{" "}
+                              {d.node_name} · {d.name}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                    )}
                     <Field label="操作系统镜像" hint="仅列出已就绪的镜像">
                       <select
                         value={image}
-                        disabled={locked.has("image")}
+                        disabled={Boolean(sourceDisk) || locked.has("image")}
                         onChange={(e) => {
                           setImage(e.target.value);
                           setNode("");
@@ -456,6 +521,7 @@ export function VmWizard({
                     >
                       <select
                         value={node}
+                        disabled={Boolean(sourceDisk)}
                         onChange={(e) => setNode(e.target.value)}
                       >
                         <option value="">选择可调度节点</option>
@@ -600,7 +666,7 @@ export function VmWizard({
                     <Field label="主网卡地址配置">
                       <select
                         value={pool}
-                        disabled={!caps?.static_networks}
+                        disabled={Boolean(sourceDisk) || !caps?.static_networks}
                         onChange={(e) => {
                           setPool(e.target.value);
                           if (e.target.value) setInitialize(true);
@@ -668,6 +734,7 @@ export function VmWizard({
                         type="checkbox"
                         checked={initialize}
                         disabled={
+                          Boolean(sourceDisk) ||
                           !caps?.cloud_init ||
                           !selectedImage?.supports_cloud_init ||
                           selectedImage?.format === "ISO"
@@ -709,7 +776,12 @@ export function VmWizard({
                       columns={2}
                       items={[
                         ["名称", name],
-                        ["镜像", selectedImage?.name],
+                        [
+                          "系统来源",
+                          sourceDisk
+                            ? `已有系统盘 #${sourceDisk}`
+                            : selectedImage?.name,
+                        ],
                         ["节点", selectedNode?.name],
                         ["计算资源", `${cpu} vCPU · ${memory} GB`],
                         ["存储", `${disk} GB · qcow2`],
@@ -784,7 +856,12 @@ export function VmWizard({
               columns={1}
               items={[
                 ["名称", name || "—"],
-                ["镜像", selectedImage?.name || "—"],
+                [
+                  "系统来源",
+                  sourceDisk
+                    ? `已有系统盘 #${sourceDisk}`
+                    : selectedImage?.name || "—",
+                ],
                 ["节点", selectedNode?.name || "—"],
                 ["规格", `${cpu} vCPU · ${memory} GB`],
                 ["系统盘", `${disk} GB · qcow2`],

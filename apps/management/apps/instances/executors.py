@@ -98,6 +98,12 @@ def execute_instance_create(task: Task) -> dict:
     creation_requested = False
     try:
         config = instance.creation_config or {}
+        if config.get('source_disk'):
+            from apps.instances.disk_sources import source_disk
+
+            retained = source_disk(actor, config['source_disk']['id'], instance.node_id)
+            if retained.relative_path != config['source_disk']['relative_path']:
+                raise AppError(ErrorCode.CONFLICT, '源磁盘路径已变化')
         source = config.get('image') or {
             'relative_path': instance.image.relative_path,
             'format': instance.image.format,
@@ -129,6 +135,15 @@ def execute_instance_create(task: Task) -> dict:
             start_after_create=config.get('start_after_create', True),
             autostart=instance.autostart,
         )
+        if config.get('source_disk'):
+            if capabilities.get('retained_disk_clone') is not True:
+                raise AppError(ErrorCode.CONFLICT, '节点需升级以支持已有系统盘克隆')
+            payload.update(
+                source_disk_relative_path=config['source_disk']['relative_path'],
+                image_relative_path='',
+                image_format='',
+                image_checksum='',
+            )
         creation_requested = True
         result = client.create_domain(payload)
         if (

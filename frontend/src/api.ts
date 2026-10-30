@@ -305,7 +305,8 @@ export const api = {
       | {
           name: string;
           node: number;
-          image: number;
+          image?: number;
+          existing_system_disk?: number;
           vcpu: number;
           memory_mib: number;
           disk_gib: number;
@@ -368,7 +369,9 @@ export const api = {
       { method: "DELETE" },
     ),
   tasks: (options: { page?: number; status?: string } = {}) =>
-    request<Paginated<import("./types").Task>>(`/tasks?page_size=20&page=${options.page || 1}&status=${encodeURIComponent(options.status || "")}`),
+    request<Paginated<import("./types").Task>>(
+      `/tasks?page_size=20&page=${options.page || 1}&status=${encodeURIComponent(options.status || "")}`,
+    ),
   task: (id: string) => request<import("./types").Task>(`/tasks/${id}`),
   cancelTask: (id: string) =>
     request<import("./types").Task>(`/tasks/${id}/cancel`, { method: "POST" }),

@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 from apps.audit.models import AuditAction
 from apps.audit.services import record_audit
 from apps.instances.actions import request_delete, start_action
-from apps.instances.models import Disk, Instance
+from apps.instances.models import Instance
 from apps.instances.serializers import (
     DiskSerializer,
     InstanceCreateSerializer,
@@ -63,6 +63,7 @@ class InstanceListCreateView(InstanceScopeMixin, generics.ListCreateAPIView):
             start_after_create=data.get('start_after_create', True),
             template=data.get('template'),
             template_version=data.get('template_version'),
+            existing_system_disk=data.get('existing_system_disk'),
             data_disks=data.get('data_disks', []),
             additional_networks=data.get('additional_networks', []),
             hardware=data.get('hardware', {}),

@@ -104,6 +104,7 @@ class InstanceCreateSerializer(serializers.Serializer):
     autostart = serializers.BooleanField(required=False, default=False)
     start_after_create = serializers.BooleanField(required=False, default=True)
     template = serializers.IntegerField(required=False, min_value=1)
+    existing_system_disk = serializers.IntegerField(required=False, min_value=1)
     template_version = serializers.IntegerField(required=False, min_value=1)
     hardware = HardwareSerializer(required=False, default=dict)
     initialization = InitializationSerializer(required=False)
@@ -126,6 +127,24 @@ class InstanceCreateSerializer(serializers.Serializer):
     def to_internal_value(self, data):
         from apps.templates.versions import resolve_version
 
+        if data.get('existing_system_disk'):
+            from apps.instances.disk_sources import source_disk
+
+            request = self.context.get('request')
+            if request is None:
+                raise serializers.ValidationError(
+                    {'existing_system_disk': '已有系统盘需要管理员授权'}
+                )
+            disk_id = self.fields['existing_system_disk'].run_validation(
+                data['existing_system_disk']
+            )
+            disk = source_disk(request.user, disk_id)
+            if data.get('template_version') or data.get('initialization'):
+                raise serializers.ValidationError(
+                    {'existing_system_disk': '已有系统盘不能与部署模板或初始化混用'}
+                )
+            data = {**data, 'image': disk.instance.image_id}
+            self.fields['image'].queryset = Image.objects.filter(pk=disk.instance.image_id)
         if data.get('template_version'):
             request = self.context.get('request')
             if request is None:
@@ -173,6 +192,13 @@ class InstanceCreateSerializer(serializers.Serializer):
             ):
                 raise serializers.ValidationError({'template': '模板不存在或无权访问'})
         image = data['image']
+        if data.get('existing_system_disk'):
+            from apps.instances.disk_sources import source_disk
+
+            disk = source_disk(request.user, data['existing_system_disk'], data['node'].pk)
+            if data['disk_gib'] < disk.size_gib:
+                raise serializers.ValidationError({'disk_gib': '新系统盘不能小于源系统盘'})
+            return data
         if image.node_id and image.node_id != data['node'].pk:
             raise serializers.ValidationError({'image': '镜像不在所选节点，请选择已同步镜像'})
         if (
