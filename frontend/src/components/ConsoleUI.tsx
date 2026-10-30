@@ -3,6 +3,7 @@ import { api } from "../api";
 import { describeError, StatusBadge } from "./ui";
 import { Icon } from "./icons";
 import { useState } from "react";
+import { monitorTask, taskPresentation } from "./taskMonitor";
 import type { Task } from "../types";
 
 export function PageHeader({
@@ -230,36 +231,43 @@ export function TaskProgressDrawer({
   onClose: () => void;
 }) {
   const [task, setTask] = useState<Task | null>(null),
-    [error, setError] = useState<string | null>(null);
+    [error, setError] = useState<string | null>(null),
+    [expanded, setExpanded] = useState(false);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
-    let alive = true,
-      working = false,
-      finished = false;
-    const load = async () => {
-      if (working || finished || document.hidden) return;
-      working = true;
-      try {
-        const result = await api.task(id);
-        finished = ["SUCCEEDED", "FAILED", "CANCELLED"].includes(result.status);
-        if (alive) {
-          setTask(result);
-          setError(null);
-        }
-      } catch (e) {
-        if (alive) setError(describeError(e));
-      } finally {
-        working = false;
-      }
-    };
-    void load();
-    const timer = window.setInterval(() => void load(), 4000);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
+    setTask(null); setError(null); setExpanded(false);
+    const monitor = monitorTask({
+      load: () => api.task(id),
+      update: result => {
+        setTask(result); setError(null);
+        const state = taskPresentation(result.status);
+        if (state.failed) setExpanded(true);
+        if (state.succeeded) closeRef.current();
+      },
+      error: e => { setError(describeError(e)); setExpanded(true); },
+      hidden: () => document.hidden,
+      schedule: (callback, ms) => window.setTimeout(callback, ms),
+      cancel: timer => window.clearTimeout(timer),
+    });
+    const resume = () => { if (!document.hidden) void monitor.refresh(); };
+    document.addEventListener("visibilitychange", resume);
+    return () => { monitor.stop(); document.removeEventListener("visibilitychange", resume); };
   }, [id]);
+  if (!expanded) return (
+    <aside className="task-receipt" role="status" aria-live="polite">
+      <div><strong>{task?.status === "FAILED" ? "任务执行失败" : task?.status === "CANCELLED" ? "任务已取消" : "任务已提交"}</strong><small>{task ? <StatusBadge status={task.status} /> : "正在确认任务状态"} · {id.slice(0, 8)}</small></div>
+      <button className="action sm" onClick={() => setExpanded(true)}>查看进度</button>
+      <button className="icon-btn" aria-label="关闭任务提示" onClick={onClose}>×</button>
+    </aside>
+  );
   return (
-    <Drawer title="任务进度" onClose={onClose}>
+    <Drawer title={task && taskPresentation(task.status).failed ? "任务未完成" : "任务进度"}
+      onClose={() => setExpanded(false)} footer={<>
+        <span className="muted">收起不取消后台任务</span>
+        <button className="action" onClick={() => setExpanded(false)}>收起</button>
+        <button className="action" onClick={onClose}>关闭提示</button>
+      </>}>
       <p className="mono">{id}</p>
       {error ? (
         <p role="alert">{error}。连接中断不代表任务失败，请查询后再操作。</p>

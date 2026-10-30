@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.instances.actions import release_cancelled_task
-from apps.tasks.models import Task, TaskStatus
+from apps.tasks.models import ACTIVE_STATUSES, Task, TaskStatus
 from apps.tasks.serializers import TaskDetailSerializer, TaskSerializer
 from apps.tasks.services import record_event
 from common.errors import AppError, ErrorCode
@@ -20,6 +20,17 @@ class TaskListView(TaskScopeMixin, generics.ListAPIView):
     permission_classes = [CanViewTask, RequiresPasswordChange]
     queryset = Task.objects.all()
     serializer_class = TaskSerializer
+
+    def get_queryset(self):
+        query = super().get_queryset().defer('payload', 'result', 'last_error_message')
+        status = self.request.query_params.get('status', '')
+        if status == 'active':
+            return query.filter(status__in=ACTIVE_STATUSES)
+        if status == 'failed':
+            return query.filter(status__in=[TaskStatus.FAILED, TaskStatus.CANCELLED])
+        if status:
+            return query.filter(status=status.upper())
+        return query
 
 
 class TaskDetailView(TaskScopeMixin, generics.RetrieveAPIView):

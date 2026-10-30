@@ -173,7 +173,7 @@ export function ImagesPage({ user }: { user: CurrentUser }) {
       <ErrorBanner message={error} />
       {notice ? <div className="banner banner-info">{notice}</div> : null}
       {canImport ? (
-        <BrowserUpload
+        <details className="resource-import"><summary>上传镜像 <span>从浏览器分片上传到节点</span></summary><BrowserUpload
           nodes={nodes}
           onChanged={() => void reload()}
           onSubmitted={(id) => {
@@ -182,10 +182,10 @@ export function ImagesPage({ user }: { user: CurrentUser }) {
               "文件已接收，后台正在检测镜像格式和 SHA-256；任务成功后才标记为可用。",
             );
           }}
-        />
+        /></details>
       ) : null}
       {canImport ? (
-        <Card title="登记已有镜像（文件需已存在于节点镜像目录）">
+        <details className="resource-import"><summary>登记节点已有镜像 <span>文件已存在时使用</span></summary><Card title="登记已有镜像（文件需已存在于节点镜像目录）">
           <form className="inline" onSubmit={submit}>
             <label>
               名称
@@ -249,7 +249,7 @@ export function ImagesPage({ user }: { user: CurrentUser }) {
             CLOUDVIRT_IMAGE_DIR 中，并允许 cloudvirt-agent
             用户读取。找不到本地文件时请使用上方浏览器上传。
           </p>
-        </Card>
+        </Card></details>
       ) : null}
       {editImage ? (
         <Card title={`编辑镜像：${editImage.name}`}>

@@ -642,7 +642,7 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
         </ConfirmOperationModal>
       ) : null}
       {taskId ? (
-        <TaskProgressDrawer id={taskId} onClose={() => setTaskId(null)} />
+        <TaskProgressDrawer id={taskId} onClose={() => { setTaskId(null); setRefresh(v => v + 1); }} />
       ) : null}
     </>
   );

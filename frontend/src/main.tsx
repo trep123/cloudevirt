@@ -8,6 +8,7 @@ import "./styles/console.css";
 import "./styles/app.css";
 import "./styles/hardware.css";
 import "./styles/console-studio.css";
+import "./styles/refinements.css";
 
 const container = document.getElementById("root");
 if (!container) {

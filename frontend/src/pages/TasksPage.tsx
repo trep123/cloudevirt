@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 
 import { api } from "../api";
 import {
   Card,
+  Pagination,
   DescList,
   Empty,
   EmptyState,
@@ -23,6 +24,9 @@ import type { CurrentUser, Task } from "../types";
 
 export function TasksPage({ user }: { user: CurrentUser }) {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [filter, setFilter] = useState("");
+  const [page, setPage] = useState(1), [total, setTotal] = useState(0);
+  const generation = useRef(0);
   const [selected, setSelected] = useState<Task | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -31,16 +35,26 @@ export function TasksPage({ user }: { user: CurrentUser }) {
   const canRetry = can(user, "tasks.retry_task");
 
   const reload = useCallback(async () => {
+    const token = ++generation.current;
     try {
-      setTasks((await api.tasks()).results);
-      setError(null);
+      const result = await api.tasks({ page, status: filter === "FAILED" ? "failed" : filter });
+      if (generation.current === token) { setTasks(result.results); setTotal(result.count); setError(null); }
     } catch (err) {
-      setError(describeError(err));
+      if (generation.current === token) setError(describeError(err));
     }
-  }, []);
+  }, [page, filter]);
 
   useEffect(() => {
-    void reload();
+    let working = false;
+    const update = async () => {
+      if (document.hidden || working) return;
+      working = true;
+      try { await reload(); } finally { working = false; }
+    };
+    void update();
+    const timer = window.setInterval(() => void update(), 5000);
+    document.addEventListener("visibilitychange", update);
+    return () => { generation.current++; clearInterval(timer); document.removeEventListener("visibilitychange", update); };
   }, [reload]);
 
   async function open(task: Task) {
@@ -78,17 +92,7 @@ export function TasksPage({ user }: { user: CurrentUser }) {
     }
   }
 
-  const [filter, setFilter] = useState("");
-  const groups: Record<string, string[]> = {
-    active: ["PENDING", "RUNNING", "VALIDATING", "PREPARING", "CREATING", "VERIFYING", "RECONCILING"],
-    SUCCEEDED: ["SUCCEEDED"],
-    FAILED: ["FAILED", "CANCELLED"],
-  };
-  const visible = filter
-    ? tasks.filter((t) => groups[filter].includes(t.status))
-    : tasks;
-  const countOf = (k: string) =>
-    tasks.filter((t) => groups[k].includes(t.status)).length;
+  const visible = tasks;
 
   return (
     <>
@@ -107,16 +111,16 @@ export function TasksPage({ user }: { user: CurrentUser }) {
         <Segmented
           label="任务状态"
           value={filter}
-          onChange={setFilter}
+          onChange={value => { setFilter(value); setPage(1); }}
           options={[
-            { value: "", label: "全部", count: tasks.length },
-            { value: "active", label: "进行中", count: countOf("active") },
-            { value: "SUCCEEDED", label: "成功", count: countOf("SUCCEEDED") },
-            { value: "FAILED", label: "失败 / 取消", count: countOf("FAILED") },
+            { value: "", label: "全部" },
+            { value: "active", label: "进行中" },
+            { value: "SUCCEEDED", label: "成功" },
+            { value: "FAILED", label: "失败 / 取消" },
           ]}
         />
       </Toolbar>
-      <Card flush title="任务列表" description={`共 ${tasks.length} 个任务`}>
+      <Card flush title="任务列表" description={`共 ${total} 个任务 · 自动刷新，隐藏页面暂停`}>
         {visible.length === 0 ? (
           <EmptyState icon="task" title="暂无任务" />
         ) : (
@@ -182,6 +186,7 @@ export function TasksPage({ user }: { user: CurrentUser }) {
           </div>
         )}
       </Card>
+      <Pagination page={page} pageSize={20} total={total} onChange={setPage} />
       {selected ? (
         <Drawer
           title={`任务详情 ${selected.id.slice(0, 8)}`}

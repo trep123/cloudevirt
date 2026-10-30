@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Drawer } from "../components/ConsoleUI";
 import { api } from "../api";
 import {
   Card,
@@ -430,8 +431,10 @@ export function UsersPage() {
         </div>
       </Card>
       {editing !== undefined && (
-        <Card title={editing === null ? "创建用户" : `编辑 ${form.username}`}>
-          <form onSubmit={save}>
+        <Drawer wide title={editing === null ? "创建用户" : `编辑 ${form.username}`}
+          onClose={() => { if (!busy) setEditing(undefined); }}>
+          <ErrorBanner message={error} />
+          <form className="account-editor" onSubmit={save}>
             <div className="inline">
               <label>
                 用户名
@@ -491,39 +494,14 @@ export function UsersPage() {
                   />
                 </label>
               )}
-              <label>
-                角色（可多选）
-                <select
-                  multiple
-                  required
-                  value={form.roles}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      roles: Array.from(
-                        event.target.selectedOptions,
-                        (option) => option.value,
-                      ),
-                    })
-                  }
-                >
-                  {roles
-                    .filter(
-                      (item) => item.enabled || form.roles.includes(item.code),
-                    )
-                    .map((item) => (
-                      <option
-                        key={item.id}
-                        disabled={
-                          !item.enabled && !form.roles.includes(item.code)
-                        }
-                        value={item.code}
-                      >
-                        {item.display_name} · {item.code}
-                      </option>
-                    ))}
-                </select>
-              </label>
+              <fieldset className="account-role-options"><legend>角色（至少选择一个）</legend>
+                {roles.filter(item => item.enabled || form.roles.includes(item.code)).map(item => (
+                  <label key={item.id}><input type="checkbox" disabled={busy || (!item.enabled && !form.roles.includes(item.code))}
+                    checked={form.roles.includes(item.code)} onChange={event => setForm({ ...form,
+                      roles: event.target.checked ? [...form.roles, item.code] : form.roles.filter(code => code !== item.code),
+                    })} /><span>{item.display_name}<small className="muted">{item.code}</small></span></label>
+                ))}
+              </fieldset>
               <label>
                 节点范围
                 <input
@@ -572,7 +550,7 @@ export function UsersPage() {
                 </label>
               ))}
             </div>
-            <button className="action primary" disabled={busy} type="submit">
+            <button className="action primary" disabled={busy || !form.roles.length} type="submit">
               {busy ? "保存中…" : "保存用户"}
             </button>
             <button
@@ -584,10 +562,10 @@ export function UsersPage() {
               取消
             </button>
           </form>
-        </Card>
+        </Drawer>
       )}
       {detail && (
-        <Card title={`用户详情：${detail.username}`}>
+        <Drawer wide title={`用户详情：${detail.username}`} onClose={() => setDetail(null)}>
           <button className="action" onClick={() => setDetail(null)}>
             关闭详情
           </button>
@@ -628,7 +606,7 @@ export function UsersPage() {
               </tbody>
             </table>
           </div>
-        </Card>
+        </Drawer>
       )}
     </>
   );

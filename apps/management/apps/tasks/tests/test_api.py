@@ -126,3 +126,25 @@ class TaskApiTests(TestCase):
 
         results = response.json()['results']
         self.assertEqual(results[0]['id'], str(other.pk))
+
+    def test_server_side_status_filter_keeps_owner_boundary(self):
+        self.client.force_login(self.operator)
+        Task.objects.create(
+            type='NODE_REFRESH',
+            resource_type='node',
+            resource_id='2',
+            status='FAILED',
+            requested_by=self.operator,
+        )
+        Task.objects.create(
+            type='NODE_REFRESH',
+            resource_type='node',
+            resource_id='3',
+            status='FAILED',
+            requested_by=self.viewer,
+        )
+        active = self.client.get('/api/v1/tasks?status=active').json()
+        self.assertEqual(active['count'], 1)
+        failed = self.client.get('/api/v1/tasks?status=failed').json()
+        self.assertEqual(failed['count'], 1)
+        self.assertEqual(failed['results'][0]['resource_id'], '2')

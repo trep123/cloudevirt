@@ -367,8 +367,8 @@ export const api = {
       `/instances/${id}?purge_disk=${purgeDisk ? "true" : "false"}`,
       { method: "DELETE" },
     ),
-  tasks: () =>
-    request<Paginated<import("./types").Task>>("/tasks?page_size=50"),
+  tasks: (options: { page?: number; status?: string } = {}) =>
+    request<Paginated<import("./types").Task>>(`/tasks?page_size=20&page=${options.page || 1}&status=${encodeURIComponent(options.status || "")}`),
   task: (id: string) => request<import("./types").Task>(`/tasks/${id}`),
   cancelTask: (id: string) =>
     request<import("./types").Task>(`/tasks/${id}/cancel`, { method: "POST" }),

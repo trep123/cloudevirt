@@ -68,17 +68,18 @@ def available_resources(node) -> dict[str, int]:
         memory=Sum('memory_reserved_mib'),
         disk=Sum('disk_reserved_bytes'),
     )
-    used_vcpu = 0
-    used_memory = 0
     allocated = Instance.objects.filter(node=node, is_deleted=False).exclude(
         reservations__status__in=[ReservationStatus.HELD, ReservationStatus.RELEASED]
     )
-    for instance in allocated:
-        used_vcpu += instance.vcpu
-        used_memory += instance.memory_mib
-    used_disk = 0
-    for disk in Disk.objects.filter(instance__in=allocated):
-        used_disk += (disk.size_gib or 0) * GIB
+    usage = allocated.aggregate(vcpu=Sum('vcpu'), memory=Sum('memory_mib'))
+    used_vcpu = usage['vcpu'] or 0
+    used_memory = usage['memory'] or 0
+    used_disk = (
+        Disk.objects.filter(instance__in=allocated)
+        .exclude(status=DiskStatus.DELETED)
+        .aggregate(size=Sum('size_gib'))['size']
+        or 0
+    ) * GIB
 
     return {
         'vcpu': (node.cpu_total or 0) - used_vcpu - (reserved['vcpu'] or 0),

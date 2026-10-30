@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, useRef } from "react";
 import {
+  PageHeader,
   ConfirmOperationModal,
   TaskProgressDrawer,
 } from "../components/ConsoleUI";
@@ -9,6 +10,7 @@ import { Pagination } from "../components/ui";
 import { api } from "../api";
 import {
   Card,
+  Toolbar,
   Empty,
   ErrorBanner,
   StatusBadge,
@@ -17,7 +19,7 @@ import {
 } from "../components/ui";
 import type { Disk } from "../types";
 
-export function DisksPage() {
+export function DisksPage({ embedded = false }: { embedded?: boolean }) {
   const [disks, setDisks] = useState<Disk[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("");
@@ -61,9 +63,8 @@ export function DisksPage() {
 
   return (
     <>
-      <div className="page-head">
-        <h2>磁盘与卷</h2>
-        <div className="actions">
+      {!embedded && <PageHeader title="我的数据卷" description="查看磁盘归属与使用状态，清理保留或已卸载的数据卷" />}
+      <Toolbar>
           <label>
             实例 ID
             <input
@@ -108,40 +109,19 @@ export function DisksPage() {
           <button className="action" onClick={() => void reload()}>
             刷新
           </button>
-        </div>
-      </div>
+      </Toolbar>
       <ErrorBanner message={error} />
       <div className="banner banner-info">
         默认仅显示现有磁盘；已删除磁盘仅在选择“已删除（历史记录）”时显示，不计入分配容量。虚拟机删除后保留的磁盘、硬件页面卸载的数据盘均可在此清理。删除会永久移除磁盘及其内部快照；使用中或仍有依赖的磁盘由后端拒绝删除。
       </div>
-      <Card title="当前页磁盘概况">
-        <div className="stats">
-          <div className="stat">
-            <span>磁盘总数</span>
-            <strong>{disks.length}</strong>
-          </div>
-          <div className="stat">
-            <span>就绪</span>
-            <strong>{readyCount}</strong>
-          </div>
-          <div className="stat">
-            <span>失败</span>
-            <strong>{failedCount}</strong>
-          </div>
-          <div className="stat">
-            <span>分配容量</span>
-            <strong>{totalSize} GiB</strong>
-          </div>
-        </div>
-      </Card>
-      <Card title={`共 ${total} 个磁盘`}>
+      <Card flush title={`数据卷 · ${total}`} description={`当前页：就绪 ${readyCount} · 失败 ${failedCount} · 分配 ${totalSize} GiB`}>
         {loading ? (
           <Empty text="加载中…" />
         ) : disks.length === 0 ? (
           <Empty text="暂无磁盘" />
         ) : (
           <div className="table-scroll">
-            <table>
+            <table className="data-table">
               <thead>
                 <tr>
                   <th>文件名</th>
@@ -152,7 +132,7 @@ export function DisksPage() {
                   <th>虚拟容量</th>
                   <th>设备</th>
                   <th>路径</th>
-                  <th>操作</th>
+                  <th className="col-actions">操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -182,7 +162,7 @@ export function DisksPage() {
                     <td>{disk.status === "DELETED" ? "—" : formatBytes(disk.virtual_size_bytes)}</td>
                     <td className="mono">{disk.target_dev}</td>
                     <td className="mono muted">{disk.relative_path}</td>
-                    <td>
+                    <td className="col-actions">
                       <button
                         className="action danger sm"
                         disabled={!disk.can_delete || busy}

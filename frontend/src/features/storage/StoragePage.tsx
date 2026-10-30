@@ -24,7 +24,7 @@ export function StoragePage() {
     free = fresh?.reduce((s, n) => s + (n.storage_free_bytes || 0), 0);
   return (
     <>
-      <PageHeader title="存储管理" description="节点目录容量与已登记数据卷">
+      <PageHeader title="数据卷与存储" description="节点容量采集与磁盘生命周期管理">
         <button className="action" onClick={() => navigate("/admin/images")}>
           镜像管理
         </button>
@@ -62,7 +62,7 @@ export function StoragePage() {
           note="过期数据不参与容量合计"
         />
       </div>
-      <DisksPage />
+      <DisksPage embedded />
     </>
   );
 }

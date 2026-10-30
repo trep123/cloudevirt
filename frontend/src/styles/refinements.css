@@ -1,0 +1,33 @@
+/* Shared desktop refinements: denser work area, readable controls, contained tables. */
+:root { --side-w:232px; --page-pad-x:24px; --card-radius:8px; --row-h:48px; }
+.shell .page-head { align-items:center; gap:16px; margin-bottom:16px; }
+.shell .page-actions { margin-left:auto; justify-content:flex-end; }
+.shell .toolbar { gap:16px; padding:16px; border-radius:8px; }
+.shell .toolbar-filters { min-width:0; flex-wrap:wrap; align-items:flex-end; gap:12px; }
+.shell .toolbar-filters>label { display:flex; flex-direction:column; gap:6px; font-size:12px; color:var(--text-secondary,#64748b); }
+.shell .toolbar-filters>label.check { flex-direction:row; align-items:center; align-self:center; }
+.shell .toolbar input[type=number] { width:128px; }
+.shell .toolbar select { min-width:144px; }
+.shell .resource-stats { gap:16px; margin-bottom:16px; }
+.shell .data-table th,.shell .data-table td { padding-top:12px; padding-bottom:12px; }
+.shell .data-table td.mono { font-size:12px; }
+.shell .detail-tabs { flex-wrap:nowrap; overflow-x:auto; scrollbar-width:thin; }
+.shell .detail-tabs>button { flex-shrink:0; }
+.console-drawer .mono,.console-drawer p { overflow-wrap:anywhere; }
+.console-drawer .task-events { padding-left:20px; display:grid; gap:12px; }
+.console-drawer:focus-visible { outline:2px solid var(--primary,#2563eb); }
+.task-receipt { position:fixed; right:24px; bottom:24px; z-index:80; display:flex; align-items:center; gap:16px; max-width:calc(100vw - 32px); padding:16px; border:1px solid var(--border,#e2e8f0); border-left:3px solid var(--primary,#2563eb); border-radius:8px; background:white; box-shadow:0 8px 24px #17233814; }
+.task-receipt>div { display:grid; gap:6px; }
+.task-receipt small { display:flex; align-items:center; gap:8px; color:var(--text-secondary,#64748b); }
+@media(max-width:1280px) { :root { --page-pad-x:16px; } .shell .page-actions { gap:8px; } }
+@media(max-width:720px) { .task-receipt { right:16px; bottom:16px; gap:8px; padding:12px; } }
+
+.account-editor>.inline { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.account-editor .account-role-options { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:12px; padding:16px; border:1px solid var(--border,#e2e8f0); border-radius:8px; }
+.account-role-options>label { display:flex; align-items:center; gap:8px; min-width:160px; }
+.account-role-options small { display:block; }
+.resource-import { margin-bottom:16px; background:white; border:1px solid var(--border,#e2e8f0); border-radius:8px; overflow:hidden; }
+.resource-import>summary { padding:16px 20px; font-weight:600; cursor:pointer; }
+.resource-import>summary>span { margin-left:12px; font-weight:400; color:var(--text-secondary,#64748b); font-size:12px; }
+.shell .resource-import>.card { margin:0; border:0; box-shadow:none; border-top:1px solid var(--border,#e2e8f0); border-radius:0; }
+@media(max-width:720px) { .account-editor>.inline { grid-template-columns:1fr; } }
