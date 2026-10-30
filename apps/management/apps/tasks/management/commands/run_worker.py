@@ -106,6 +106,12 @@ class Command(BaseCommand):
         try:
             result = execute_task(task)
         except Exception as exc:
+            from common.errors import AppError
+            if not isinstance(exc, AppError):
+                logger.exception(
+                    '任务执行发生未处理异常',
+                    extra={'task_id': str(task.pk), 'task_type': task.type},
+                )
             mark_failed(task, exc)
             self.stdout.write(self.style.WARNING(f'任务失败: {task.pk} {exc}'))
         else:
