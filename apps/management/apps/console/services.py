@@ -3,6 +3,7 @@
 import base64
 import hashlib
 import hmac
+import ipaddress
 import json
 import socket
 from datetime import timedelta
@@ -63,6 +64,14 @@ def agent_target(instance):
     return f'{endpoint.scheme}://{host}:{port}/vnc', endpoint.hostname
 
 
+def ssh_agent_target(instance):
+    target, host = agent_target(instance)
+    endpoint = urlsplit(target)
+    if endpoint.scheme != 'https' and not ipaddress.ip_address(endpoint.hostname).is_loopback:
+        raise AppError(ErrorCode.CONFLICT, '远程节点 Web SSH 必须配置可信 HTTPS Agent 地址')
+    return target.removesuffix('/vnc') + '/ssh', host
+
+
 @transaction.atomic
 def create_desktop(request, instance):
     require_transport(request)
@@ -109,6 +118,8 @@ def ticket(session):
         'domain': session.instance.libvirt_domain_name,
         'exp': int(timezone.now().timestamp()) + 30,
     }
+    if session.protocol == 'ssh':
+        payload.update(protocol='ssh', address=session.ssh_address)
     encoded = (
         base64.urlsafe_b64encode(json.dumps(payload, separators=(',', ':')).encode())
         .decode()

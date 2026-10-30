@@ -177,6 +177,7 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
           </button>
         ) : null}
         <RowMenu>
+          {can("instances.ssh_instance") && <button disabled={!running || vm.observed_state_is_stale} onClick={() => navigate(`${prefix}/vms/${vm.id}/ssh`)}>Web SSH</button>}
           {running && can("instances.reboot_instance") ? (
             <button
               disabled={active || busy}
@@ -271,6 +272,7 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
               )
             }
           >
+            {detail && can("instances.ssh_instance") && <button className="action" disabled={detail.observed_state !== "RUNNING" || detail.observed_state_is_stale} onClick={() => navigate(`${prefix}/vms/${detail.id}/ssh`)}>Web SSH</button>}
             {detail ? actions(detail) : null}
           </PageHeader>
           <ErrorBanner message={error} />

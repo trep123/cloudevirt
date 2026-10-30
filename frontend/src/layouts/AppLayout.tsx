@@ -153,6 +153,10 @@ function breadcrumb(path: string, admin: boolean, sections: Section[]) {
     crumbs.push({
       label: parts[2] === "create" ? "创建" : /^\d+$/.test(parts[2]) ? `详情 #${parts[2]}` : parts[2],
     });
+  if (parts[3] === "ssh" && /^\d+$/.test(parts[2] || "")) {
+    crumbs[crumbs.length - 1].to = `/${parts[0]}/vms/${parts[2]}`;
+    crumbs.push({ label: "Web SSH" });
+  }
   return crumbs;
 }
 

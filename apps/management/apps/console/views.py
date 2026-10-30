@@ -24,6 +24,7 @@ from .services import (
     login_hash,
     origin_matches,
     require_transport,
+    ssh_agent_target,
     ticket,
 )
 
@@ -52,6 +53,13 @@ def owned_desktop(request, pk, lock=False):
         target_type='instance',
         target_id=str(session.instance_id),
     )
+    if session.protocol == 'ssh':
+        check_permission(
+            request.user,
+            'instances.ssh_instance',
+            target_type='instance',
+            target_id=str(session.instance_id),
+        )
     return session
 
 
@@ -79,7 +87,10 @@ class DesktopAuthorizeView(APIView):
         session = owned_desktop(request, match[1], lock=True)
         if session.claimed or session.revoked or session.expires_at <= timezone.now():
             raise AppError(ErrorCode.PERMISSION_DENIED, '控制台票据已使用或过期，请重新授权')
-        target, host = agent_target(session.instance)
+        if session.protocol == 'ssh':
+            target, host = ssh_agent_target(session.instance)
+        else:
+            target, host = agent_target(session.instance)
         session.claimed = True
         session.expires_at = timezone.now() + timedelta(seconds=90)
         session.save(update_fields=['claimed', 'expires_at'])

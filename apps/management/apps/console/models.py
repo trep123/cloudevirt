@@ -10,6 +10,10 @@ class ConsoleSession(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     instance = models.ForeignKey('instances.Instance', on_delete=models.PROTECT)
+    protocol = models.CharField(
+        max_length=8, default='vnc', choices=[('vnc', 'VNC'), ('ssh', 'SSH')]
+    )
+    ssh_address = models.GenericIPAddressField(null=True, blank=True)
     login_hash = models.CharField(max_length=64)
     claimed = models.BooleanField(default=False)
     revoked = models.BooleanField(default=False)

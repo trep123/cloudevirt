@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 
@@ -35,6 +36,7 @@ type DomainLister interface {
 
 // Dependencies 是路由所需的外部依赖。
 type Dependencies struct {
+	SSHDial          func(string, string, time.Duration) (net.Conn, error)
 	Version          string
 	Token            string
 	StoragePaths     []string
@@ -81,6 +83,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	api.HandleFunc("POST /api/v1/domains/{name}/hardware", hardwareHandler(deps))
 	api.HandleFunc("POST /api/v1/domains/{name}/display", displayHandler(deps))
 	api.HandleFunc("GET /api/v1/domains/{name}/addresses", domainAddressesHandler(deps))
+	api.HandleFunc("GET /api/v1/domains/{name}/ssh-targets", sshTargetsHandler(deps))
 	api.HandleFunc("GET /api/v1/domains/{name}/interfaces", domainInterfacesHandler(deps))
 	api.HandleFunc("GET /api/v1/networks", networkListHandler(deps))
 	api.HandleFunc("GET /api/v1/disks", diskListHandler(deps))
@@ -98,6 +101,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	mux.Handle("/api/", protected)
 	mux.Handle("/api/v1/", protected)
 	// 控制台 WebSocket 使用短签名凭证，不使用静态令牌头
+	mux.HandleFunc("GET /ssh", sshProxyHandler(deps))
 	mux.HandleFunc("GET /vnc", vncProxyHandler(deps))
 	return RequestIDMiddleware(mux)
 }

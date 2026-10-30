@@ -19,9 +19,11 @@ import (
 var consoleID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 type consoleTicket struct {
-	SID    string `json:"sid"`
-	Domain string `json:"domain"`
-	Exp    int64  `json:"exp"`
+	Protocol string `json:"protocol,omitempty"`
+	Address  string `json:"address,omitempty"`
+	SID      string `json:"sid"`
+	Domain   string `json:"domain"`
+	Exp      int64  `json:"exp"`
 }
 type consoleConnection struct {
 	browser net.Conn

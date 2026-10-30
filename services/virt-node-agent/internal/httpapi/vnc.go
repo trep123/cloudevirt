@@ -31,7 +31,7 @@ func vncProxyHandler(deps Dependencies) http.HandlerFunc {
 		requestID := RequestIDFromContext(request.Context())
 		ticket, valid := parseConsoleTicket(deps.Token, request.Header.Get("X-Console-Ticket"))
 		origin, originError := url.Parse(request.Header.Get("Origin"))
-		if !valid || originError != nil || origin.Host != request.Host || (origin.Scheme != "http" && origin.Scheme != "https") || request.URL.RawQuery != "" {
+		if !valid || (ticket.Protocol != "" && ticket.Protocol != "vnc") || originError != nil || origin.Host != request.Host || (origin.Scheme != "http" && origin.Scheme != "https") || request.URL.RawQuery != "" {
 			writeAPIError(writer, deps.Logger, apierr.New(
 				apierr.CodeUnauthorized, "控制台凭证无效", nil,
 			), requestID)

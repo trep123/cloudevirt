@@ -265,3 +265,11 @@ test("upload chunks send raw binary with CSRF, offset, cookies and progress", as
     globalThis.XMLHttpRequest = previous;
   }
 });
+
+test("Web SSH route requires separate permission and preserves admin/user route boundaries",()=>{
+  const user={console_scope:"user",permissions:["instances.view_instance"]};
+  assert.equal(canEnterRoute(user,"/app/vms/4/ssh"),false);
+  user.permissions.push("instances.ssh_instance");
+  assert.equal(canEnterRoute(user,"/app/vms/4/ssh"),true);
+  assert.equal(canEnterRoute(user,"/admin/vms/4/ssh"),false);
+});

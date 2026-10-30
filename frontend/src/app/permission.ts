@@ -2,6 +2,7 @@ import type { CurrentUser } from "../types";
 
 export function canEnterRoute(user: CurrentUser, path: string): boolean {
   if (path.startsWith("/admin") && user.console_scope !== "admin") return false;
+  if (/\/vms\/\d+\/ssh$/.test(path) && !user.permissions.includes("instances.ssh_instance")) return false;
   const key = path.split("/")[2];
   if (
     ["clusters", "pools", "storage-pools", "settings"].includes(key) &&

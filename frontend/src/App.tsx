@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { api, ApiError } from "./api";
 import { usePath, navigate } from "./app/router";
 import { canEnterRoute } from "./app/permission";
@@ -24,6 +24,8 @@ import { TasksPage } from "./pages/TasksPage";
 import { TemplatesPage } from "./pages/TemplatesPage";
 import { describeError, EmptyState } from "./components/ui";
 import type { CurrentUser } from "./types";
+const VmSSHPage = lazy(() => import("./features/vms/VmSSHPage"));
+
 export default function App() {
   const path = usePath(),
     [user, setUser] = useState<CurrentUser | null>(null),
@@ -122,6 +124,8 @@ export default function App() {
   else if (key === "storage-pools" && admin) content = <StoragePoolsPage />;
   else if (key === "snapshots") content = <SnapshotsPage canManage={user.permissions.includes("instances.manage_snapshot_instance")} />;
   else if (key === "settings" && admin) content = <SettingsPage />;
+  else if (/^\/(admin|app)\/vms\/\d+\/ssh$/.test(path))
+    content = <Suspense fallback={<p role="status">正在加载 SSH 终端…</p>}><VmSSHPage id={Number(path.split("/")[3])} admin={admin} /></Suspense>;
   else if (/^\/(admin|app)\/vms\/\d+\/console$/.test(path))
     content = <VmConsolePage id={Number(path.split("/")[3])} admin={admin} />;
   else if (key === "vms") content = <VmsPage user={user} path={path} />;
