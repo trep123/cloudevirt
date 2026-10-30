@@ -26,7 +26,18 @@ func InspectExistingDisk(ctx context.Context, root, relative string) (FileInfo, 
 	}
 	out, err := exec.CommandContext(ctx, "qemu-img", "info", "--output=json", "--", path).Output()
 	if err != nil {
-		return FileInfo{}, apierr.New(apierr.CodeConflict, "系统盘不可读取或正被占用", err)
+		message := "系统盘检查失败，请查看节点 Agent 日志"
+		if failure, ok := err.(*exec.ExitError); ok {
+			detail := strings.ToLower(string(failure.Stderr))
+			if strings.Contains(detail, "permission denied") || strings.Contains(detail, "operation not permitted") {
+				message = "节点 Agent 无权读取系统盘，请检查文件读取权限及上级目录穿越权限（root 可读取不代表 Agent 可读取）"
+			} else if strings.Contains(detail, "lock") || strings.Contains(detail, "another process") {
+				message = "系统盘被其他进程锁定，请先关闭使用该磁盘的虚拟机；禁止强制共享可写系统盘"
+			}
+		} else if _, ok := err.(*exec.Error); ok {
+			message = "节点无法执行 qemu-img，请检查 qemu-utils 安装"
+		}
+		return FileInfo{}, apierr.New(apierr.CodeConflict, message, err)
 	}
 	var meta qemuImgOutput
 	if err = json.Unmarshal(out, &meta); err != nil {
