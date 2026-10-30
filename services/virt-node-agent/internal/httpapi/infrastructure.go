@@ -78,6 +78,18 @@ func infrastructureHandler(deps Dependencies, snapshots bool) http.HandlerFunc {
 		}
 		infrastructureMutation.Lock()
 		defer infrastructureMutation.Unlock()
+		if !snapshots && body.Action == "delete" {
+			root, err := diskRootForPool(r.Context(), deps, body.Name)
+			if err != nil || root != body.Path {
+				fail(apierr.New(apierr.CodeConflict, "存储池目录已变化或不可用", err))
+				return
+			}
+			remover, ok := deps.Virtualizer.(interface { DeleteDirectoryPool(context.Context, string, string) error })
+			if !ok { fail(apierr.New(apierr.CodeConflict, "节点需升级", nil)); return }
+			if err := remover.DeleteDirectoryPool(r.Context(), body.Name, root); err != nil { fail(err); return }
+			writeJSON(w, 200, map[string]any{"deleted": true})
+			return
+		}
 		var err error
 		if snapshots {
 			if body.Action != "create" && !deps.AllowDestructive {

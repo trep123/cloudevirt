@@ -364,6 +364,41 @@ class StoragePoolAccessView(APIView):
     permission_classes = ADMIN_PERMISSIONS
 
     @transaction.atomic
+    def delete(self, request, node_id, name):
+        node = get_object_or_404(Node.objects.select_for_update(), pk=node_id, is_deleted=False)
+        pool = get_object_or_404(
+            ManagedStoragePool.objects.select_for_update(), node=node, name=name
+        )
+        from apps.instances.models import Disk, ResourceReservation
+
+        if (
+            pool.instances.filter(is_deleted=False).exists()
+            or Disk.objects.filter(instance__storage_pool=pool).exclude(status='DELETED').exists()
+            or pool.reservations.filter(status='HELD').exists()
+        ):
+            raise AppError(ErrorCode.CONFLICT, '存储池仍有关联虚拟机、保留磁盘或资源预留，不能删除')
+        if not node.is_schedulable:
+            raise AppError(ErrorCode.NODE_OFFLINE)
+        result = AgentClient(node.endpoint, timeout=180).request_json(
+            '/api/v1/storage-pools',
+            'POST',
+            {'name': pool.name, 'path': pool.path, 'action': 'delete'},
+        )
+        if result.get('deleted') is not True:
+            raise AppError(ErrorCode.CONFLICT, '节点未确认存储池删除')
+        pool.instances.update(storage_pool=None)
+        ResourceReservation.objects.filter(storage_pool=pool).update(storage_pool=None)
+        audit(
+            request,
+            'STORAGE_POOL_DELETE',
+            'storage_pool',
+            pool.pk,
+            {'name': name, 'path': pool.path},
+        )
+        pool.delete()
+        return Response({'deleted': True})
+
+    @transaction.atomic
     def put(self, request, node_id, name):
         node = get_object_or_404(Node.objects.select_for_update(), pk=node_id, is_deleted=False)
         pool = get_object_or_404(

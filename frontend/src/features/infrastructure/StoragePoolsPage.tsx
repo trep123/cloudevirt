@@ -224,6 +224,15 @@ export function StoragePoolsPage() {
                               setError(null);
                             }}>分配使用权限</button>
                           )}
+                          {p.managed && <button className="action danger" disabled={busy} onClick={async () => {
+                            if (!window.confirm(`删除存储池 ${p.name}？仅移除空池定义与授权，保留目录；有关联资源或目录非空时将拒绝删除。`)) return;
+                            setBusy(true); setError(null);
+                            try {
+                              await api.request(`/admin/nodes/${node}/storage-pools/${encodeURIComponent(p.name)}/access/`, { method: "DELETE" });
+                              setRefresh((value) => value + 1);
+                            } catch (err) { setError(describeError(err)); }
+                            finally { setBusy(false); }
+                          }}>删除</button>}
                         </td>
                       </tr>
                     );

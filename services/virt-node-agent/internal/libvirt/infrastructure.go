@@ -135,6 +135,16 @@ func (c *Client) CreateDirectoryPoolAt(ctx context.Context, name, root, target s
 	return err
 }
 
+// DeleteDirectoryPool removes only an empty pool definition; it never deletes files.
+func (c *Client) DeleteDirectoryPool(ctx context.Context, name, path string) error {
+	entries, err := os.ReadDir(path)
+	if err != nil { return err }
+	if len(entries) != 0 { return apierr.New(apierr.CodeConflict, "存储池目录非空，请先处理文件", nil) }
+	if _, err := c.run(ctx, "pool-destroy", name); err != nil { return err }
+	_, err = c.run(ctx, "pool-undefine", name)
+	return err
+}
+
 type Snapshot struct {
 	Name      string `xml:"name" json:"name"`
 	State     string `xml:"state" json:"state"`
