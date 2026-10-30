@@ -65,6 +65,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	api := http.NewServeMux()
 	api.HandleFunc("GET /api/v1/node/physical-interfaces", bridgeProxyHandler(deps))
 	api.HandleFunc("POST /api/v1/node/bridges", bridgeProxyHandler(deps))
+	api.HandleFunc("DELETE /api/v1/node/bridges", bridgeProxyHandler(deps))
 	api.HandleFunc("GET /api/v1/node/capabilities", creationCapabilitiesHandler(deps))
 	api.HandleFunc("POST /api/v1/console-sessions/{id}/lease", consoleLeaseHandler(deps))
 	api.HandleFunc("DELETE /api/v1/console-sessions/{id}", consoleLeaseHandler(deps))

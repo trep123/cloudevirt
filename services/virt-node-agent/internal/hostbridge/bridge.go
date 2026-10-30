@@ -431,6 +431,15 @@ func Serve() error {
 		return err
 	}
 	mux := http.NewServeMux()
+	mux.HandleFunc("DELETE /api/v1/node/bridges", func(w http.ResponseWriter, r *http.Request) {
+		var s Spec
+		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&s); err != nil { failure(w, err); return }
+		if err := m.Delete(r.Context(), s); err != nil { failure(w, err); return }
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]bool{"deleted": true})
+	})
 	mux.HandleFunc("GET /api/v1/node/physical-interfaces", func(w http.ResponseWriter, r *http.Request) {
 		v, e := m.Inventory(r.Context())
 		if e != nil {
@@ -456,6 +465,37 @@ func Serve() error {
 		json.NewEncoder(w).Encode(map[string]any{"type": s.Type, "bridge": s.Bridge, "uplink": s.Uplink, "verified": true})
 	})
 	return (&http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second}).Serve(listener)
+}
+
+func (m *Manager) Delete(ctx context.Context, s Spec) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !validName.MatchString(s.Bridge) || !validName.MatchString(s.Uplink) || (s.Type != "OVS" && s.Type != "BRIDGE") { return fmt.Errorf("网桥参数无效") }
+	b, err := os.ReadFile(m.file(s))
+	if err != nil { return err }
+	var saved Spec
+	if json.Unmarshal(b, &saved) != nil || saved != s { return fmt.Errorf("网桥托管配置不一致") }
+	links, routes, err := m.snapshot(ctx)
+	if err != nil { return err }
+	exists := false
+	for _, l := range links {
+		if l.Name == s.Bridge {
+			exists = true
+			if reason := unsafe(l, routes, ""); reason != "" { return fmt.Errorf("网桥正在使用：%s", reason) }
+		}
+		if l.Master == s.Bridge && l.Name != s.Uplink { return fmt.Errorf("网桥仍有其他端口") }
+	}
+	if exists {
+		if s.Type == "OVS" {
+			ports, err := m.Run(ctx, "ovs-vsctl", "--timeout=8", "list-ports", s.Bridge)
+			if err != nil { return err }
+			for _, port := range strings.Fields(string(ports)) { if port != s.Uplink { return fmt.Errorf("网桥仍有其他端口") } }
+			if _, err := m.Run(ctx, "ovs-vsctl", "--timeout=8", "--if-exists", "del-br", s.Bridge); err != nil { return err }
+		} else {
+			if _, err := m.Run(ctx, "ip", "link", "delete", "dev", s.Bridge, "type", "bridge"); err != nil { return err }
+		}
+	}
+	return os.Remove(m.file(s))
 }
 func failure(w http.ResponseWriter, e error) {
 	w.Header().Set("Content-Type", "application/json")

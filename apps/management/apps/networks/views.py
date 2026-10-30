@@ -114,11 +114,8 @@ class NetworkDetailView(generics.RetrieveUpdateDestroyAPIView):
     def perform_destroy(self, instance) -> None:
         """软删除网络，并提示调用方检查实例引用。"""
         instance = Network.objects.select_for_update().get(pk=instance.pk)
-        if instance.managed:
-            raise AppError(
-                ErrorCode.CONFLICT,
-                '托管网桥不能仅删除登记记录；需先在节点安全解除物理接口并清理配置',
-            )
+        if instance.is_management:
+            raise AppError(ErrorCode.CONFLICT, '管理网络禁止删除')
         from apps.networks.models import InstanceNIC, IPPool
 
         if (
@@ -128,6 +125,22 @@ class NetworkDetailView(generics.RetrieveUpdateDestroyAPIView):
             raise AppError(ErrorCode.CONFLICT, '网络仍被地址池或虚拟机网卡引用')
         if Instance.objects.filter(network_name=instance.name, is_deleted=False).exists():
             raise AppError(ErrorCode.CONFLICT, '网络仍被虚拟机引用，不能删除')
+        if instance.managed:
+            from apps.nodes.client import AgentClient
+            from apps.nodes.models import Node
+
+            node = Node.objects.select_for_update().get(pk=instance.node_id)
+            if not node.is_schedulable:
+                raise AppError(ErrorCode.NODE_OFFLINE)
+            if instance.provisioning_status in ['PENDING', 'CREATING']:
+                raise AppError(ErrorCode.CONFLICT, '网桥创建任务尚未结束')
+            result = AgentClient(node.endpoint).request_json(
+                '/api/v1/node/bridges',
+                'DELETE',
+                {key: getattr(instance, key) for key in ['type', 'bridge', 'uplink']},
+            )
+            if result.get('deleted') is not True:
+                raise AppError(ErrorCode.CONFLICT, '节点未确认网桥已删除')
         instance.is_deleted = True
         instance.save(update_fields=['is_deleted', 'updated_at'])
         record_audit(

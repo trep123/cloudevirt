@@ -753,10 +753,9 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
                             </button>
                             <button
                               className="action sm danger"
-                              disabled={network.managed}
                               title={
                                 network.managed
-                                  ? "托管网桥需先在节点安全解除物理网卡，不能仅删除登记记录"
+                                  ? "删除前校验引用，并拆除节点托管网桥"
                                   : undefined
                               }
                               onClick={() => setDeleting(network)}
@@ -851,7 +850,7 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
         <ConfirmOperationModal
           target={deleting.name}
           operation="删除网络记录"
-          description="仅删除平台网络记录，不拆除宿主机网桥和 DHCP 服务。后端会拒绝删除仍被虚拟机引用的网络。"
+          description="托管网桥将同时从节点拆除并解除物理网卡连接。仍被虚拟机、地址池或其他端口使用，或承载地址和路由时将拒绝删除。"
           busy={busy}
           error={error}
           onCancel={() => setDeleting(null)}
