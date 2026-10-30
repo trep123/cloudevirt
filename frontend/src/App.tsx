@@ -17,6 +17,7 @@ import { AuditPage } from "./features/audit/AuditPage";
 import { UsersAndRolesPage } from "./features/users/UsersAndRolesPage";
 import { ImagesPage } from "./pages/ImagesPage";
 import { ChangePasswordGate, LoginPage } from "./pages/LoginPage";
+import { ProfilePage } from "./pages/ProfilePage";
 import { MonitoringPage } from "./pages/MonitoringPage";
 import { NetworksPage } from "./pages/NetworksPage";
 import { NodesPage } from "./pages/NodesPage";
@@ -159,9 +160,8 @@ export default function App() {
     content = <MonitoringPage user={user} />;
   else if (key === "profile")
     content = (
-      <ChangePasswordGate
+      <ProfilePage
         user={user}
-        onDone={() => navigate(prefix + "/dashboard")}
         onLogout={() => void logout()}
       />
     );

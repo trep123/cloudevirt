@@ -193,13 +193,18 @@ export function ChangePasswordGate({
 }) {
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    setBusy(true);
     setError(null);
+    if (newPassword !== confirmPassword) {
+      setError("两次输入的新密码不一致");
+      return;
+    }
+    setBusy(true);
     try {
       await api.changePassword(oldPassword, newPassword);
       onDone();
@@ -220,16 +225,32 @@ export function ChangePasswordGate({
             当前密码
             <input
               type="password"
+              autoComplete="current-password"
               value={oldPassword}
               onChange={(e) => setOldPassword(e.target.value)}
+              required
             />
           </label>
           <label>
             新密码（至少 12 位）
             <input
               type="password"
+              autoComplete="new-password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
+              minLength={12}
+              required
+            />
+          </label>
+          <label>
+            确认新密码
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              minLength={12}
+              required
             />
           </label>
           {error ? <div className="banner banner-error">{error}</div> : null}
