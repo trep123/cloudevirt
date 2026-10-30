@@ -215,7 +215,7 @@ export function DeploymentTemplateEditor({
           ? `编辑部署模板：${editing.template_name} v${editing.version}`
           : "新建部署模板"
       }
-      description="将规格、镜像与设备配置固化为可交付的版本。"
+      description="将计算资源、镜像与设备配置发布为可部署的版本。"
       className="deployment-editor"
     >
       <div className="deployment-flow">
@@ -456,7 +456,7 @@ export function DeploymentTemplateEditor({
         </label>
         <p className="muted field-wide">
           硬件、数据盘、附加网卡在用户部署时固定继承；每台实例生成独立磁盘与
-          MAC。模板沿用所属规格的公开 / 用户分配规则。
+          MAC。模板按上方设置的公开范围与用户授权分配。
         </p>
         <p className="muted field-wide">
           发布后
