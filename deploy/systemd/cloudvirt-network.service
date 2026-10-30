@@ -8,6 +8,7 @@ Before=cloudvirt-agent.service
 Type=simple
 User=root
 Group=cloudvirt-agent
+SupplementaryGroups=cloudvirt
 EnvironmentFile=-/etc/cloudvirt/network.env
 ExecStart=/opt/cloudvirt/services/virt-node-agent/bin/virt-node-agent --network-service
 RuntimeDirectory=cloudvirt-network
