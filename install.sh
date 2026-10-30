@@ -11,6 +11,7 @@ WEB_ROOT=/var/www/cloudvirt
 REPO_URL="${CLOUDVIRT_REPO_URL:-https://github.com/trep123/cloudevirt.git}"
 REPO_REF="${CLOUDVIRT_REPO_REF:-master}"
 SOURCE_DIR=""
+OFFLINE_DIR="${CLOUDVIRT_OFFLINE_DIR:-}"
 DOMAIN="${CLOUDVIRT_DOMAIN:-}"
 PORT="${CLOUDVIRT_PORT:-443}"
 HTTPS=true
@@ -25,6 +26,7 @@ CloudVirt / Ubuntu 26.x amd64
   sudo bash install.sh [options]
 
   --source DIR          Install this complete local source tree (preferred).
+  --offline-dir DIR     Use verified local Node/Python/npm/Go packages.
   --domain HOST         Hostname or IPv4 address; defaults to primary host IP.
   --port PORT           HTTPS listen port; default 443.
   --http                Use HTTP instead of self-signed HTTPS (default port 80).
@@ -34,6 +36,8 @@ CloudVirt / Ubuntu 26.x amd64
 
 If no local source is found, clone CLOUDVIRT_REPO_URL at CLOUDVIRT_REPO_REF.
 Unpublished local changes are included only when installing the complete source package.
+With --source, bundled offline/linux-amd64 packages are selected automatically.
+An explicitly selected --offline-dir must be complete and match the source locks.
 OVS variables: CLOUDVIRT_OVS_SUBNET, CLOUDVIRT_OVS_GATEWAY,
 CLOUDVIRT_OVS_DHCP_START, CLOUDVIRT_OVS_DHCP_END, CLOUDVIRT_UPLINK.
 Initial credentials: /etc/cloudvirt/initial-admin.txt (root only).
@@ -58,9 +62,9 @@ trap cleanup EXIT
 
 while (($#)); do
     case "$1" in
-        --source|--domain|--port)
+        --source|--offline-dir|--domain|--port)
             (($# >= 2)) || die "Missing value for $1"
-            case "$1" in --source) SOURCE_DIR=$2;; --domain) DOMAIN=$2;; --port) PORT=$2;; esac
+            case "$1" in --source) SOURCE_DIR=$2;; --offline-dir) OFFLINE_DIR=$2;; --domain) DOMAIN=$2;; --port) PORT=$2;; esac
             shift 2;;
         --http) HTTPS=false; [[ "$PORT" != 443 ]] || PORT=80; shift;;
         --enable-ovs) ENABLE_OVS=true; shift;;
@@ -130,6 +134,32 @@ if [[ -z "$SOURCE_DIR" ]]; then
 fi
 if [[ "$ENABLE_OVS" == true && ! -f "$SOURCE_DIR/scripts/install_ovs.sh" ]]; then
     die "OVS helper is not present in the selected source; use the complete deployment package"
+fi
+if [[ -z "$OFFLINE_DIR" && -f "$SOURCE_DIR/offline/linux-amd64/manifest.sha256" ]]; then
+    OFFLINE_DIR="$SOURCE_DIR/offline/linux-amd64"
+fi
+if [[ -n "$OFFLINE_DIR" ]]; then
+    STEP=offline-packages
+    OFFLINE_DIR=$(realpath -e -- "$OFFLINE_DIR")
+    [[ -d "$OFFLINE_DIR/wheels" && -f "$OFFLINE_DIR/manifest.sha256" &&
+       -f "$OFFLINE_DIR/source.sha256" && -f "$OFFLINE_DIR/npm-cache.tar.gz" &&
+       -f "$OFFLINE_DIR/go-vendor.tar.gz" ]] || die "Incomplete offline package directory: $OFFLINE_DIR"
+    log "Verifying local package checksums and source dependency locks"
+    (cd "$OFFLINE_DIR"; sha256sum --status -c manifest.sha256) || die "Offline package checksum mismatch"
+    python3 - "$SOURCE_DIR" "$OFFLINE_DIR/source.sha256" <<'PY' || die "Offline packages do not match source dependency locks"
+import hashlib
+import pathlib
+import sys
+
+source = pathlib.Path(sys.argv[1])
+for entry in pathlib.Path(sys.argv[2]).read_text().splitlines():
+    expected, name = entry.split(maxsplit=1)
+    path = source / name.strip().lstrip('*')
+    # Source archives prepared on Windows may use CRLF for text lock files.
+    actual = hashlib.sha256(path.read_bytes().replace(b'\r\n', b'\n')).hexdigest()
+    if actual != expected:
+        raise SystemExit(f'Lock file mismatch: {name}')
+PY
 fi
 if [[ -e "$APP_DIR/apps/management/manage.py" && "$SOURCE_DIR" != "$APP_DIR" ]]; then
     install -d -m 0700 /var/backups/cloudvirt
@@ -218,15 +248,23 @@ STEP=runtime
 log "Installing private Node.js 24 runtime with official SHA-256 verification"
 NODE_HOME="$APP_DIR/runtime/node"
 if [[ ! -x "$NODE_HOME/bin/node" ]] || [[ $("$NODE_HOME/bin/node" -p 'process.versions.node.split(".")[0]') != 24 ]]; then
-    curl --proto '=https' --tlsv1.2 -fSL --retry 3 --connect-timeout 20 \
-        https://nodejs.org/dist/latest-v24.x/SHASUMS256.txt -o "$TMP_DIR/SHASUMS256.txt"
-    NODE_FILE=$(awk '$2 ~ /^node-v24\.[0-9]+\.[0-9]+-linux-x64.tar.xz$/ {print $2; exit}' "$TMP_DIR/SHASUMS256.txt")
-    [[ "$NODE_FILE" =~ ^node-v24\.[0-9]+\.[0-9]+-linux-x64.tar.xz$ ]] || die "Cannot resolve official Node.js 24 download"
-    curl --proto '=https' --tlsv1.2 -fSL --retry 3 --connect-timeout 20 \
-        "https://nodejs.org/dist/latest-v24.x/$NODE_FILE" -o "$TMP_DIR/$NODE_FILE"
-    (cd "$TMP_DIR"; awk -v file="$NODE_FILE" '$2 == file' SHASUMS256.txt | sha256sum -c -)
+    if [[ -n "$OFFLINE_DIR" ]]; then
+        node_archives=("$OFFLINE_DIR"/node-v24.*-linux-x64.tar.xz)
+        [[ ${#node_archives[@]} == 1 && -f "${node_archives[0]}" ]] || die "Offline bundle must contain one Node.js 24 linux-x64 archive"
+        NODE_ARCHIVE=${node_archives[0]}
+        (cd "$OFFLINE_DIR"; sha256sum --status -c node-official.sha256) || die "Node.js archive differs from its official SHA-256"
+    else
+        curl --proto '=https' --tlsv1.2 -fSL --retry 3 --connect-timeout 20 \
+            https://nodejs.org/dist/latest-v24.x/SHASUMS256.txt -o "$TMP_DIR/SHASUMS256.txt"
+        NODE_FILE=$(awk '$2 ~ /^node-v24\.[0-9]+\.[0-9]+-linux-x64.tar.xz$/ {print $2; exit}' "$TMP_DIR/SHASUMS256.txt")
+        [[ "$NODE_FILE" =~ ^node-v24\.[0-9]+\.[0-9]+-linux-x64.tar.xz$ ]] || die "Cannot resolve official Node.js 24 download"
+        curl --proto '=https' --tlsv1.2 -fSL --retry 3 --connect-timeout 20 \
+            "https://nodejs.org/dist/latest-v24.x/$NODE_FILE" -o "$TMP_DIR/$NODE_FILE"
+        (cd "$TMP_DIR"; awk -v file="$NODE_FILE" '$2 == file' SHASUMS256.txt | sha256sum -c -)
+        NODE_ARCHIVE="$TMP_DIR/$NODE_FILE"
+    fi
     install -d -m 0755 "$NODE_HOME"
-    tar -xJf "$TMP_DIR/$NODE_FILE" --strip-components=1 -C "$NODE_HOME"
+    tar -xJf "$NODE_ARCHIVE" --strip-components=1 -C "$NODE_HOME"
 fi
 export PATH="$NODE_HOME/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 export CLOUDVIRT_NPM_REGISTRY="${CLOUDVIRT_NPM_REGISTRY:-https://registry.npmjs.org}"
@@ -248,11 +286,24 @@ path.write_text(json.dumps(lock, indent=2) + '\n')
 PY
 log "Building Python backend, React frontend and Go Agent"
 python3 -m venv "$APP_DIR/.venv"
-"$APP_DIR/.venv/bin/python" -m pip install --upgrade pip
-"$APP_DIR/.venv/bin/python" -m pip install -r "$APP_DIR/apps/management/requirements/prod.txt"
-(cd "$APP_DIR/frontend"; npm ci --registry="$CLOUDVIRT_NPM_REGISTRY"; npm run build)
+if [[ -n "$OFFLINE_DIR" ]]; then
+    "$APP_DIR/.venv/bin/python" -m pip install --no-index --find-links "$OFFLINE_DIR/wheels" --upgrade pip
+    "$APP_DIR/.venv/bin/python" -m pip install --no-index --find-links "$OFFLINE_DIR/wheels" -r "$APP_DIR/apps/management/requirements/prod.txt"
+    install -d -m 0700 "$TMP_DIR/npm-cache"
+    tar -xzf "$OFFLINE_DIR/npm-cache.tar.gz" -C "$TMP_DIR/npm-cache"
+    (cd "$APP_DIR/frontend"; npm ci --offline --cache "$TMP_DIR/npm-cache" --registry="$CLOUDVIRT_NPM_REGISTRY" --no-audit --no-fund; npm run build)
+else
+    "$APP_DIR/.venv/bin/python" -m pip install --upgrade pip
+    "$APP_DIR/.venv/bin/python" -m pip install -r "$APP_DIR/apps/management/requirements/prod.txt"
+    (cd "$APP_DIR/frontend"; npm ci --registry="$CLOUDVIRT_NPM_REGISTRY"; npm run build)
+fi
 install -d -m 0755 "$APP_DIR/services/virt-node-agent/bin"
-(cd "$APP_DIR/services/virt-node-agent"; CGO_ENABLED=0 GOTOOLCHAIN=auto go build -trimpath -o bin/virt-node-agent ./cmd/virt-node-agent)
+if [[ -n "$OFFLINE_DIR" ]]; then
+    tar -xzf "$OFFLINE_DIR/go-vendor.tar.gz" -C "$APP_DIR/services/virt-node-agent"
+    (cd "$APP_DIR/services/virt-node-agent"; CGO_ENABLED=0 GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off GOFLAGS=-mod=vendor go build -trimpath -o bin/virt-node-agent ./cmd/virt-node-agent)
+else
+    (cd "$APP_DIR/services/virt-node-agent"; CGO_ENABLED=0 GOTOOLCHAIN=auto GOFLAGS=-mod=mod go build -trimpath -o bin/virt-node-agent ./cmd/virt-node-agent)
+fi
 rsync -a --chmod=D755,F644 "$APP_DIR/frontend/dist/" "$WEB_ROOT/"
 chmod -R a+rX "$APP_DIR/.venv"
 chmod 0755 "$APP_DIR/services/virt-node-agent/bin/virt-node-agent"

@@ -47,7 +47,7 @@ done
 assert_path() {
     local target=$1
     case "$target" in
-        /opt/cloudvirt/apps|/opt/cloudvirt/frontend|/opt/cloudvirt/.venv|/opt/cloudvirt/runtime|/var/www/cloudvirt) ;;
+        /opt/cloudvirt/apps|/opt/cloudvirt/frontend|/opt/cloudvirt/.venv|/opt/cloudvirt/runtime|/opt/cloudvirt/offline|/var/www/cloudvirt) ;;
         *) die "Path is not an approved application directory: $target";;
     esac
     [[ ! -L "$target" && $(realpath -m -- "$target") == "$target" ]] || die "Refusing symlinked application path: $target"
@@ -72,7 +72,7 @@ for job in reconcile_broadcasts reconcile_workspaces; do
     TIMERS+=("cloudvirt-$job.timer")
     SERVICES+=("cloudvirt-$job.service")
 done
-TARGETS=("$APP_DIR/apps" "$APP_DIR/frontend" "$APP_DIR/.venv" "$APP_DIR/runtime" "$WEB_ROOT")
+TARGETS=("$APP_DIR/apps" "$APP_DIR/frontend" "$APP_DIR/.venv" "$APP_DIR/runtime" "$APP_DIR/offline" "$WEB_ROOT")
 log "Mode: $([[ "$APPLY" == true ]] && printf APPLY || printf PLAN-ONLY)"
 log "Stop/disable/remove units: ${TIMERS[*]} ${SERVICES[*]}"
 log "Remove CloudVirt nginx site, console/security/HSTS snippets and application directories: ${TARGETS[*]}"

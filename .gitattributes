@@ -1,0 +1,6 @@
+*.sh text eol=lf
+apps/management/requirements/*.txt text eol=lf
+frontend/package*.json text eol=lf
+services/virt-node-agent/go.mod text eol=lf
+services/virt-node-agent/go.sum text eol=lf
+offline/linux-amd64/*.sha256 text eol=lf

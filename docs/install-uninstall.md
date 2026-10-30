@@ -9,6 +9,7 @@
 - 应用/配置/Web 根目录校验拒绝符号链接及重定向父目录。
 - 安装时保留 nginx 默认站点和已有站点，由 CloudVirt 的 `server_name` 处理指定域名；同时检查 API、前端入口及网络 helper。
 - 卸载时将 CloudVirt 的控制台、安全响应头和 HSTS snippet 一起备份并移除；nginx 校验失败时恢复这些文件。
+- 仓库内 Ubuntu 26 amd64 离线包已按源锁文件校验；在隔离目录用 `--no-index`、`npm ci --offline` 和 `GOPROXY=off` 完成 Python 安装、前端构建与 Go Agent 构建。
 - 验证范围为语法、当前主机包可用性、现有服务和 HTTP 响应；没有在全新系统上重装。镜像源、外网下载、硬件虚拟化、磁盘空间等仍由安装时实际检查决定。
 
 ## 安装
@@ -18,6 +19,8 @@
 ```bash
 sudo bash install.sh --source "$PWD" --domain 192.168.100.100
 ```
+
+仓库内的 `offline/linux-amd64` 包会自动优先使用；也可指定 `--offline-dir /path/to/linux-amd64`。包和源码依赖锁均通过 SHA-256 校验，不匹配时停止安装。该包包含 Node.js、Python wheels、npm 缓存、Go vendor；从本地完整源码执行 `--source` 不会访问 GitHub 克隆源码。apt 软件包仍取自系统配置的仓库或镜像。重新生成方式见 [offline/README.md](../offline/README.md)。
 
 按需增加 --enable-ovs、--allow-destructive；重复安装保留数据库与密钥并备份，迁移前停止控制平面任务。不要在无维护窗口的生产环境直接重装。
 
@@ -34,7 +37,7 @@ sudo bash uninstall.sh --apply     # 真正卸载控制平面
 
 - 停止并禁用 CloudVirt API、worker、Agent、已知定时任务及旧版控制平面服务，删除其明确列出的 systemd 单元和安装器 Agent drop-in。
 - 移除 CloudVirt nginx 站点及控制台、安全响应头、HSTS snippet。先备份并校验 nginx；移除后再次校验，其他站点仍依赖这些 snippet 时恢复配置并中止，不停止共享 nginx。
-- 只递归删除固定白名单中的 /opt/cloudvirt/apps、frontend、.venv、runtime 和 /var/www/cloudvirt。拒绝符号链接/重定向父目录和内部挂载点，不接受自定义删除路径。
+- 只递归删除固定白名单中的 /opt/cloudvirt/apps、frontend、.venv、runtime、offline 和 /var/www/cloudvirt。拒绝符号链接/重定向父目录和内部挂载点，不接受自定义删除路径。
 - 仅接受存在有效 root-owned 0600 install-secrets.env 标记的安装器部署。与安装器共用 flock，避免并发。
 
 ### 明确保留

@@ -23,18 +23,20 @@
 | 操作系统 | Ubuntu 26.04.1 LTS | 目标环境为 Ubuntu Server LTS |
 | Python | 3.14.4 | 后端运行时 |
 | Go | 1.26.8 | Agent 构建 |
-| Node / npm | v24.22.1 / 12.2.1 | 前端构建 |
+| Node / npm | Node 24.x / 随附 npm | 前端构建；安装器优先使用仓库内校验过的离线包 |
 | PostgreSQL | 18.6 | 业务数据库 |
 | qemu-utils | 10.2.1 | 镜像与磁盘操作（qemu-img） |
 
-宿主机侧还需 `qemu-kvm`、`libvirt-daemon-system`、`libvirt-clients` 与可用的 `/dev/kvm`（本机已开启嵌套虚拟化并通过验证，见 docs/ENVIRONMENT_DEPLOYMENT.md 第 1.3 节）。
+宿主机侧还需 `qemu-system-x86`、`libvirt-daemon-system`、`libvirt-clients` 与可用的 `/dev/kvm`（本机已开启嵌套虚拟化并通过验证，见 docs/ENVIRONMENT_DEPLOYMENT.md 第 1.3 节）。
 缺少 `/dev/kvm` 的环境可执行 `CLOUDVIRT_ALLOW_TCG=true bash scripts/precheck.sh` 以 QEMU TCG 模拟降级运行（退出码 2，仅用于开发测试，性能不代表生产）。
 
 ## 3. 快速开始
 
 Ubuntu 26 新系统的一键部署（在完整项目根目录执行）：
 
-    sudo bash install.sh --enable-ovs --allow-destructive
+    sudo bash install.sh --source "$PWD" --enable-ovs --allow-destructive
+
+仓库内 `offline/linux-amd64` 包会自动优先用于 Node.js、Python、npm 和 Go 依赖；`--source` 使用本地源码，避免安装时从 GitHub 克隆。apt 包仍使用系统软件源。详见 [离线包说明](offline/README.md)。
 
 参数、证书、初始口令和部署限制见 [Ubuntu 26 部署说明](docs/INSTALL_UBUNTU_26.md)。
 
