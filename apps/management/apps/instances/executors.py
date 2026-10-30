@@ -157,6 +157,15 @@ def execute_instance_create(task: Task) -> dict:
             payload.update(
                 use_existing_disk=True, image_relative_path='', image_format='', image_checksum=''
             )
+        mode = config.get('clone_mode', 'direct' if config.get('existing_system_file') else 'full')
+        if mode == 'linked' and capabilities.get('linked_clone') is not True:
+            raise AppError(ErrorCode.CONFLICT, '节点尚不支持链接克隆，请升级 Agent')
+        if mode in {'full', 'linked'}:
+            payload.pop('use_existing_disk', None)
+            if config.get('existing_system_file'):
+                payload['source_disk_relative_path'] = config['existing_system_file']
+            if mode == 'linked':
+                payload['clone_mode'] = 'linked'
         creation_requested = True
         result = client.create_domain(payload)
         if (

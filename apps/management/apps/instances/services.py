@@ -147,6 +147,7 @@ def create_instance(
     template_version: int | None = None,
     existing_system_disk: int | None = None,
     existing_system_file: str | None = None,
+    clone_mode: str | None = None,
     data_disks: list[int] | None = None,
     additional_networks: list[str] | None = None,
     hardware: dict | None = None,
@@ -174,6 +175,13 @@ def create_instance(
     Raises:
         AppError: 参数非法、节点不可调度、镜像不可用或资源不足。
     """
+    clone_mode = clone_mode or ('direct' if existing_system_file else 'full')
+    if (
+        clone_mode not in {'full', 'linked', 'direct'}
+        or (clone_mode == 'direct' and not existing_system_file)
+        or (image and image.format == 'ISO' and clone_mode == 'linked')
+    ):
+        raise AppError(ErrorCode.INVALID_ARGUMENT, '系统盘克隆模式无效')
     validate_spec(name=name, vcpu=vcpu, memory_mib=memory_mib, disk_gib=disk_gib)
     data_disks = data_disks or []
     additional_networks = additional_networks or []
@@ -297,6 +305,10 @@ def create_instance(
                     or instance.creation_config.get('hardware', {}) != hardware
                     or instance.creation_config.get('initialization') != initialization
                     or instance.creation_config.get('static_networks', {}) != static_networks
+                    or instance.creation_config.get(
+                        'clone_mode', 'direct' if existing_system_file else 'full'
+                    )
+                    != clone_mode
                     or instance.creation_config.get('existing_system_file') != existing_system_file
                     or instance.creation_config.get('source_disk', {}).get('id')
                     != existing_system_disk
@@ -313,10 +325,12 @@ def create_instance(
             if image is not None or existing_system_disk or template_version or initialization:
                 raise AppError(ErrorCode.CONFLICT, '直接挂载来源配置冲突')
             info = inspect_file(user, locked_node, existing_system_file)
-            if disk_gib != (info['virtual_size_bytes'] + GIB - 1) // GIB:
+            minimum = (info['virtual_size_bytes'] + GIB - 1) // GIB
+            if disk_gib < minimum or (clone_mode == 'direct' and disk_gib != minimum):
                 raise AppError(ErrorCode.CONFLICT, '系统盘容量已变化')
-            disk_name = existing_system_file
-            disk_bytes = sum(data_disks) * GIB
+            if clone_mode == 'direct':
+                disk_name = existing_system_file
+                disk_bytes = sum(data_disks) * GIB
         source = None
         if existing_system_disk:
             source = source_disk(user, existing_system_disk, locked_node.pk, lock=True)
@@ -369,6 +383,7 @@ def create_instance(
             initialization_status='PENDING' if initialization else 'NOT_CONFIGURED',
             creation_config={
                 'schema_version': 1,
+                'clone_mode': clone_mode,
                 'existing_system_file': existing_system_file,
                 **(
                     {'source_disk': {'id': source.pk, 'relative_path': source.relative_path}}

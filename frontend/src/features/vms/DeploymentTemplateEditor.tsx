@@ -29,6 +29,7 @@ export function DeploymentTemplateEditor({
   editing?: DeploymentVersion | null;
   onSaved: () => void;
 }) {
+  const [cloneMode, setCloneMode] = useState("full");
   const [images, setImages] = useState<Image[]>([]),
     [name, setName] = useState(editing?.template_name || ""),
     [description, setDescription] = useState(editing?.description || ""),
@@ -58,6 +59,7 @@ export function DeploymentTemplateEditor({
   useEffect(() => {
     if (!editing) return;
     const c = editing.configuration;
+    setCloneMode(String(c.clone_mode || "full"));
     setImage(String(c.image || ""));
     setNode(String(c.node || ""));
     setVcpu(Number(c.vcpu || 2));
@@ -152,6 +154,7 @@ export function DeploymentTemplateEditor({
       if (!name.trim() || !image || !node)
         throw Error("请填写模板名称、选择可用镜像和目标节点");
       const configuration = {
+        clone_mode: cloneMode,
         node: Number(node),
         ...(initialize
           ? {
@@ -187,6 +190,7 @@ export function DeploymentTemplateEditor({
             configuration,
             constraints: {
               locked: [
+                "clone_mode",
                 "hardware",
                 "data_disks",
                 "image",
@@ -368,6 +372,24 @@ export function DeploymentTemplateEditor({
             value={systemDisk}
             onChange={(e) => setSystemDisk(Number(e.target.value))}
           />
+        </label>
+        <label>
+          系统盘克隆方式
+          <select
+            value={cloneMode}
+            onChange={(e) => setCloneMode(e.target.value)}
+          >
+            <option value="full">全克隆（独立系统盘）</option>
+            <option
+              value="linked"
+              disabled={
+                images.find((i) => i.id === Number(image))?.format === "ISO" ||
+                caps?.linked_clone !== true
+              }
+            >
+              链接克隆（差异盘，依赖只读基础盘）
+            </option>
+          </select>
         </label>
         <HardwareFields
           value={hardware}

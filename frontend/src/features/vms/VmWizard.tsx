@@ -34,6 +34,7 @@ export function VmWizard({
   onCreated: (id: string) => void;
   onCancel: () => void;
 }) {
+  const [cloneMode, setCloneMode] = useState("full");
   const [diskSources, setDiskSources] = useState<
       { name: string; virtual_size_bytes: number }[]
     >([]),
@@ -296,6 +297,7 @@ export function VmWizard({
               },
             }
           : {}),
+        clone_mode: cloneMode,
         hardware,
         data_disks: dataDisks,
         additional_networks: extraNetworks,
@@ -511,6 +513,9 @@ export function VmWizard({
                             checked={useFile}
                             onChange={(e) => {
                               setUseFile(e.target.checked);
+                              setCloneMode(
+                                e.target.checked ? "direct" : "full",
+                              );
                               setFileChecked(false);
                               setSourceDisk("");
                               setVersion("");
@@ -599,6 +604,7 @@ export function VmWizard({
                         disabled={useFile || locked.has("image")}
                         onChange={(e) => {
                           setImage(e.target.value);
+                          setCloneMode("full");
                           setNode("");
                         }}
                       >
@@ -679,13 +685,45 @@ export function VmWizard({
                   </>
                 ) : step === 2 ? (
                   <>
+                    <Field
+                      label="系统盘克隆方式"
+                      hint={
+                        cloneMode === "linked"
+                          ? "建立 QCOW2 差异盘，依赖节点保存的只读基础盘；首次使用会准备基础副本，后续克隆更快。"
+                          : cloneMode === "direct"
+                            ? "直接写入所选原文件，不复制。"
+                            : "生成独立系统盘，创建后不依赖源盘。"
+                      }
+                    >
+                      <select
+                        value={cloneMode}
+                        onChange={(e) => setCloneMode(e.target.value)}
+                      >
+                        <option value="full">全克隆（独立系统盘）</option>
+                        <option
+                          value="linked"
+                          disabled={
+                            selectedImage?.format === "ISO" ||
+                            caps?.linked_clone !== true
+                          }
+                        >
+                          链接克隆（差异盘）
+                        </option>
+                        {useFile && (
+                          <option value="direct">直接使用原文件</option>
+                        )}
+                      </select>
+                    </Field>
                     <Field label="系统盘（GB）" hint="1–2048 的整数">
                       <input
                         type="number"
                         min="1"
                         max={diskLimit}
                         value={disk}
-                        disabled={useFile || locked.has("disk_gib")}
+                        disabled={
+                          (useFile && cloneMode === "direct") ||
+                          locked.has("disk_gib")
+                        }
                         onChange={(e) => setDisk(Number(e.target.value))}
                       />
                     </Field>

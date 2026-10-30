@@ -192,3 +192,56 @@ class DirectDiskFileTests(TestCase):
             )
             self.assertEqual(response.status_code, 409, response.content)
         self.assertFalse(Instance.objects.filter(name='duplicate-direct').exists())
+
+
+class CloneModeTests(TestCase):
+    setUp = DirectDiskFileTests.setUp
+
+    def test_full_and_linked_file_modes_create_independent_paths_and_task_mode(self):
+        from unittest.mock import patch
+
+        from apps.instances.executors import execute_instance_create
+
+        for mode in ['full', 'linked']:
+            data = {**self.data, 'name': f'clone-{mode}', 'clone_mode': mode, 'disk_gib': 2}
+            with patch(
+                'apps.nodes.client.AgentClient.request_json',
+                return_value={'format': 'QCOW2', 'virtual_size_bytes': 1024**3},
+            ):
+                response = self.client.post(
+                    '/api/v1/instances', data, content_type='application/json'
+                )
+            self.assertEqual(response.status_code, 202, response.content)
+            vm = Instance.objects.get(name=f'clone-{mode}')
+            self.assertNotEqual(
+                vm.disks.get(role='SYSTEM').relative_path, data['existing_system_file']
+            )
+            self.assertEqual(vm.reservations.get().disk_reserved_bytes, 2 * 1024**3)
+            with patch('apps.instances.executors.AgentClient') as client:
+                client.return_value.get_json.return_value = {
+                    'existing_disk_attach': True,
+                    'linked_clone': True,
+                    'image_clone': True,
+                    'iso_install': True,
+                    'start_control': True,
+                }
+                client.return_value.create_domain.return_value = {'state': 'SHUTOFF'}
+                execute_instance_create(vm.current_task)
+                sent = client.return_value.create_domain.call_args.args[0]
+                self.assertNotIn('use_existing_disk', sent)
+                self.assertEqual(sent['source_disk_relative_path'], data['existing_system_file'])
+                self.assertEqual(sent.get('clone_mode', 'full'), mode)
+
+    def test_invalid_mode_and_iso_linked_clone_are_rejected(self):
+        response = self.client.post(
+            '/api/v1/instances', {**self.data, 'clone_mode': 'bad'}, content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 400, response.content)
+        image = make_image(node=self.node, format='ISO')
+        data = {k: v for k, v in self.data.items() if k != 'existing_system_file'}
+        response = self.client.post(
+            '/api/v1/instances',
+            {**data, 'image': image.pk, 'clone_mode': 'linked'},
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 400, response.content)

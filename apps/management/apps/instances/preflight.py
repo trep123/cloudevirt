@@ -42,7 +42,9 @@ class CreatePreflightView(APIView):
             'vcpu': data['vcpu'],
             'memory_mib': data['memory_mib'],
             'disk_bytes': (
-                sum(data.get('data_disks', [])) if data.get('existing_system_file') else total_disk
+                sum(data.get('data_disks', []))
+                if data.get('existing_system_file') and data.get('clone_mode', 'direct') == 'direct'
+                else total_disk
             )
             * 1024**3,
         }
@@ -60,6 +62,8 @@ class CreatePreflightView(APIView):
             and capabilities.get('existing_disk_attach') is not True
         ):
             raise AppError(ErrorCode.CONFLICT, '节点需升级以支持直接使用磁盘')
+        if data.get('clone_mode') == 'linked' and capabilities.get('linked_clone') is not True:
+            raise AppError(ErrorCode.CONFLICT, '节点尚不支持链接克隆')
         validate_creation_capabilities(data, capabilities)
         if not all(
             capabilities.get(key) is True for key in ['image_clone', 'iso_install', 'start_control']
@@ -79,7 +83,7 @@ class CreatePreflightView(APIView):
                 'valid_for_seconds': 60,
                 'warnings': ['预校验不预留容量，正式提交会再次检查'],
                 'deployment_mode': 'existing_disk'
-                if data.get('existing_system_file')
+                if data.get('existing_system_file') and data.get('clone_mode', 'direct') == 'direct'
                 else ('iso' if image and image.format == 'ISO' else 'image'),
             }
         )

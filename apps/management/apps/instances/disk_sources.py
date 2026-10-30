@@ -68,7 +68,7 @@ def inspect_file(user, node, path, check_registered=True):
         or len(PurePosixPath(path).name) > 128
         or path.startswith('/')
         or '\\' in path
-        or '..' in PurePosixPath(path).parts
+        or any(part.startswith('.') for part in PurePosixPath(path).parts)
         or str(PurePosixPath(path)) != path
     ):
         raise AppError(ErrorCode.INVALID_ARGUMENT, '请使用节点磁盘目录内的规范相对路径')

@@ -12,6 +12,7 @@ from apps.templates.models import Template, TemplateVersion
 from common.permissions import CanViewTemplate, RequiresPasswordChange
 
 CONFIG_FIELDS = {
+    'clone_mode',
     'node',
     'initialization',
     'data_disks',
@@ -72,6 +73,8 @@ class VersionSerializer(serializers.ModelSerializer):
         config = data.get('configuration', {})
         if not isinstance(config, dict):
             raise serializers.ValidationError({'configuration': '必须是配置对象'})
+        if config.get('clone_mode', 'full') not in {'full', 'linked'}:
+            raise serializers.ValidationError({'clone_mode': '模板仅支持全克隆或链接克隆'})
         from apps.instances.hardware import HardwareSerializer, InitializationSerializer
 
         if 'initialization' in config:
@@ -250,6 +253,8 @@ def publish_version(version, user):
         disk_gib=config['disk_gib'],
     )
     image = Image.objects.filter(pk=config.get('image'), is_deleted=False, status='READY').first()
+    if image and image.format == 'ISO' and config.get('clone_mode') == 'linked':
+        raise serializers.ValidationError({'clone_mode': 'ISO 安装不支持链接克隆'})
     if image is None:
         raise serializers.ValidationError({'image': '发布前需指定可用镜像'})
     from apps.nodes.models import Node
@@ -314,6 +319,8 @@ def resolve_version(data, user):
         status='READY',
         is_deleted=False,
     ).first()
+    if image and image.format == 'ISO' and version.configuration.get('clone_mode') == 'linked':
+        raise serializers.ValidationError({'clone_mode': 'ISO 安装不支持链接克隆'})
     if image is None:
         raise serializers.ValidationError(
             {'template_version': '模板镜像已变更或不可用，请重新发布版本'}

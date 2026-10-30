@@ -308,6 +308,7 @@ export const api = {
           image?: number;
           existing_system_disk?: number;
           existing_system_file?: string;
+          clone_mode?: string;
           vcpu: number;
           memory_mib: number;
           disk_gib: number;

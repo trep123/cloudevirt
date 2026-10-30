@@ -65,6 +65,7 @@ class InstanceListCreateView(InstanceScopeMixin, generics.ListCreateAPIView):
             template_version=data.get('template_version'),
             existing_system_disk=data.get('existing_system_disk'),
             existing_system_file=data.get('existing_system_file'),
+            clone_mode=data.get('clone_mode'),
             data_disks=data.get('data_disks', []),
             additional_networks=data.get('additional_networks', []),
             hardware=data.get('hardware', {}),

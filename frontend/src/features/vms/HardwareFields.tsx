@@ -19,6 +19,7 @@ export type HardwareConfig = {
   network_mbps?: number;
 };
 export type CreationCapabilities = {
+  linked_clone?: boolean;
   clipboard?: boolean;
   video_models?: string[];
   static_networks?: boolean;

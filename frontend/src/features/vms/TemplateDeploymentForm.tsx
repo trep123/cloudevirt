@@ -166,6 +166,7 @@ export function TemplateDeploymentForm({
             <DescList
               columns={1}
               items={[
+                ["克隆方式", c.clone_mode === "linked" ? "链接克隆" : "全克隆"],
                 ["vCPU", `${c.vcpu} 核`],
                 ["内存", `${Number(c.memory_mib) / 1024} GiB`],
                 ["系统盘", `${c.disk_gib} GiB · qcow2`],

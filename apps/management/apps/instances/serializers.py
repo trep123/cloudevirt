@@ -104,6 +104,7 @@ class InstanceCreateSerializer(serializers.Serializer):
     autostart = serializers.BooleanField(required=False, default=False)
     start_after_create = serializers.BooleanField(required=False, default=True)
     template = serializers.IntegerField(required=False, min_value=1)
+    clone_mode = serializers.ChoiceField(choices=['full', 'linked', 'direct'], required=False)
     existing_system_file = serializers.CharField(required=False, max_length=255)
     existing_system_disk = serializers.IntegerField(required=False, min_value=1)
     template_version = serializers.IntegerField(required=False, min_value=1)
@@ -210,14 +211,20 @@ class InstanceCreateSerializer(serializers.Serializer):
                 or not visible_templates(request.user).filter(pk=template_id).exists()
             ):
                 raise serializers.ValidationError({'template': '模板不存在或无权访问'})
+        mode = data.get('clone_mode', 'direct' if data.get('existing_system_file') else 'full')
+        if mode == 'direct' and not data.get('existing_system_file'):
+            raise serializers.ValidationError({'clone_mode': '直接使用仅适用于节点已有系统盘文件'})
         if data.get('existing_system_file'):
             from apps.instances.disk_sources import inspect_file
 
             info = inspect_file(request.user, data['node'], data['existing_system_file'])
-            if data['disk_gib'] != (info['virtual_size_bytes'] + 1024**3 - 1) // 1024**3:
+            minimum = (info['virtual_size_bytes'] + 1024**3 - 1) // 1024**3
+            if data['disk_gib'] < minimum or (mode == 'direct' and data['disk_gib'] != minimum):
                 raise serializers.ValidationError({'disk_gib': '请检查磁盘并使用实际容量'})
             return data
         image = data['image']
+        if image and image.format == 'ISO' and mode == 'linked':
+            raise serializers.ValidationError({'clone_mode': 'ISO 安装不支持链接克隆'})
         if data.get('existing_system_disk'):
             from apps.instances.disk_sources import source_disk
 

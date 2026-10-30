@@ -11,6 +11,11 @@ import (
 
 // InspectExistingDisk checks a standalone qcow2 without reading/hashing its entire contents.
 func InspectExistingDisk(ctx context.Context, root, relative string) (FileInfo, error) {
+	for _, part := range strings.Split(relative, "/") {
+		if strings.HasPrefix(part, ".") {
+			return FileInfo{}, apierr.New(apierr.CodeInvalidArgument, "禁止使用节点内部保留路径", nil)
+		}
+	}
 	path, err := SafePath(root, relative)
 	if err != nil {
 		return FileInfo{}, err

@@ -30,6 +30,7 @@ type DomainOperator interface {
 
 // createDomainRequest 是创建域请求体。
 type createDomainRequest struct {
+	CloneMode              string             `json:"clone_mode,omitempty"`
 	UseExistingDisk        bool               `json:"use_existing_disk,omitempty"`
 	SourceDiskRelativePath string             `json:"source_disk_relative_path,omitempty"`
 	MAC                    string             `json:"mac"`
@@ -93,6 +94,18 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 		} else {
 			diskReferenceMutation.RLock()
 			defer diskReferenceMutation.RUnlock()
+		}
+		if payload.CloneMode != "" && payload.CloneMode != "full" && payload.CloneMode != "linked" {
+			writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeInvalidArgument, "克隆模式无效", nil), requestID)
+			return
+		}
+		if payload.UseExistingDisk && payload.CloneMode != "" {
+			writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeInvalidArgument, "直接挂载不能指定克隆模式", nil), requestID)
+			return
+		}
+		if payload.ImageFormat == "ISO" && payload.CloneMode == "linked" {
+			writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeInvalidArgument, "ISO 安装不支持链接克隆", nil), requestID)
+			return
 		}
 		// 磁盘可能尚不存在，使用允许缺失的路径校验
 		diskPath, err := storage.SafePathAllowMissing(deps.DiskDir, payload.DiskRelativePath)
@@ -280,7 +293,9 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 				writeAPIError(writer, deps.Logger, err, requestID)
 				return
 			}
-			if !diskReady {
+			if !diskReady && payload.CloneMode == "linked" {
+				diskErr = storage.CloneLinked(ctx, deps.DiskDir, payload.SourceDiskRelativePath, "", "", diskPath, payload.DiskGiB)
+			} else if !diskReady {
 				diskErr = storage.CloneRetainedDisk(ctx, deps.DiskDir, payload.SourceDiskRelativePath, diskPath, payload.DiskGiB)
 			}
 		} else if payload.ImageRelativePath != "" {
@@ -298,6 +313,8 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 				if diskErr == nil {
 					diskErr = storage.CreateDisk(ctx, diskPath, payload.DiskGiB)
 				}
+			} else if !diskReady && payload.CloneMode == "linked" {
+				diskErr = storage.CloneLinked(ctx, deps.ImageDir, payload.ImageRelativePath, payload.ImageChecksum, payload.ImageFormat, diskPath, payload.DiskGiB)
 			} else if !diskReady {
 				diskErr = storage.CloneImage(ctx, deps.ImageDir, payload.ImageRelativePath, payload.ImageChecksum, payload.ImageFormat, diskPath, payload.DiskGiB)
 			}
