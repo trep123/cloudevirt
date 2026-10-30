@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from apps.accounts.models import AccountBatch
+from apps.accounts.models import AccountBatch, LoginRateBucket
 
 
 class Command(BaseCommand):
@@ -14,3 +14,5 @@ class Command(BaseCommand):
             .update(rows=[], results=[], file_data=None, state='EXPIRED')
         )
         self.stdout.write(f'Expired account batches cleared: {count}')
+        expired, _ = LoginRateBucket.objects.filter(expires_at__lte=timezone.now()).delete()
+        self.stdout.write(f'Expired login counters cleared: {expired}')

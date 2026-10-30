@@ -4,21 +4,20 @@
 所有登录结果写入审计。
 """
 
+import hashlib
 import ipaddress
-import logging
+from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.models import AbstractUser
-from django.core.cache import cache
+from django.db import transaction
 from django.utils import timezone
 
-from apps.accounts.models import UserProfile
+from apps.accounts.models import LoginRateBucket, UserProfile
 from apps.audit.models import AuditAction, AuditResult
 from apps.audit.services import record_audit
 from common.errors import AppError, ErrorCode
-
-logger = logging.getLogger(__name__)
 
 # 统一失败文案，避免通过提示差异探测账号是否存在
 INVALID_CREDENTIALS_MESSAGE = '用户名或密码错误'
@@ -35,9 +34,16 @@ def client_ip(request) -> str | None:
     """
     raw = request.META.get('REMOTE_ADDR', '') if request else ''
     try:
-        return str(ipaddress.ip_address(raw))
+        peer = ipaddress.ip_address(raw)
     except ValueError:
         return None
+    if peer.is_loopback and getattr(settings, 'SECURE_PROXY_SSL_HEADER', None):
+        forwarded = request.META.get('HTTP_X_REAL_IP', '')
+        try:
+            return str(ipaddress.ip_address(forwarded))
+        except ValueError:
+            pass
+    return str(peer)
 
 
 def get_or_create_profile(user: AbstractUser) -> UserProfile:
@@ -66,18 +72,38 @@ def enforce_login_rate_limit(request, username: str) -> None:
         AppError: 触发限流时抛出 RATE_LIMITED(429)。
     """
     ip = client_ip(request) or 'unknown'
-    key = f'cloudvirt:login:{ip}:{username}'
+    # Never store a probed username in a cache key or log.  The database is
+    # shared by every Gunicorn process; row locking makes the count atomic.
+    account_key = hashlib.sha256(f'account\0{ip}\0{username}'.encode()).hexdigest()
+    ip_key = hashlib.sha256(f'ip\0{ip}'.encode()).hexdigest()
     window = getattr(settings, 'SECURITY_LOGIN_WINDOW_SECONDS', 300)
-    limit = getattr(settings, 'SECURITY_LOGIN_MAX_ATTEMPTS', 10)
-    try:
-        attempts = cache.get_or_set(key, 0, timeout=window)
-        if attempts >= limit:
-            raise AppError(ErrorCode.RATE_LIMITED, '登录尝试过于频繁，请稍后再试')
-        cache.set(key, attempts + 1, timeout=window)
-    except AppError:
-        raise
-    except Exception:  # 缓存不可用时降级为不限流，但必须记录
-        logger.warning('登录限流不可用，已降级', exc_info=True)
+    account_limit = min(
+        getattr(settings, 'SECURITY_LOGIN_MAX_ATTEMPTS', 10),
+        getattr(settings, 'SECURITY_LOGIN_MAX_FAILED', 5),
+    )
+    ip_limit = getattr(settings, 'SECURITY_LOGIN_MAX_IP_ATTEMPTS', 50)
+    now = timezone.now()
+    limited = False
+    with transaction.atomic():
+        # Stable key ordering avoids deadlocks when attempts arrive concurrently.
+        buckets = []
+        for key, limit in sorted(((account_key, account_limit), (ip_key, ip_limit))):
+            bucket, _ = LoginRateBucket.objects.get_or_create(
+                key=key,
+                defaults={'expires_at': now + timedelta(seconds=window)},
+            )
+            bucket = LoginRateBucket.objects.select_for_update().get(pk=bucket.pk)
+            if bucket.expires_at <= now:
+                bucket.attempts = 0
+                bucket.expires_at = now + timedelta(seconds=window)
+            limited = limited or bucket.attempts >= limit
+            buckets.append(bucket)
+        if not limited:
+            for bucket in buckets:
+                bucket.attempts += 1
+                bucket.save(update_fields=['attempts', 'expires_at'])
+    if limited:
+        raise AppError(ErrorCode.RATE_LIMITED, '登录尝试过于频繁，请稍后再试')
 
 
 def login_user(request, username: str, password: str) -> AbstractUser:
@@ -111,7 +137,7 @@ def login_user(request, username: str, password: str) -> AbstractUser:
                 details={'reason': 'locked'},
                 ip=ip,
             )
-            raise AppError(ErrorCode.UNAUTHORIZED, '账号已锁定，请稍后再试')
+            raise AppError(ErrorCode.UNAUTHORIZED, INVALID_CREDENTIALS_MESSAGE)
 
     user = authenticate(request, username=username, password=password)
     if user is None:

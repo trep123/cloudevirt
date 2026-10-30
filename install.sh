@@ -442,6 +442,8 @@ systemctl restart cloudvirt-agent cloudvirt-management cloudvirt-worker
 
 STEP=nginx
 install -d -m 0755 /etc/nginx/snippets
+install -m 0644 "$APP_DIR/deploy/nginx/security-headers.conf" /etc/nginx/snippets/cloudvirt-security-headers.conf
+install -m 0644 "$APP_DIR/deploy/nginx/hsts.conf" /etc/nginx/snippets/cloudvirt-hsts.conf
 CLOUDVIRT_CONSOLE_GATEWAY_KEY=$(manage console_gateway_key)
 export CLOUDVIRT_CONSOLE_GATEWAY_KEY
 "$APP_DIR/.venv/bin/python" - "$APP_DIR/deploy/nginx/console-gateway.conf" <<'PY'
@@ -477,12 +479,11 @@ server {
     $TLS_LINES
     root $WEB_ROOT;
     index index.html;
-    add_header X-Content-Type-Options nosniff always;
-    add_header X-Frame-Options DENY always;
-    add_header Referrer-Policy no-referrer always;
+    include /etc/nginx/snippets/cloudvirt-security-headers.conf;
+    $(if [[ "$HTTPS" == true ]]; then printf '%s' 'include /etc/nginx/snippets/cloudvirt-hsts.conf;'; fi)
     client_max_body_size 64m;
     location /assets/ { expires 30d; try_files \$uri =404; }
-    location = /index.html { add_header Cache-Control "no-store"; }
+    location = /index.html { expires epoch; }
     location / { try_files \$uri \$uri/ /index.html; }
     location /api/ {
         proxy_pass http://127.0.0.1:8000;
@@ -498,7 +499,20 @@ server {
     include /etc/nginx/snippets/cloudvirt-console.conf;
 }
 NGINX
+if [[ "$HTTPS" == true && "$PORT" != 80 ]]; then
+    REDIRECT_PORT=""
+    [[ "$PORT" == 443 ]] || REDIRECT_PORT=":$PORT"
+    cat >> /etc/nginx/sites-available/cloudvirt <<NGINX
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+    return 301 https://$DOMAIN$REDIRECT_PORT\$request_uri;
+}
+NGINX
+fi
 ln -sfn /etc/nginx/sites-available/cloudvirt /etc/nginx/sites-enabled/cloudvirt
+rm -f /etc/nginx/sites-enabled/default
 nginx -t
 systemctl enable --now nginx
 systemctl reload nginx

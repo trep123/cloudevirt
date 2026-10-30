@@ -98,9 +98,9 @@ class HealthViewTests(TestCase):
     """健康检查契约测试。"""
 
     def test_health_returns_ok_without_authentication(self) -> None:
-        """健康检查免认证并返回版本号。"""
+        """健康检查免认证，但不披露版本号。"""
         response = self.client.get('/api/v1/health')
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['status'], 'ok')
-        self.assertIn('version', response.json())
+        self.assertNotIn('version', response.json())

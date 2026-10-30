@@ -2,7 +2,6 @@
 
 from typing import Any
 
-from django.conf import settings
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.http import require_GET
 
@@ -31,9 +30,9 @@ def health(request: HttpRequest) -> JsonResponse:
         request: HTTP 请求，未使用。
 
     Returns:
-        形如 {"status": "ok", "version": "x.y.z"} 的 JSON 响应（免认证）。
+        仅返回存活状态，不向匿名请求披露版本。
     """
-    return json_response({'status': 'ok', 'version': settings.APP_VERSION})
+    return json_response({'status': 'ok'})
 
 
 def json_404(request: HttpRequest, exception: Exception) -> JsonResponse:

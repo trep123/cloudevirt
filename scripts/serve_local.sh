@@ -39,6 +39,8 @@ rm -rf "${WEB_ROOT:?}"/*
 cp -r dist/* "$WEB_ROOT/"
 
 echo "==> 安装 nginx 站点配置"
+install -d -m 0755 /etc/nginx/snippets
+install -m 0644 "$ROOT_DIR/deploy/nginx/security-headers.conf" /etc/nginx/snippets/cloudvirt-security-headers.conf
 ln -sf "$ROOT_DIR/deploy/nginx/cloudvirt.conf" "$NGINX_SITE"
 ln -sf "$NGINX_SITE" /etc/nginx/sites-enabled/cloudvirt
 rm -f /etc/nginx/sites-enabled/default

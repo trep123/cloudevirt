@@ -1,10 +1,10 @@
 """登录、登出与密码策略测试。"""
 
 from django.contrib.auth import get_user_model
-from django.core.cache import cache
 from django.test import Client, TestCase, override_settings
 
 from apps.accounts.models import UserProfile
+from apps.accounts.services import client_ip
 from apps.audit.models import AuditAction, AuditEvent, AuditResult
 
 
@@ -13,8 +13,7 @@ class LoginTests(TestCase):
     """登录相关用例。"""
 
     def setUp(self) -> None:
-        """创建测试用户并清空缓存。"""
-        cache.clear()
+        """创建测试用户。"""
         self.user = get_user_model().objects.create_user(
             username='alice', password='Str0ngPassw0rd'
         )
@@ -56,6 +55,17 @@ class LoginTests(TestCase):
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.json()['error']['message'], '用户名或密码错误')
 
+    @override_settings(SECURE_PROXY_SSL_HEADER=('HTTP_X_FORWARDED_PROTO', 'https'))
+    def test_proxy_ip_only_trusted_for_loopback_peer(self) -> None:
+        """仅允许本机 nginx 覆写来源 IP，阻止客户端伪造限流键。"""
+        from django.test import RequestFactory
+
+        factory = RequestFactory()
+        local = factory.get('/', REMOTE_ADDR='127.0.0.1', HTTP_X_REAL_IP='192.0.2.12')
+        remote = factory.get('/', REMOTE_ADDR='192.0.2.15', HTTP_X_REAL_IP='192.0.2.12')
+        self.assertEqual(client_ip(local), '192.0.2.12')
+        self.assertEqual(client_ip(remote), '192.0.2.15')
+
     @override_settings(SECURITY_LOGIN_MAX_FAILED=2, SECURITY_LOGIN_LOCK_SECONDS=600)
     def test_account_is_locked_after_repeated_failures(self) -> None:
         """连续失败达到阈值后账号应被锁定。"""
@@ -67,9 +77,32 @@ class LoginTests(TestCase):
             '/api/v1/auth/login', {'username': 'alice', 'password': 'Str0ngPassw0rd'}
         )
 
-        self.assertEqual(response.status_code, 401)
-        self.assertIn('锁定', response.json()['error']['message'])
+        self.assertEqual(response.status_code, 429)
         self.assertTrue(UserProfile.objects.get(user=self.user).is_locked)
+
+    @override_settings(SECURITY_LOGIN_MAX_FAILED=2, SECURITY_LOGIN_MAX_ATTEMPTS=10)
+    def test_unknown_and_existing_accounts_have_same_lock_response(self) -> None:
+        """未知用户与已锁定用户不能靠响应码和文案区分。"""
+        results = []
+        for username in ('alice', 'ghost'):
+            attempts = [
+                self.client.post('/api/v1/auth/login', {'username': username, 'password': 'wrong'})
+                for _ in range(3)
+            ]
+            results.append(
+                [(item.status_code, item.json()['error']['message']) for item in attempts]
+            )
+        self.assertEqual(results[0], results[1])
+        self.assertEqual(results[0][-1][0], 429)
+
+    @override_settings(SECURITY_LOGIN_MAX_IP_ATTEMPTS=2)
+    def test_ip_limit_blocks_username_spray(self) -> None:
+        """切换用户名不能绕过来源地址的总尝试次数限制。"""
+        responses = [
+            self.client.post('/api/v1/auth/login', {'username': f'unknown-{i}', 'password': 'bad'})
+            for i in range(3)
+        ]
+        self.assertEqual([response.status_code for response in responses], [401, 401, 429])
 
     def test_disabled_user_cannot_login(self) -> None:
         """已停用用户不能登录。"""

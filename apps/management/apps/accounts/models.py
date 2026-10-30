@@ -121,3 +121,17 @@ class AccountBatch(models.Model):
 
     def __str__(self):
         return str(self.pk)
+
+
+class LoginRateBucket(models.Model):
+    """Shared, row-locked login counter for every Gunicorn worker."""
+
+    key = models.CharField(max_length=64, primary_key=True)
+    attempts = models.PositiveIntegerField(default=0)
+    expires_at = models.DateTimeField(db_index=True)
+
+    class Meta:
+        verbose_name = '登录限流计数'
+
+    def __str__(self) -> str:
+        return self.key
