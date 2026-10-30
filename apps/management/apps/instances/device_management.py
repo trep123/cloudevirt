@@ -44,6 +44,7 @@ class DeviceInput(StrictInput):
             'nic-remove',
         ]
     )
+    live = serializers.BooleanField(required=False)
     vcpu = serializers.IntegerField(min_value=1, max_value=128, required=False)
     memory_mib = serializers.IntegerField(min_value=128, max_value=1048576, required=False)
     disk_id = serializers.IntegerField(min_value=1, required=False)
@@ -63,7 +64,9 @@ class DeviceInput(StrictInput):
             'nic-add': {'network_name', 'model'},
             'nic-remove': {'mac'},
         }[data['operation']]
-        if set(data) - {'operation'} != required:
+        if data.get('live') and data['operation'] != 'nic-add':
+            raise serializers.ValidationError({'live': '热变更仅支持新增网卡'})
+        if set(data) - {'operation', 'live'} != required:
             raise serializers.ValidationError(f'此操作只接受以下字段：{sorted(required)}')
         return data
 
@@ -140,7 +143,22 @@ class InstanceHardwareView(APIView):
                     },
                     status=202,
                 )
-        cold_instance(instance)
+        if data.get('live'):
+            if (
+                not instance.node.is_schedulable
+                or instance.observed_state != 'RUNNING'
+                or instance.observed_state_is_stale
+                or not instance.observed_state_updated_at
+                or instance.observed_state_updated_at < timezone.now() - timedelta(seconds=60)
+            ):
+                raise AppError(ErrorCode.CONFLICT, '热接入要求虚拟机处于已确认的运行状态')
+            if (
+                AgentClient(node.endpoint).get_json('/api/v1/node/capabilities').get('nic_hotplug')
+                is not True
+            ):
+                raise AppError(ErrorCode.CONFLICT, '节点尚不支持网卡热接入，请升级 Agent')
+        else:
+            cold_instance(instance)
         if instance.reservations.filter(status='HELD').exists():
             raise AppError(ErrorCode.CONFLICT, '创建任务仍保留资源，请先核对创建结果')
         ensure_no_active_task(instance)
@@ -152,6 +170,8 @@ class InstanceHardwareView(APIView):
             )
         op = data['operation']
         payload = {'operation': op, 'uuid': str(instance.uuid)}
+        if data.get('live'):
+            payload['live'] = True
         meta = {}
         delta = {'vcpu': 0, 'memory_mib': 0, 'disk_gib': 0}
         disk = None
@@ -236,10 +256,17 @@ class InstanceHardwareView(APIView):
                             raise AppError(ErrorCode.CONFLICT, '无可用磁盘设备号')
                         payload['target'] = target
         elif op == 'nic-add':
+            if instance.network_interfaces.count() >= 8:
+                raise AppError(ErrorCode.CONFLICT, '最多支持 8 个网卡')
             network = validate_network_for_instance(data['network_name'], instance.node)
             if network is None or not network.is_usable:
                 raise AppError(ErrorCode.CONFLICT, '网络不可用')
             network = Network.objects.select_for_update().get(pk=network.pk)
+            if data.get('live') and (
+                network.is_management
+                or instance.network_interfaces.filter(network=network).exists()
+            ):
+                raise AppError(ErrorCode.CONFLICT, '管理网络或已连接网络不能重复热接入')
             mac = '02:' + ':'.join(f'{b:02x}' for b in secrets.token_bytes(5))
             payload.update(
                 mac=mac,

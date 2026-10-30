@@ -1,5 +1,7 @@
+import type { TopologyVM as Instance } from "../features/networks/topologyModel";
 import { useCallback, useEffect, useState } from "react";
 
+import { newRequestId } from "../utils/requestId";
 import { api } from "../api";
 import { NetworkTopology } from "../components/NetworkTopology";
 import { BridgeCreator } from "../features/networks/BridgeCreator";
@@ -7,6 +9,7 @@ import {
   Drawer,
   ConfirmOperationModal,
   PageHeader,
+  TaskProgressDrawer,
 } from "../components/ConsoleUI";
 import { validateAddress } from "../features/networks/validateAddress";
 import {
@@ -17,12 +20,7 @@ import {
   describeError,
 } from "../components/ui";
 import { can } from "../permissions";
-import type {
-  CurrentUser,
-  Instance,
-  InstanceInterface,
-  Network,
-} from "../types";
+import type { CurrentUser, InstanceInterface, Network } from "../types";
 
 const NETWORK_TYPES = [
   { value: "LIBVIRT_NETWORK", label: "libvirt 网络" },
@@ -84,33 +82,30 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
   const [deleting, setDeleting] = useState<Network | null>(null);
   const [selectedNetwork, setSelectedNetwork] = useState<Network | null>(null);
 
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [connection, setConnection] = useState<{
+      vm: Instance;
+      network: Network;
+      key: string;
+    } | null>(null),
+    [connectionTask, setConnectionTask] = useState<string | null>(null),
+    [truncated, setTruncated] = useState(false);
+  const canConnect =
+    user.console_scope === "admin" && can(user, "instances.change_instance");
   const canManage = can(user, "networks.manage_network");
 
   const reload = useCallback(async () => {
     try {
-      const [networkPage, instancePage] = await Promise.all([
-        api.networks(),
-        api.instances(),
-      ]);
-      setNetworks(networkPage.results);
-      setInstances(instancePage.results);
-      const running = instancePage.results.filter(
-        (instance) => instance.observed_state === "RUNNING",
-      );
-      if (running.length === 0) {
-        setInterfaces({});
-      } else {
-        void Promise.all(
-          running.map(async (instance) => {
-            try {
-              const data = await api.instanceInterfaces(instance.id);
-              return [instance.id, data.interfaces] as const;
-            } catch {
-              return [instance.id, []] as const;
-            }
-          }),
-        ).then((entries) => setInterfaces(Object.fromEntries(entries)));
-      }
+      const topology = await api.request<{
+        networks: Network[];
+        instances: Instance[];
+        interfaces: Record<number, InstanceInterface[]>;
+        truncated: boolean;
+      }>("/networks/topology");
+      setNetworks(topology.networks);
+      setInstances(topology.instances);
+      setInterfaces(topology.interfaces);
+      setTruncated(topology.truncated);
       setError(null);
     } catch (err) {
       setError(describeError(err));
@@ -135,6 +130,41 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
     return () => clearInterval(timer);
   }, [networks, reload]);
 
+  useEffect(() => {
+    if (view !== "topology") return;
+    const timer = setInterval(() => {
+      if (!document.hidden) void reload();
+    }, 15000);
+    return () => clearInterval(timer);
+  }, [view, reload]);
+  async function connect() {
+    if (!connection || busy) return;
+    setBusy(true);
+    setConnectionError(null);
+    try {
+      const result = await api.request<{ task: { id: string } }>(
+        `/instances/${connection.vm.id}/hardware`,
+        {
+          method: "POST",
+          headers: { "Idempotency-Key": connection.key },
+          body: JSON.stringify({
+            operation: "nic-add",
+            network_name: connection.network.name,
+            model: "virtio",
+            ...(connection.vm.observed_state === "RUNNING"
+              ? { live: true }
+              : {}),
+          }),
+        },
+      );
+      setConnection(null);
+      setConnectionTask(result.task.id);
+    } catch (e) {
+      setConnectionError(describeError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
   function resetForm() {
     setNetworkStep(0);
     setForm(EMPTY_FORM);
@@ -572,10 +602,21 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
       ) : null}
       {view === "topology" ? (
         <Card title="网络与接口拓扑">
+          {truncated && (
+            <p className="muted">
+              当前展示最多 300 台授权虚拟机，请结合节点筛选查看。
+            </p>
+          )}
           <NetworkTopology
             networks={networks}
             instances={instances}
             interfaces={interfaces}
+            editable={canConnect && !busy && !connectionTask}
+            onConnect={(vm, network) => {
+              setError(null);
+              setConnectionError(null);
+              setConnection({ vm, network, key: newRequestId() });
+            }}
           />
         </Card>
       ) : null}
@@ -761,8 +802,10 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
             <dt>当前列表关联实例</dt>
             <dd>
               {
-                instances.filter(
-                  (vm) => vm.network_name === selectedNetwork.name,
+                instances.filter((vm) =>
+                  (interfaces[vm.id] || []).some(
+                    (nic) => nic.source === selectedNetwork.name,
+                  ),
                 ).length
               }
             </dd>
@@ -772,6 +815,32 @@ export function NetworksPage({ user }: { user: CurrentUser }) {
           </p>
         </Drawer>
       ) : null}
+      {connection && (
+        <ConfirmOperationModal
+          target={`${connection.vm.name} → ${connection.network.name}`}
+          operation={
+            connection.vm.observed_state === "RUNNING"
+              ? "热接入网络（新增 VirtIO 网卡）"
+              : "接入网络（新增 VirtIO 网卡）"
+          }
+          description="保留现有网卡，新增独立 MAC 的网卡并同步持久配置。运行中接入需要节点与客体驱动支持；存在快照时需先处理一致性。任务成功并回读确认后更新连线。"
+          busy={busy}
+          error={connectionError}
+          onCancel={() => {
+            if (!busy) setConnection(null);
+          }}
+          onConfirm={() => void connect()}
+        />
+      )}
+      {connectionTask && (
+        <TaskProgressDrawer
+          id={connectionTask}
+          onClose={() => {
+            setConnectionTask(null);
+            void reload();
+          }}
+        />
+      )}
       {deleting ? (
         <ConfirmOperationModal
           target={deleting.name}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -17,6 +18,7 @@ import (
 )
 
 type HardwareChange struct {
+	Live         bool                  `json:"live,omitempty"`
 	Operation    string                `json:"operation"`
 	UUID         string                `json:"uuid"`
 	VCPU         int                   `json:"vcpu"`
@@ -284,6 +286,9 @@ func buildDisk(change HardwareChange, path string) (string, error) {
 }
 
 func (c *Client) ChangeHardware(ctx context.Context, name, root string, change HardwareChange) (HardwareInventory, error) {
+	if change.Live {
+		return c.hotAddNIC(ctx, name, root, change)
+	}
 	fail := func(message string) (HardwareInventory, error) {
 		return HardwareInventory{}, apierr.New(apierr.CodeConflict, message, nil)
 	}
@@ -497,4 +502,109 @@ func (c *Client) ChangeHardware(ctx context.Context, name, root string, change H
 		return before, err
 	}
 	return actual, nil
+}
+
+func (c *Client) hotAddNIC(ctx context.Context, name, root string, change HardwareChange) (HardwareInventory, error) {
+	fail := func(msg string) (HardwareInventory, error) {
+		return HardwareInventory{}, apierr.New(apierr.CodeConflict, msg, nil)
+	}
+	if !domainxml.ValidName(name) || change.Operation != "nic-add" {
+		return fail("热变更仅支持新增网卡")
+	}
+	state, err := c.DomainState(ctx, name)
+	if err != nil {
+		return HardwareInventory{}, err
+	}
+	if state != StateRunning {
+		return fail("虚拟机未处于运行状态")
+	}
+	raw, err := buildNIC(change)
+	if err != nil {
+		return HardwareInventory{}, err
+	}
+	// Compare both definitions; retry repairs a partially completed attach using the same MAC.
+	matched := func(content string) (bool, error) {
+		inventory, err := parseHardware(ctx, content, root)
+		if err != nil {
+			return false, err
+		}
+		if change.UUID == "" || inventory.UUID != change.UUID {
+			return false, apierr.New(apierr.CodeConflict, "域 UUID 不匹配", nil)
+		}
+		for _, n := range inventory.NICs {
+			if n.Address == strings.ToLower(change.MAC) {
+				if n.ModelName != change.Model || (n.NetworkName != change.Network.Network && n.NetworkName != change.Network.NetworkBridge) {
+					return false, apierr.New(apierr.CodeConflict, "网卡 MAC 已用于其他配置", nil)
+				}
+				return true, nil
+			}
+		}
+		if len(inventory.NICs) >= 8 {
+			return false, apierr.New(apierr.CodeConflict, "最多支持 8 个网卡", nil)
+		}
+		return false, nil
+	}
+	snapshots, err := c.run(ctx, "snapshot-list", name, "--name")
+	if err != nil {
+		return HardwareInventory{}, err
+	}
+	if strings.TrimSpace(snapshots) != "" {
+		return fail("存在快照，请先处理快照一致性后热接入")
+	}
+	for _, args := range [][]string{{"dumpxml", name, "--inactive"}, {"dumpxml", name}} {
+		content, err := c.run(ctx, args...)
+		if err != nil {
+			return HardwareInventory{}, err
+		}
+		if _, err := matched(content); err != nil {
+			return HardwareInventory{}, err
+		}
+	}
+	for _, mode := range []string{"--config", "--live"} {
+		args := []string{"dumpxml", name}
+		if mode == "--config" {
+			args = append(args, "--inactive")
+		}
+		content, err := c.run(ctx, args...)
+		if err != nil {
+			return HardwareInventory{}, err
+		}
+		found, err := matched(content)
+		if err != nil {
+			return HardwareInventory{}, err
+		}
+		if !found {
+			file, err := os.CreateTemp("", "cloudvirt-nic-*.xml")
+			if err != nil {
+				return HardwareInventory{}, err
+			}
+			path := file.Name()
+			_, err = file.WriteString(raw)
+			closeErr := file.Close()
+			if err == nil {
+				err = closeErr
+			}
+			if err == nil {
+				_, err = c.run(ctx, "attach-device", name, path, mode)
+			}
+			os.Remove(path)
+			if err != nil {
+				return HardwareInventory{}, err
+			}
+		}
+	}
+	for _, args := range [][]string{{"dumpxml", name, "--inactive"}, {"dumpxml", name}} {
+		content, err := c.run(ctx, args...)
+		if err != nil {
+			return HardwareInventory{}, err
+		}
+		found, err := matched(content)
+		if err != nil {
+			return HardwareInventory{}, err
+		}
+		if !found {
+			return fail("热接入尚未在运行与持久配置中同时确认，请核对原任务")
+		}
+	}
+	return c.HardwareInventory(ctx, name, root)
 }
