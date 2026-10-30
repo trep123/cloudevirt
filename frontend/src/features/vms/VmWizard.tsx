@@ -12,7 +12,7 @@ import {
   describeError,
 } from "../../components/ui";
 import { Icon } from "../../components/icons";
-import type { Image, Node, Network, Template } from "../../types";
+import type { Image, Node, Network } from "../../types";
 import { TemplateDeploymentForm } from "./TemplateDeploymentForm";
 import {
   HardwareFields,
@@ -49,9 +49,7 @@ export function VmWizard({
     [disk, setDisk] = useState(20),
     [network, setNetwork] = useState("");
   const [quota, setQuota] = useState<Quota | null>(null);
-  const [templates, setTemplates] = useState<Template[]>([]),
-    [template, setTemplate] = useState(""),
-    [versions, setVersions] = useState<
+  const [versions, setVersions] = useState<
       {
         id: number;
         template_name: string;
@@ -117,12 +115,10 @@ export function VmWizard({
   useEffect(() => {
     let active = true;
     Promise.all([
-      fetchAllOptions<Template>("/templates").then((results) => ({ results })),
       api.request<{ results: typeof versions }>("/templates/deployments"),
     ])
-      .then(([t, v]) => {
+      .then(([v]) => {
         if (active) {
-          setTemplates(t.results);
           setVersions(v.results);
         }
       })
@@ -265,7 +261,6 @@ export function VmWizard({
         network_name: network,
         autostart,
         start_after_create: startAfter,
-        ...(template ? { template: Number(template) } : {}),
         ...(version ? { template_version: Number(version) } : {}),
       };
       await api.request("/instances/preflight", {
@@ -382,37 +377,12 @@ export function VmWizard({
               <div className="wizard-fields">
                 {step === 0 ? (
                   <>
-                    <Field label="规格预设">
-                      <select
-                        value={template}
-                        onChange={(e) => {
-                          setTemplate(e.target.value);
-                          setVersion("");
-                          const t = templates.find(
-                            (t) => t.id === Number(e.target.value),
-                          );
-                          if (t) {
-                            setCpu(t.vcpu);
-                            setMemory(t.memory_mib / 1024);
-                            setDisk(t.disk_gib);
-                          }
-                        }}
-                      >
-                        <option value="">自定义规格</option>
-                        {templates.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.name} · {t.vcpu} 核 / {t.memory_mib / 1024} GiB
-                          </option>
-                        ))}
-                      </select>
-                    </Field>
                     <Field label="已发布部署模板">
                       <select
                         value={version}
                         onChange={(e) => {
                           setVersion(e.target.value);
                           setNode("");
-                          setTemplate("");
                           const v = versions.find(
                             (v) => v.id === Number(e.target.value),
                           );

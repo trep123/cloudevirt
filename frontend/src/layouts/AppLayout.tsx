@@ -39,7 +39,7 @@ const adminSections: Section[] = [
       },
       { label: "资源池", key: "pools", icon: "pool" },
       {
-        label: "规格模板",
+        label: "部署模板",
         key: "templates",
         icon: "template",
         permission: "templates.view_template",

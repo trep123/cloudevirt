@@ -49,6 +49,7 @@ class TemplateVersion(models.Model):
     configuration = models.JSONField(default=dict)
     constraints = models.JSONField(default=dict)
     published = models.BooleanField(default=False)
+    is_deleted = models.BooleanField(default=False)
     image_checksum = models.CharField(max_length=64, blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
 

@@ -1,24 +1,44 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api";
 import { Card, ErrorBanner, describeError } from "../../components/ui";
-import type { Template, Image, Node, Network } from "../../types";
+import type { Image, Node, Network, User } from "../../types";
 import {
   HardwareFields,
   type HardwareConfig,
   type CreationCapabilities,
 } from "./HardwareFields";
 
+export type DeploymentVersion = {
+  id: number;
+  template: number;
+  template_name: string;
+  version: number;
+  configuration: Record<string, unknown>;
+  constraints: Record<string, unknown>;
+  created_at: string;
+  name?: string;
+  description?: string;
+  is_public?: boolean;
+  assigned_users?: number[];
+};
+
 export function DeploymentTemplateEditor({
-  templates,
+  editing,
+  onSaved,
 }: {
-  templates: Template[];
+  editing?: DeploymentVersion | null;
+  onSaved: () => void;
 }) {
   const [images, setImages] = useState<Image[]>([]),
-    [parent, setParent] = useState(""),
+    [name, setName] = useState(editing?.template_name || ""),
+    [description, setDescription] = useState(editing?.description || ""),
+    [isPublic, setIsPublic] = useState(editing?.is_public ?? true),
+    [assigned, setAssigned] = useState<number[]>(editing?.assigned_users || []),
+    [users, setUsers] = useState<User[]>([]),
+    [userSearch, setUserSearch] = useState(""),
     [image, setImage] = useState(""),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState<string | null>(null),
-    [notice, setNotice] = useState("");
+    [error, setError] = useState<string | null>(null);
   const [start, setStart] = useState(true),
     [autostart, setAutostart] = useState(false);
   const [vcpu, setVcpu] = useState(2),
@@ -35,6 +55,48 @@ export function DeploymentTemplateEditor({
     [nodes, setNodes] = useState<Node[]>([]),
     [node, setNode] = useState(""),
     [caps, setCaps] = useState<CreationCapabilities | null>(null);
+  useEffect(() => {
+    if (!editing) return;
+    const c = editing.configuration;
+    setImage(String(c.image || ""));
+    setNode(String(c.node || ""));
+    setVcpu(Number(c.vcpu || 2));
+    setMemoryGiB(Number(c.memory_mib || 2048) / 1024);
+    setSystemDisk(Number(c.disk_gib || 20));
+    setStart(c.start_after_create !== false);
+    setAutostart(c.autostart === true);
+    setHardware((c.hardware as HardwareConfig) || {});
+    setDataDisks((c.data_disks as number[]) || []);
+    setExtraNetworks((c.additional_networks as string[]) || []);
+    setNetwork(String(c.network_name || ""));
+    const init = c.initialization as
+      | { username?: string; ssh_public_keys?: string[] }
+      | undefined;
+    setInitialize(Boolean(init));
+    if (init) {
+      setGuestUser(init.username || "cloudvirt");
+      setSshKeys((init.ssh_public_keys || []).join("\n"));
+    }
+  }, [editing]);
+  useEffect(() => {
+    let alive = true;
+    const timer = setTimeout(() => {
+      api
+        .request<{ results: User[] }>(
+          `/users?page_size=100&search=${encodeURIComponent(userSearch)}`,
+        )
+        .then((v) => {
+          if (alive) setUsers(v.results);
+        })
+        .catch((e) => {
+          if (alive) setError(describeError(e));
+        });
+    }, 250);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [userSearch]);
   useEffect(() => {
     let alive = true;
     Promise.all([api.nodes(), api.networks()])
@@ -86,11 +148,9 @@ export function DeploymentTemplateEditor({
     if (busy) return;
     setBusy(true);
     setError(null);
-    setNotice("");
     try {
-      const t = templates.find((t) => t.id === Number(parent));
-      if (!t || !image || !node)
-        throw Error("请选择规格模板、可用镜像和目标节点");
+      if (!name.trim() || !image || !node)
+        throw Error("请填写模板名称、选择可用镜像和目标节点");
       const configuration = {
         node: Number(node),
         ...(initialize
@@ -115,11 +175,15 @@ export function DeploymentTemplateEditor({
         start_after_create: start,
         autostart,
       };
-      const draft = await api.request<{ id: number; version: number }>(
-        `/templates/${t.id}/versions`,
+      await api.request(
+        editing ? `/template-versions/${editing.id}` : "/templates/deployments",
         {
-          method: "POST",
+          method: editing ? "PATCH" : "POST",
           body: JSON.stringify({
+            name: name.trim(),
+            description,
+            is_public: isPublic,
+            assigned_users: assigned,
             configuration,
             constraints: {
               locked: [
@@ -137,13 +201,7 @@ export function DeploymentTemplateEditor({
           }),
         },
       );
-      await api.request(`/template-versions/${draft.id}/publish`, {
-        method: "POST",
-        body: "{}",
-      });
-      setNotice(
-        `已发布 ${t.name} v${draft.version}；发布版本保持不变，后续修改将创建新版本。`,
-      );
+      onSaved();
     } catch (e) {
       setError(describeError(e));
     } finally {
@@ -152,13 +210,17 @@ export function DeploymentTemplateEditor({
   }
   return (
     <Card
-      title="发布部署版本"
+      title={
+        editing
+          ? `编辑部署模板：${editing.template_name} v${editing.version}`
+          : "新建部署模板"
+      }
       description="将规格、镜像与设备配置固化为可交付的版本。"
       className="deployment-editor"
     >
       <div className="deployment-flow">
         <span>
-          <b>01</b>关联规格与镜像
+          <b>01</b>基本信息与镜像
         </span>
         <i />
         <span>
@@ -170,34 +232,67 @@ export function DeploymentTemplateEditor({
         </span>
       </div>
       <p className="muted">
-        将现有规格与镜像固化为可复用版本，继承规格模板可见性。此操作不会创建虚拟机或复制镜像。
+        配置完整部署参数与使用范围，发布后进入模板库；编辑将发布替代版本，不修改已有虚拟机。
       </p>
       <ErrorBanner message={error} />
-      {notice && <p>{notice}</p>}
       <form className="inline deployment-form" onSubmit={publish}>
         <label>
-          规格模板
-          <select
-            value={parent}
-            onChange={(e) => {
-              setParent(e.target.value);
-              const t = templates.find((t) => t.id === Number(e.target.value));
-              if (t) {
-                setVcpu(t.vcpu);
-                setMemoryGiB(t.memory_mib / 1024);
-                setSystemDisk(t.disk_gib);
-              }
-            }}
+          模板名称
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
             required
-          >
-            <option value="">选择模板</option>
-            {templates.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
+            minLength={2}
+            maxLength={64}
+          />
         </label>
+        <label>
+          说明
+          <input
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            maxLength={200}
+          />
+        </label>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={isPublic}
+            onChange={(e) => setIsPublic(e.target.checked)}
+          />
+          公开可用
+        </label>
+        <fieldset style={{ gridColumn: "1 / -1", minWidth: 0 }}>
+          <legend>定向授权用户</legend>
+          <input
+            aria-label="搜索授权用户"
+            placeholder="搜索用户"
+            value={userSearch}
+            onChange={(e) => setUserSearch(e.target.value)}
+          />
+          <div className="table-scroll" style={{ maxHeight: 160 }}>
+            {users.map((u) => (
+              <label className="check" key={u.id}>
+                <input
+                  type="checkbox"
+                  checked={assigned.includes(u.id)}
+                  onChange={(e) =>
+                    setAssigned((previous) =>
+                      e.target.checked
+                        ? [...previous, u.id]
+                        : previous.filter((id) => id !== u.id),
+                    )
+                  }
+                />
+                {u.username}
+              </label>
+            ))}
+          </div>
+          <small className="muted">
+            关闭公开后仅授权用户可用，已选 {assigned.length}{" "}
+            人；不授予硬件修改权限。
+          </small>
+        </fieldset>
         <label>
           系统镜像
           <select
@@ -419,7 +514,11 @@ export function DeploymentTemplateEditor({
           宿主机重启后自启
         </label>
         <button className="action primary" disabled={busy} type="submit">
-          {busy ? "发布中…" : "创建并发布新版本"}
+          {busy
+            ? "正在校验并发布…"
+            : editing
+              ? "保存并发布替代版本"
+              : "创建并发布模板"}
         </button>
       </form>
     </Card>

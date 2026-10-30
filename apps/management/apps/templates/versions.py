@@ -38,6 +38,18 @@ def visible_templates(user):
 
 class VersionSerializer(serializers.ModelSerializer):
     template_name = serializers.CharField(source='template.name', read_only=True)
+    description = serializers.CharField(source='template.description', read_only=True)
+    is_public = serializers.BooleanField(source='template.is_public', read_only=True)
+    assigned_users = serializers.PrimaryKeyRelatedField(
+        source='template.assigned_users', many=True, read_only=True
+    )
+
+    def get_fields(self):
+        fields = super().get_fields()
+        request = self.context.get('request')
+        if request is None or not is_admin(request.user):
+            fields.pop('assigned_users', None)
+        return fields
 
     class Meta:
         model = TemplateVersion
@@ -45,6 +57,9 @@ class VersionSerializer(serializers.ModelSerializer):
             'id',
             'template',
             'template_name',
+            'description',
+            'is_public',
+            'assigned_users',
             'version',
             'configuration',
             'constraints',
@@ -124,12 +139,50 @@ class DeploymentVersionListView(APIView):
     def get(self, request):
         versions = (
             TemplateVersion.objects.filter(
-                template__in=visible_templates(request.user), published=True
+                template__in=visible_templates(request.user), published=True, is_deleted=False
             )
             .select_related('template')
             .order_by('template__name', '-version')
         )
-        return Response({'results': VersionSerializer(versions, many=True).data})
+        if is_admin(request.user):
+            versions = versions.prefetch_related('template__assigned_users')
+        return Response(
+            {'results': VersionSerializer(versions, many=True, context={'request': request}).data}
+        )
+
+    @transaction.atomic
+    def post(self, request):
+        require_admin(request.user, 'templates.add_template')
+        if not isinstance(request.data, dict) or set(request.data) - {
+            'name',
+            'description',
+            'is_public',
+            'assigned_users',
+            'configuration',
+            'constraints',
+        }:
+            raise serializers.ValidationError('存在未知模板字段')
+        payload = request.data.copy()
+        config = payload.pop('configuration', {})
+        constraints = payload.pop('constraints', {})
+        from apps.templates.serializers import TemplateSerializer
+
+        serializer = VersionSerializer(data={'configuration': config, 'constraints': constraints})
+        serializer.is_valid(raise_exception=True)
+        config = serializer.validated_data.get('configuration', {})
+        metadata = TemplateSerializer(
+            data={
+                **payload,
+                **{key: config.get(key) for key in ['vcpu', 'memory_mib', 'disk_gib']},
+            },
+            context={'request': request},
+        )
+        metadata.is_valid(raise_exception=True)
+        parent = metadata.save(created_by=request.user)
+        version = serializer.save(template=parent, version=1)
+        result = publish_version(version, request.user)
+        result.status_code = 201
+        return result
 
 
 class TemplateVersionView(APIView):
@@ -174,69 +227,72 @@ class PublishTemplateVersionView(APIView):
             TemplateVersion.objects.select_for_update().select_related('template'),
             pk=pk,
             template__is_deleted=False,
+            is_deleted=False,
         )
-        config = {
-            'vcpu': version.template.vcpu,
-            'memory_mib': version.template.memory_mib,
-            'disk_gib': version.template.disk_gib,
-            **version.configuration,
-        }
-        from apps.images.models import Image
-        from apps.instances.services import validate_spec
-        from apps.networks.services import validate_network_for_instance
+        return publish_version(version, request.user)
 
-        validate_spec(
-            name='template-validation',
-            vcpu=config['vcpu'],
-            memory_mib=config['memory_mib'],
-            disk_gib=config['disk_gib'],
-        )
-        image = Image.objects.filter(
-            pk=config.get('image'), is_deleted=False, status='READY'
-        ).first()
-        if image is None:
-            raise serializers.ValidationError({'image': '发布前需指定可用镜像'})
-        from apps.nodes.models import Node
 
-        node_id = config.get('node') or image.node_id
-        node = None
-        if node_id:
-            node = get_object_or_404(Node, pk=node_id, is_deleted=False)
-            if image.node_id and image.node_id != node.pk:
-                raise serializers.ValidationError({'node': '目标节点必须持有所选镜像'})
-        from apps.instances.hardware import validate_hardware_policy
+def publish_version(version, user):
+    config = {
+        'vcpu': version.template.vcpu,
+        'memory_mib': version.template.memory_mib,
+        'disk_gib': version.template.disk_gib,
+        **version.configuration,
+    }
+    from apps.images.models import Image
+    from apps.instances.services import validate_spec
+    from apps.networks.services import validate_network_for_instance
 
-        validate_hardware_policy({**config, 'image': image}, request.user)
-        if len(image.checksum_sha256) != 64:
-            raise serializers.ValidationError({'image': '镜像需重新登记以获取摘要'})
-        for field, bounds in version.constraints.get('bounds', {}).items():
-            if not bounds['min'] <= config[field] <= bounds['max']:
-                raise serializers.ValidationError({field: '默认值超出模板允许范围'})
-        if (
-            image.format != 'ISO'
-            and image.virtual_size_bytes
-            and image.virtual_size_bytes > config['disk_gib'] * 1024**3
-        ):
-            raise serializers.ValidationError({'disk_gib': '小于镜像虚拟容量'})
-        validate_network_for_instance(config.get('network_name', ''), node)
-        for name in config.get('additional_networks', []):
-            validate_network_for_instance(name, node)
-        names = [config.get('network_name')] + config.get('additional_networks', [])
-        if len([n for n in names if n]) != len({n for n in names if n}):
-            raise serializers.ValidationError({'additional_networks': '网卡网络不能重复'})
-        if version.published:
-            return Response(VersionSerializer(version).data)
-        version.image_checksum = image.checksum_sha256
-        version.published = True
-        version.save(update_fields=['published', 'image_checksum'])
-        record_audit(
-            action='TEMPLATE_PUBLISH',
-            actor=request.user,
-            target_type='template',
-            target_id=str(version.template_id),
-            details={'version': version.version},
-        )
+    validate_spec(
+        name='template-validation',
+        vcpu=config['vcpu'],
+        memory_mib=config['memory_mib'],
+        disk_gib=config['disk_gib'],
+    )
+    image = Image.objects.filter(pk=config.get('image'), is_deleted=False, status='READY').first()
+    if image is None:
+        raise serializers.ValidationError({'image': '发布前需指定可用镜像'})
+    from apps.nodes.models import Node
+
+    node_id = config.get('node') or image.node_id
+    node = None
+    if node_id:
+        node = get_object_or_404(Node, pk=node_id, is_deleted=False)
+        if image.node_id and image.node_id != node.pk:
+            raise serializers.ValidationError({'node': '目标节点必须持有所选镜像'})
+    from apps.instances.hardware import validate_hardware_policy
+
+    validate_hardware_policy({**config, 'image': image}, user)
+    if len(image.checksum_sha256) != 64:
+        raise serializers.ValidationError({'image': '镜像需重新登记以获取摘要'})
+    for field, bounds in version.constraints.get('bounds', {}).items():
+        if not bounds['min'] <= config[field] <= bounds['max']:
+            raise serializers.ValidationError({field: '默认值超出模板允许范围'})
+    if (
+        image.format != 'ISO'
+        and image.virtual_size_bytes
+        and image.virtual_size_bytes > config['disk_gib'] * 1024**3
+    ):
+        raise serializers.ValidationError({'disk_gib': '小于镜像虚拟容量'})
+    validate_network_for_instance(config.get('network_name', ''), node)
+    for name in config.get('additional_networks', []):
+        validate_network_for_instance(name, node)
+    names = [config.get('network_name')] + config.get('additional_networks', [])
+    if len([n for n in names if n]) != len({n for n in names if n}):
+        raise serializers.ValidationError({'additional_networks': '网卡网络不能重复'})
+    if version.published:
         return Response(VersionSerializer(version).data)
+    version.image_checksum = image.checksum_sha256
+    version.published = True
+    version.save(update_fields=['published', 'image_checksum'])
+    record_audit(
+        action='TEMPLATE_PUBLISH',
+        actor=user,
+        target_type='template',
+        target_id=str(version.template_id),
+        details={'version': version.version},
+    )
+    return Response(VersionSerializer(version).data)
 
 
 def resolve_version(data, user):
@@ -247,6 +303,7 @@ def resolve_version(data, user):
         TemplateVersion.objects.select_related('template'),
         pk=version_id,
         published=True,
+        is_deleted=False,
         template__in=visible_templates(user),
     )
     from apps.images.models import Image
@@ -322,3 +379,84 @@ def resolve_version(data, user):
             raise serializers.ValidationError({field: '超出模板允许范围'})
     config['template'] = version.template_id
     return config
+
+
+class DeploymentVersionDetailView(APIView):
+    permission_classes = [RequiresPasswordChange]
+
+    def current(self, pk):
+        # Always lock parent before revision, consistent with revision creation.
+        original = get_object_or_404(TemplateVersion, pk=pk)
+        parent = get_object_or_404(
+            Template.objects.select_for_update(), pk=original.template_id, is_deleted=False
+        )
+        version = get_object_or_404(
+            TemplateVersion.objects.select_for_update(), pk=pk, published=True, is_deleted=False
+        )
+        return parent, version
+
+    @transaction.atomic
+    def patch(self, request, pk):
+        require_admin(request.user, 'templates.add_template')
+        parent, old = self.current(pk)
+        allowed = {
+            'name',
+            'description',
+            'is_public',
+            'assigned_users',
+            'configuration',
+            'constraints',
+        }
+        if not isinstance(request.data, dict) or set(request.data) - allowed:
+            raise serializers.ValidationError('存在未知模板字段')
+        from copy import deepcopy
+
+        from apps.templates.serializers import TemplateSerializer
+
+        metadata = TemplateSerializer(
+            parent,
+            data={
+                k: v
+                for k, v in request.data.items()
+                if k in allowed - {'configuration', 'constraints'}
+            },
+            partial=True,
+            context={'request': request},
+        )
+        metadata.is_valid(raise_exception=True)
+        metadata.save()
+        serializer = VersionSerializer(
+            data={
+                'configuration': request.data.get('configuration', deepcopy(old.configuration)),
+                'constraints': request.data.get('constraints', deepcopy(old.constraints)),
+            }
+        )
+        serializer.is_valid(raise_exception=True)
+        latest = parent.versions.order_by('-version').first()
+        version = serializer.save(template=parent, version=latest.version + 1)
+        result = publish_version(version, request.user)
+        old.is_deleted = True
+        old.save(update_fields=['is_deleted'])
+        record_audit(
+            action='TEMPLATE_VERSION_UPDATE',
+            actor=request.user,
+            target_type='template',
+            target_id=str(parent.pk),
+            details={'previous_version': old.version, 'version': version.version},
+        )
+        return result
+
+    @transaction.atomic
+    def delete(self, request, pk):
+        require_admin(request.user, 'templates.add_template')
+        parent, version = self.current(pk)
+        version.is_deleted = True
+        version.save(update_fields=['is_deleted'])
+        record_audit(
+            action='TEMPLATE_VERSION_DELETE',
+            actor=request.user,
+            target_type='template',
+            target_id=str(parent.pk),
+            details={'version': version.version},
+        )
+        return Response(status=204)
