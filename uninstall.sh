@@ -75,7 +75,7 @@ done
 TARGETS=("$APP_DIR/apps" "$APP_DIR/frontend" "$APP_DIR/.venv" "$APP_DIR/runtime" "$WEB_ROOT")
 log "Mode: $([[ "$APPLY" == true ]] && printf APPLY || printf PLAN-ONLY)"
 log "Stop/disable/remove units: ${TIMERS[*]} ${SERVICES[*]}"
-log "Remove CloudVirt nginx site/snippet and application directories: ${TARGETS[*]}"
+log "Remove CloudVirt nginx site, console/security/HSTS snippets and application directories: ${TARGETS[*]}"
 log "Keep /etc/cloudvirt, all databases, /var/lib/cloudvirt, /var/lib/libvirt, backups and service accounts."
 log "Keep cloudvirt-network, cloudvirt-ovs-* and $APP_DIR/services for existing VM networking."
 log "Keep source checkouts, OS packages, firewall rules and shared web server configuration."
@@ -103,7 +103,10 @@ done
 for root in /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/snippets /etc/systemd/system; do
     [[ ! -L "$root" && $(realpath -m -- "$root") == "$root" ]] || die "Refusing redirected system configuration root: $root"
 done
-[[ ! -L /etc/nginx/sites-available/cloudvirt && ! -L /etc/nginx/snippets/cloudvirt-console.conf ]] || die "Unexpected symlink in CloudVirt nginx files"
+for file in /etc/nginx/sites-available/cloudvirt /etc/nginx/snippets/cloudvirt-console.conf \
+            /etc/nginx/snippets/cloudvirt-security-headers.conf /etc/nginx/snippets/cloudvirt-hsts.conf; do
+    [[ ! -L "$file" ]] || die "Unexpected symlink in CloudVirt nginx file: $file"
+done
 if [[ -L /etc/nginx/sites-enabled/cloudvirt ]]; then
     [[ $(realpath -m /etc/nginx/sites-enabled/cloudvirt) == /etc/nginx/sites-available/cloudvirt ]] || die "CloudVirt site points outside installer-owned configuration"
 fi
@@ -116,7 +119,10 @@ BACKUP=$(mktemp -d /var/backups/cloudvirt/uninstall-XXXXXXXX)
 # Configuration backup is retained even if a later stage fails; no database is changed.
 if [[ -d /etc/cloudvirt ]]; then tar -czf "$BACKUP/config.tar.gz" -C /etc cloudvirt; fi
 install -d -m 0700 "$BACKUP/nginx" "$BACKUP/units"
-for file in /etc/nginx/sites-available/cloudvirt /etc/nginx/sites-enabled/cloudvirt /etc/nginx/snippets/cloudvirt-console.conf; do
+for file in /etc/nginx/sites-available/cloudvirt /etc/nginx/sites-enabled/cloudvirt \
+            /etc/nginx/snippets/cloudvirt-console.conf \
+            /etc/nginx/snippets/cloudvirt-security-headers.conf \
+            /etc/nginx/snippets/cloudvirt-hsts.conf; do
     if [[ -e "$file" || -L "$file" ]]; then cp -a --parents -- "$file" "$BACKUP/nginx/"; fi
 done
 for unit in "${TIMERS[@]}" "${SERVICES[@]}"; do
@@ -128,7 +134,10 @@ fi
 
 STEP=nginx
 nginx -t
-rm -f -- /etc/nginx/sites-enabled/cloudvirt /etc/nginx/sites-available/cloudvirt /etc/nginx/snippets/cloudvirt-console.conf
+rm -f -- /etc/nginx/sites-enabled/cloudvirt /etc/nginx/sites-available/cloudvirt \
+    /etc/nginx/snippets/cloudvirt-console.conf \
+    /etc/nginx/snippets/cloudvirt-security-headers.conf \
+    /etc/nginx/snippets/cloudvirt-hsts.conf
 if ! nginx -t; then
     log "Remaining nginx configuration is invalid; restoring CloudVirt nginx files."
     if [[ -d "$BACKUP/nginx/etc/nginx" ]]; then cp -a "$BACKUP/nginx/etc/nginx/." /etc/nginx/; fi

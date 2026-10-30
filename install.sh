@@ -504,15 +504,16 @@ if [[ "$HTTPS" == true && "$PORT" != 80 ]]; then
     [[ "$PORT" == 443 ]] || REDIRECT_PORT=":$PORT"
     cat >> /etc/nginx/sites-available/cloudvirt <<NGINX
 server {
-    listen 80 default_server;
-    listen [::]:80 default_server;
-    server_name _;
+    listen 80;
+    listen [::]:80;
+    server_name $DOMAIN;
     return 301 https://$DOMAIN$REDIRECT_PORT\$request_uri;
 }
 NGINX
 fi
 ln -sfn /etc/nginx/sites-available/cloudvirt /etc/nginx/sites-enabled/cloudvirt
-rm -f /etc/nginx/sites-enabled/default
+# Leave the distribution's default site and any other administrator sites intact.
+# CloudVirt's explicit server_name routes its own host without taking over port 80.
 nginx -t
 systemctl enable --now nginx
 systemctl reload nginx
@@ -532,10 +533,18 @@ wait_url() {
 }
 wait_url http://127.0.0.1:9100/health
 wait_url http://127.0.0.1:8000/api/v1/health
+[[ -s "$WEB_ROOT/index.html" ]] || die "Frontend index.html was not deployed"
 if [[ "$HTTPS" == true ]]; then
-    wait_url "https://127.0.0.1:$PORT/api/v1/health" --cacert "$CONFIG_DIR/tls/server.crt" -H "Host: $DOMAIN"
+    wait_url "$ORIGIN/api/v1/health" --noproxy '*' --resolve "$DOMAIN:$PORT:127.0.0.1" --cacert "$CONFIG_DIR/tls/server.crt"
+    wait_url "$ORIGIN/index.html" --noproxy '*' --resolve "$DOMAIN:$PORT:127.0.0.1" --cacert "$CONFIG_DIR/tls/server.crt"
+    if [[ "$PORT" != 80 ]]; then
+        redirect_status=$(curl -sS -o /dev/null -w '%{http_code}' --noproxy '*' \
+            --resolve "$DOMAIN:80:127.0.0.1" "http://$DOMAIN/")
+        [[ "$redirect_status" == 301 ]] || die "HTTP-to-HTTPS redirect is unavailable for $DOMAIN (status $redirect_status)"
+    fi
 else
-    wait_url "http://127.0.0.1:$PORT/api/v1/health" -H "Host: $DOMAIN"
+    wait_url "$ORIGIN/api/v1/health" --noproxy '*' --resolve "$DOMAIN:$PORT:127.0.0.1"
+    wait_url "$ORIGIN/index.html" --noproxy '*' --resolve "$DOMAIN:$PORT:127.0.0.1"
 fi
 export CLOUDVIRT_DEFAULT_NETWORK_XML
 CLOUDVIRT_DEFAULT_NETWORK_XML=$(virsh -c qemu:///system net-dumpxml default)
@@ -573,11 +582,16 @@ if [[ "$ENABLE_OVS" == true ]]; then
 fi
 systemctl enable --now cloudvirt-collect_node_status.timer cloudvirt-reconcile.timer cloudvirt-cleanup_console_sessions.timer
 systemctl enable --now cloudvirt-cleanup_account_batches.timer
-for service in cloudvirt-agent cloudvirt-management cloudvirt-worker nginx postgresql; do
+for service in cloudvirt-agent cloudvirt-management cloudvirt-worker cloudvirt-network nginx postgresql; do
     systemctl is-active --quiet "$service" || die "Service is not active: $service"
 done
 log "Deployment completed"
-printf 'Console: %s\nUser: admin\nInitial password: sudo cat %s/initial-admin.txt\n' "$ORIGIN" "$CONFIG_DIR"
+printf 'Console: %s\n' "$ORIGIN"
+if [[ -f "$CONFIG_DIR/initial-admin.txt" ]]; then
+    printf 'Initial administrator credentials: sudo cat %s/initial-admin.txt\n' "$CONFIG_DIR"
+else
+    printf 'Existing administrator account retained; no new password was generated.\n'
+fi
 printf 'Images: %s/images\nDisks: %s/disks\n' "$DATA_DIR" "$DATA_DIR"
 printf 'Self-signed HTTPS: %s (replace the certificate for public deployment).\n' "$HTTPS"
 printf 'Agent destructive operations: check %s/agent.env\n' "$CONFIG_DIR"
