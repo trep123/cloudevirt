@@ -339,4 +339,6 @@ class DiskListView(generics.ListAPIView):
         disk_status = self.request.query_params.get('status')
         if disk_status:
             queryset = queryset.filter(status=disk_status.upper())
+        else:
+            queryset = queryset.exclude(status='DELETED')
         return queryset.order_by('id')

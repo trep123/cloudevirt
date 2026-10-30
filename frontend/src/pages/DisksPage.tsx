@@ -55,7 +55,7 @@ export function DisksPage() {
     void reload();
   }, [reload]);
 
-  const totalSize = disks.reduce((sum, disk) => sum + (disk.size_gib || 0), 0);
+  const totalSize = disks.reduce((sum, disk) => sum + (disk.status === "DELETED" ? 0 : disk.size_gib || 0), 0);
   const readyCount = disks.filter((disk) => disk.status === "READY").length;
   const failedCount = disks.filter((disk) => disk.status === "FAILED").length;
 
@@ -86,12 +86,12 @@ export function DisksPage() {
                 setPage(1);
               }}
             >
-              <option value="">全部</option>
+              <option value="">现有磁盘</option>
               <option value="CREATING">创建中</option>
               <option value="READY">就绪</option>
               <option value="FAILED">失败</option>
               <option value="DETACHED">已卸载</option>
-              <option value="DELETED">已删除</option>
+              <option value="DELETED">已删除（历史记录）</option>
             </select>
           </label>
           <label className="check">
@@ -112,7 +112,7 @@ export function DisksPage() {
       </div>
       <ErrorBanner message={error} />
       <div className="banner banner-info">
-        虚拟机删除后保留的磁盘、硬件页面卸载的数据盘均可在此清理。删除会永久移除磁盘及其内部快照；使用中或仍有依赖的磁盘由后端拒绝删除。
+        默认仅显示现有磁盘；已删除磁盘仅在选择“已删除（历史记录）”时显示，不计入分配容量。虚拟机删除后保留的磁盘、硬件页面卸载的数据盘均可在此清理。删除会永久移除磁盘及其内部快照；使用中或仍有依赖的磁盘由后端拒绝删除。
       </div>
       <Card title="当前页磁盘概况">
         <div className="stats">
@@ -169,6 +169,7 @@ export function DisksPage() {
                     <td>{disk.role}</td>
                     <td>
                       <StatusBadge status={disk.status} />
+                      {disk.status === "DELETED" && <div className="muted">已清理 · 历史记录</div>}
                       {disk.is_orphan ? (
                         <div className="muted">
                           {disk.instance_deleted
@@ -177,8 +178,8 @@ export function DisksPage() {
                         </div>
                       ) : null}
                     </td>
-                    <td>{disk.size_gib} GiB</td>
-                    <td>{formatBytes(disk.virtual_size_bytes)}</td>
+                    <td>{disk.status === "DELETED" ? "—" : `${disk.size_gib} GiB`}</td>
+                    <td>{disk.status === "DELETED" ? "—" : formatBytes(disk.virtual_size_bytes)}</td>
                     <td className="mono">{disk.target_dev}</td>
                     <td className="mono muted">{disk.relative_path}</td>
                     <td>

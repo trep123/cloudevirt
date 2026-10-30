@@ -92,3 +92,15 @@ class RetainedDiskTests(TestCase):
         with self.assertRaises(AppError):
             execute_disk_delete(task)
         client.return_value.request_json.assert_not_called()
+
+    def test_deleted_disks_hidden_unless_history_requested(self):
+        self.disk.status = 'DELETED'
+        self.disk.is_orphan = False
+        self.disk.save()
+        self.assertEqual(self.client.get('/api/v1/disks').json()['count'], 0)
+        self.assertEqual(self.client.get('/api/v1/disks?retained=true').json()['count'], 0)
+        history = self.client.get('/api/v1/disks?status=DELETED').json()
+        self.assertEqual(history['count'], 1)
+        self.assertFalse(history['results'][0]['can_delete'])
+        self.client.force_login(self.other)
+        self.assertEqual(self.client.get('/api/v1/disks?status=DELETED').json()['count'], 0)
