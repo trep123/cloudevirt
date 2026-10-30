@@ -491,10 +491,20 @@ export function VmWizard({
                       />
                     </Field>
                     {isAdmin && (
-                      <Field
-                        label="已有系统磁盘文件（平台管理员）"
-                        hint="直接挂载节点磁盘目录中的独立 QCOW2 文件，不复制，不需要导入镜像。文件不能被其他虚拟机使用。"
+                      <fieldset
+                        className="field-wide"
+                        style={{
+                          minWidth: 0,
+                          border: "1px solid var(--border)",
+                          borderRadius: 8,
+                          padding: 16,
+                        }}
                       >
+                        <legend>已有系统磁盘文件（平台管理员）</legend>
+                        <p className="muted">
+                          直接挂载节点磁盘目录中的独立 QCOW2
+                          文件，不复制，不需要导入镜像。文件不能被其他虚拟机使用。
+                        </p>
                         <label className="check">
                           <input
                             type="checkbox"
@@ -581,7 +591,7 @@ export function VmWizard({
                             </small>
                           </>
                         )}
-                      </Field>
+                      </fieldset>
                     )}
                     <Field label="操作系统镜像" hint="仅列出已就绪的镜像">
                       <select
