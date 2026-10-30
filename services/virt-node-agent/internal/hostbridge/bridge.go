@@ -55,6 +55,7 @@ type Manager struct {
 	Dir, Sysfs string
 	Run        Runner
 	Protected  map[string]bool
+	Allowed    map[string]bool
 	mu         sync.Mutex
 }
 
@@ -62,10 +63,22 @@ var validName = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,14}$`)
 
 func New() *Manager {
 	protected := map[string]bool{}
+	allowed := map[string]bool{}
+	for _, name := range strings.Fields(strings.ReplaceAll(os.Getenv("CLOUDVIRT_BRIDGE_ALLOWED_INTERFACES"), ",", " ")) {
+		allowed[name] = true
+	}
 	for _, name := range strings.Fields(strings.ReplaceAll(os.Getenv("CLOUDVIRT_PROTECTED_INTERFACES"), ",", " ")) {
 		protected[name] = true
 	}
-	return &Manager{Dir: "/var/lib/cloudvirt/network", Sysfs: "/sys/class/net", Run: run, Protected: protected}
+	return &Manager{Dir: "/var/lib/cloudvirt/network", Sysfs: "/sys/class/net", Run: run, Protected: protected, Allowed: allowed}
+}
+
+func (m *Manager) unsafe(l link, rs []route, owned string) string {
+	if m.Allowed[l.Name] {
+		l.Addresses = nil
+		rs = nil
+	}
+	return unsafe(l, rs, owned)
 }
 func run(ctx context.Context, name string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -160,8 +173,8 @@ func (m *Manager) inventory(ctx context.Context) ([]Interface, error) {
 		if _, err = os.Stat(filepath.Join(m.Sysfs, l.Name, "device")); err != nil {
 			continue
 		}
-		reason := unsafe(l, rs, "")
-		if m.Protected[l.Name] {
+		reason := m.unsafe(l, rs, "")
+		if m.Protected[l.Name] && !m.Allowed[l.Name] {
 			reason = "已指定为管理接口"
 		}
 		if reason == "" && reserved[l.Name] {
@@ -185,7 +198,7 @@ func (m *Manager) bridgeTypes(ctx context.Context) []string {
 }
 func (m *Manager) file(s Spec) string { return filepath.Join(m.Dir, s.Bridge+".json") }
 func (m *Manager) validate(ctx context.Context, s Spec, owned bool) error {
-	if m.Protected[s.Uplink] {
+	if m.Protected[s.Uplink] && !m.Allowed[s.Uplink] {
 		return fmt.Errorf("管理接口禁止桥接")
 	}
 	if !validName.MatchString(s.Bridge) || !validName.MatchString(s.Uplink) || s.Bridge == s.Uplink || (s.Type != "BRIDGE" && s.Type != "OVS") {
@@ -213,7 +226,7 @@ func (m *Manager) validate(ctx context.Context, s Spec, owned bool) error {
 					allow = "ovs-system"
 				}
 			}
-			if reason := unsafe(l, rs, allow); reason != "" {
+			if reason := m.unsafe(l, rs, allow); reason != "" {
 				return fmt.Errorf("拒绝桥接 %s：%s", s.Uplink, reason)
 			}
 		}
@@ -221,7 +234,7 @@ func (m *Manager) validate(ctx context.Context, s Spec, owned bool) error {
 			if !owned {
 				return fmt.Errorf("网桥已存在，不能接管外部网桥")
 			}
-			if reason := unsafe(l, rs, ""); reason != "" {
+			if reason := m.unsafe(l, rs, ""); reason != "" {
 				return fmt.Errorf("网桥已承担地址或路由，禁止重配：%s", reason)
 			}
 			kind := "bridge"

@@ -14,6 +14,8 @@
 
 ## 安装
 
+安装或升级时可重复指定 `--bridge-allow-interface eno2 --bridge-allow-interface eno3`，使这些网卡跳过管理接口、地址和路由的自动过滤。配置保存在 `/etc/cloudvirt/network.env` 的 `CLOUDVIRT_BRIDGE_ALLOWED_INTERFACES`，重复安装保留已有豁免；移除豁免需编辑该变量并重启 `cloudvirt-network`。接口已加入其他网桥或聚合时仍禁止接入。该选项不迁移已有地址、路由或网络配置，请只指定已确认可用于业务桥接的接口；桥接实际管理网卡可能中断宿主机连接。
+
 从完整源码目录执行：
 
 ```bash

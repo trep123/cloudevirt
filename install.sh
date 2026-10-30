@@ -17,6 +17,7 @@ PORT="${CLOUDVIRT_PORT:-443}"
 HTTPS=true
 ENABLE_OVS=false
 STORAGE_ROOTS=()
+BRIDGE_ALLOWED=()
 ALLOW_DESTRUCTIVE=false
 TMP_DIR=""
 STEP=preflight
@@ -33,6 +34,7 @@ CloudVirt / Ubuntu 26.x amd64
   --http                Use HTTP instead of self-signed HTTPS (default port 80).
   --enable-ovs          Configure a dedicated OVS bridge, DHCP and NAT.
   --storage-root DIR    Approve an additional VM storage directory (repeatable).
+  --bridge-allow-interface NAME  Exempt a NIC from management detection (repeatable).
   --allow-destructive   Allow Agent force-stop and deletion operations.
   --help                Show this help without changing the system.
 
@@ -75,6 +77,11 @@ while (($#)); do
             STORAGE_ROOTS+=("$2")
             shift 2;;
         --allow-destructive) ALLOW_DESTRUCTIVE=true; shift;;
+        --bridge-allow-interface)
+            (($# >= 2)) || die "Missing value for $1"
+            [[ "$2" =~ ^[A-Za-z][A-Za-z0-9_-]{0,14}$ && "$2" != lo && -e "/sys/class/net/$2" ]] || die "Invalid bridge interface: $2"
+            BRIDGE_ALLOWED+=("$2")
+            shift 2;;
         --help|-h) usage; exit 0;;
         *) die "Unknown option: $1";;
     esac
@@ -456,7 +463,20 @@ virsh -c qemu:///system net-autostart default
 runuser -u cloudvirt-agent -- virsh -c qemu:///system list --all >/dev/null
 
 STEP=services
-if [[ ! -e "$CONFIG_DIR/network.env" ]]; then
+if ((${#BRIDGE_ALLOWED[@]})); then
+    install -d -m 0750 "$CONFIG_DIR"
+    touch "$CONFIG_DIR/network.env"
+    for nic in "${BRIDGE_ALLOWED[@]}"; do
+        printf 'Bridge management-filter exemption: %s (existing addresses/routes are not migrated)\n' "$nic"
+    done
+    allowed_csv=$(IFS=,; printf '%s' "${BRIDGE_ALLOWED[*]}")
+    existing_allowed=$(sed -n 's/^CLOUDVIRT_BRIDGE_ALLOWED_INTERFACES=//p' "$CONFIG_DIR/network.env" | tail -1)
+    sed -i '/^CLOUDVIRT_BRIDGE_ALLOWED_INTERFACES=/d' "$CONFIG_DIR/network.env"
+    printf 'CLOUDVIRT_BRIDGE_ALLOWED_INTERFACES=%s\n' "${existing_allowed:+$existing_allowed,}$allowed_csv" >> "$CONFIG_DIR/network.env"
+    chown root:cloudvirt-agent "$CONFIG_DIR/network.env"
+    chmod 0640 "$CONFIG_DIR/network.env"
+fi
+if ! grep -q '^CLOUDVIRT_PROTECTED_INTERFACES=' "$CONFIG_DIR/network.env" 2>/dev/null; then
     python3 - "$CONFIG_DIR/network.env" <<'PY'
 import ipaddress
 import json
@@ -468,8 +488,8 @@ links = json.loads(subprocess.check_output(['ip', '-j', 'address', 'show']))
 protected = sorted({link['ifname'] for link in links if link['ifname'] != 'lo'
                     and any(not ipaddress.ip_address(address['local']).is_link_local
                             for address in link.get('addr_info', []))})
-pathlib.Path(sys.argv[1]).write_text(
-    'CLOUDVIRT_PROTECTED_INTERFACES=' + ','.join(protected) + '\n', encoding='utf-8')
+with pathlib.Path(sys.argv[1]).open('a', encoding='utf-8') as output:
+    output.write('CLOUDVIRT_PROTECTED_INTERFACES=' + ','.join(protected) + '\n')
 PY
     chown root:cloudvirt-agent "$CONFIG_DIR/network.env"
     chmod 0640 "$CONFIG_DIR/network.env"
