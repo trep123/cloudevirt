@@ -463,6 +463,7 @@ virsh -c qemu:///system net-autostart default
 runuser -u cloudvirt-agent -- virsh -c qemu:///system list --all >/dev/null
 
 STEP=services
+install -o root -g root -m 0755 "$APP_DIR/scripts/cloudvirtctl.py" /usr/local/sbin/cloudvirtctl
 if ((${#BRIDGE_ALLOWED[@]})); then
     install -d -m 0750 "$CONFIG_DIR"
     touch "$CONFIG_DIR/network.env"

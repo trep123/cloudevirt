@@ -14,6 +14,20 @@
 
 ## 安装
 
+安装器同时安装 `cloudvirtctl`，供后续独立管理可选功能：
+
+```bash
+sudo cloudvirtctl status
+sudo cloudvirtctl interface allow eno2   # 跳过该接口的管理地址/路由过滤
+sudo cloudvirtctl interface protect eno2 # 恢复自动过滤
+sudo cloudvirtctl enable network-bridge
+sudo cloudvirtctl disable network-bridge
+sudo cloudvirtctl enable destructive    # 允许磁盘清理、快照恢复等破坏性操作
+sudo cloudvirtctl disable destructive
+```
+
+工具不自动安装软件包，使用已安装的服务；配置写入后自动重启对应的运行中服务。禁用 network-bridge 只停止网络配置 helper，不拆除已有网桥或虚拟机网络。网卡豁免不会迁移已有 IP 或路由，实际管理接口应继续受保护。
+
 安装或升级时可重复指定 `--bridge-allow-interface eno2 --bridge-allow-interface eno3`，使这些网卡跳过管理接口、地址和路由的自动过滤。配置保存在 `/etc/cloudvirt/network.env` 的 `CLOUDVIRT_BRIDGE_ALLOWED_INTERFACES`，重复安装保留已有豁免；移除豁免需编辑该变量并重启 `cloudvirt-network`。接口已加入其他网桥或聚合时仍禁止接入。该选项不迁移已有地址、路由或网络配置，请只指定已确认可用于业务桥接的接口；桥接实际管理网卡可能中断宿主机连接。
 
 从完整源码目录执行：
