@@ -102,7 +102,10 @@ class InstanceHardwareView(APIView):
 
     def get(self, request, pk):
         instance = get_object_or_404(instances_for(request.user), pk=pk)
-        result = AgentClient(instance.node.endpoint).domain_hardware(instance.libvirt_domain_name)
+        result = AgentClient(instance.node.endpoint).domain_hardware(
+            instance.libvirt_domain_name,
+            storage_pool=instance.storage_pool.name if instance.storage_pool_id else '',
+        )
         if result.get('uuid') != str(instance.uuid):
             raise AppError(ErrorCode.CONFLICT, '节点域 UUID 不匹配')
         records = {d.relative_path: d for d in instance.disks.exclude(status='DELETED')}
@@ -306,6 +309,10 @@ class InstanceHardwareView(APIView):
                 )
             payload['mac'] = mac
         available = available_resources(node)
+        if delta['disk_gib'] > 0 and instance.storage_pool_id:
+            from apps.infrastructure.placement import pool_available_bytes
+
+            available['disk_bytes'] = pool_available_bytes(node, instance.storage_pool)
         if any(
             delta[k] > 0 and delta[k] > available[v]
             for k, v in [('vcpu', 'vcpu'), ('memory_mib', 'memory_mib')]
@@ -342,6 +349,7 @@ class InstanceHardwareView(APIView):
         )
         ResourceReservation.objects.create(
             node=node,
+            storage_pool=instance.storage_pool,
             task=task,
             vcpu_reserved=delta['vcpu'],
             memory_reserved_mib=delta['memory_mib'],
@@ -445,7 +453,8 @@ def execute_hardware_change(task):
         task.save(update_fields=['payload', 'updated_at'])
         Instance.objects.filter(pk=instance.pk).update(operation_status='PREPARING')
         result = AgentClient(instance.node.endpoint).domain_hardware(
-            instance.libvirt_domain_name, change
+            instance.libvirt_domain_name, change,
+            storage_pool=instance.storage_pool.name if instance.storage_pool_id else '',
         )
         if not verify_result(result, change):
             raise AppError(ErrorCode.OPERATION_FAILED, '节点未确认目标硬件，保留预留以便核对')

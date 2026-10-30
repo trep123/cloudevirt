@@ -87,6 +87,8 @@ def execute_instance_create(task: Task) -> dict:
         'vcpu': instance.vcpu,
         'memory_mib': instance.memory_mib,
         'disk_relative_path': disk.relative_path,
+        'storage_pool': instance.storage_pool.name if instance.storage_pool_id else '',
+        'storage_pool_path': instance.storage_pool.path if instance.storage_pool_id else '',
         'disk_gib': instance.disk_gib,
         'network': instance.network_name,
         'network_type': (task.payload or {}).get('network_type', ''),
@@ -378,15 +380,18 @@ def execute_instance_delete(task: Task) -> dict:
     disk_relative_path = payload.get('disk_relative_path') or (disk.relative_path if disk else '')
 
     client = AgentClient(instance.node.endpoint)
+    pool_kwargs = {'storage_pool': instance.storage_pool.name} if instance.storage_pool_id else {}
     live_disks = instance.disks.exclude(status='DELETED')
     if purge_disk and live_disks.filter(role='DATA').exists():
         result = client.delete_domain_disks(
             instance.libvirt_domain_name,
             list(live_disks.values_list('relative_path', flat=True)),
+            **pool_kwargs,
         )
     else:
         result = client.delete_domain(
-            instance.libvirt_domain_name, disk_relative_path if purge_disk else ''
+            instance.libvirt_domain_name, disk_relative_path if purge_disk else '',
+            **pool_kwargs,
         )
 
     if purge_disk and live_disks.exists() and result.get('disk_removed') is not True:

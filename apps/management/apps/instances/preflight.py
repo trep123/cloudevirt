@@ -2,6 +2,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.administration import limit_nodes
+from apps.infrastructure.placement import pool_available_bytes, select_storage_pool
 from apps.instances.hardware import validate_creation_capabilities
 from apps.instances.serializers import InstanceCreateSerializer
 from apps.instances.services import available_resources, validate_spec
@@ -38,6 +39,11 @@ class CreatePreflightView(APIView):
         if image and not data.get('existing_system_disk') and len(image.checksum_sha256) != 64:
             raise AppError(ErrorCode.CONFLICT, '镜像摘要缺失，请重新登记校验')
         resources = available_resources(node)
+        selected_pool = select_storage_pool(request.user, node, data.get('storage_pool', ''))
+        if selected_pool:
+            if data.get('existing_system_file'):
+                raise AppError(ErrorCode.INVALID_ARGUMENT, '直接使用已有系统盘仅支持默认磁盘目录')
+            resources['disk_bytes'] = pool_available_bytes(node, selected_pool)
         requested = {
             'vcpu': data['vcpu'],
             'memory_mib': data['memory_mib'],

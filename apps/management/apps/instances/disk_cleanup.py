@@ -119,7 +119,10 @@ def execute_disk_delete(task):
     if not node.is_schedulable:
         raise AppError(ErrorCode.NODE_OFFLINE)
     result = AgentClient(node.endpoint, timeout=180).request_json(
-        '/api/v1/disks', 'DELETE', {'relative_path': disk.relative_path}
+        '/api/v1/disks', 'DELETE', {
+            'relative_path': disk.relative_path,
+            'storage_pool': instance.storage_pool.name if instance.storage_pool_id else '',
+        }
     )
     if (
         not isinstance(result, dict)

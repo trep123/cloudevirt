@@ -169,9 +169,15 @@ class AgentClient:
         path = f'/api/v1/domains/{quote(name, safe="")}/display'
         return self.get_json(path) if config is None else self.request_json(path, 'POST', config)
 
-    def domain_hardware(self, name, payload=None):
+    def domain_hardware(self, name, payload=None, *, storage_pool=''):
         path = f'/api/v1/domains/{quote(name, safe="")}/hardware'
-        return self.get_json(path) if payload is None else self.request_json(path, 'POST', payload, timeout=90)
+        if storage_pool:
+            path += f'?storage_pool={quote(storage_pool, safe="")}'
+        return (
+            self.get_json(path)
+            if payload is None
+            else self.request_json(path, 'POST', payload, timeout=90)
+        )
 
     def domain_addresses(self, name: str) -> dict:
         """读取域内网卡的 IPv4/IPv6 地址。"""
@@ -185,10 +191,19 @@ class AgentClient:
         """执行域操作：start / shutdown / force-stop / reboot。"""
         return self.request_json(f'/api/v1/domains/{name}/{action}', 'POST', {})
 
-    def delete_domain(self, name: str, disk_relative_path: str = '') -> dict:
+    def delete_domain(
+        self, name: str, disk_relative_path: str = '', *, storage_pool: str = ''
+    ) -> dict:
         """删除域定义，可选删除磁盘文件。"""
-        suffix = f'?disk_relative_path={disk_relative_path}' if disk_relative_path else ''
-        return self.request_json(f'/api/v1/domains/{name}{suffix}', 'DELETE')
+        from urllib.parse import urlencode
+
+        query = {}
+        if disk_relative_path:
+            query['disk_relative_path'] = disk_relative_path
+        if storage_pool:
+            query['storage_pool'] = storage_pool
+        suffix = '?' + urlencode(query) if query else ''
+        return self.request_json(f'/api/v1/domains/{quote(name, safe="")}{suffix}', 'DELETE')
 
     def list_disks(self) -> list[dict]:
         """列出节点磁盘目录中的文件。"""
@@ -197,11 +212,14 @@ class AgentClient:
         disks = (payload.get('disks') or []) if isinstance(payload, dict) else []
         return [item for item in disks if isinstance(item, dict)]
 
-    def delete_domain_disks(self, name, paths):
+    def delete_domain_disks(self, name, paths, *, storage_pool=''):
         from urllib.parse import urlencode
 
+        query = {'disk_relative_path': paths}
+        if storage_pool:
+            query['storage_pool'] = storage_pool
         return self.request_json(
-            '/api/v1/domains/' + name + '?' + urlencode({'disk_relative_path': paths}, doseq=True),
+            '/api/v1/domains/' + quote(name, safe='') + '?' + urlencode(query, doseq=True),
             'DELETE',
         )
 

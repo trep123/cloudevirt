@@ -55,6 +55,9 @@ class InstanceSerializer(serializers.ModelSerializer):
 
     node_name = serializers.CharField(source='node.name', read_only=True)
     image_name = serializers.CharField(source='image.name', read_only=True, allow_null=True)
+    storage_pool_name = serializers.CharField(
+        source='storage_pool.name', read_only=True, allow_null=True
+    )
     disks = DiskSerializer(many=True, read_only=True)
 
     class Meta:
@@ -66,6 +69,8 @@ class InstanceSerializer(serializers.ModelSerializer):
             'libvirt_domain_name',
             'node',
             'node_name',
+            'storage_pool',
+            'storage_pool_name',
             'image',
             'image_name',
             'network_name',
@@ -101,6 +106,9 @@ class InstanceCreateSerializer(serializers.Serializer):
     memory_mib = serializers.IntegerField(min_value=1)
     disk_gib = serializers.IntegerField(min_value=1)
     network_name = serializers.CharField(max_length=64, required=False, allow_blank=True)
+    storage_pool = serializers.CharField(
+        max_length=64, required=False, allow_blank=True, default=''
+    )
     autostart = serializers.BooleanField(required=False, default=False)
     start_after_create = serializers.BooleanField(required=False, default=True)
     template = serializers.IntegerField(required=False, min_value=1)

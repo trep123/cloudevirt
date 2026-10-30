@@ -91,6 +91,11 @@ func deleteDomainHandler(deps Dependencies) http.HandlerFunc {
 			present = false
 		}
 		paths := request.URL.Query()["disk_relative_path"]
+		diskRoot, rootErr := diskRootForPool(ctx, deps, request.URL.Query().Get("storage_pool"))
+		if rootErr != nil {
+			writeAPIError(writer, deps.Logger, rootErr, requestID)
+			return
+		}
 		if len(paths) > 9 {
 			writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeInvalidArgument, "磁盘数量超限", nil), requestID)
 			return
@@ -100,7 +105,7 @@ func deleteDomainHandler(deps Dependencies) http.HandlerFunc {
 				writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeConflict, "宿主机未开启破坏性操作开关", nil), requestID)
 				return
 			}
-			if _, err := storage.SafePathAllowMissing(deps.DiskDir, relative); err != nil {
+			if _, err := storage.SafePathAllowMissing(diskRoot, relative); err != nil {
 				writeAPIError(writer, deps.Logger, err, requestID)
 				return
 			}
@@ -143,7 +148,7 @@ func deleteDomainHandler(deps Dependencies) http.HandlerFunc {
 				writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeConflict, "Agent disk cleanup is unavailable", nil), requestID)
 				return
 			}
-			if err := provider.RemoveUnusedDisk(ctx, deps.DiskDir, relative); err != nil {
+			if err := provider.RemoveUnusedDisk(ctx, diskRoot, relative); err != nil {
 				writeAPIError(writer, deps.Logger, err, requestID)
 				return
 			}

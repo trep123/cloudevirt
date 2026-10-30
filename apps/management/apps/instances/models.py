@@ -64,6 +64,10 @@ class Instance(models.Model):
     node = models.ForeignKey(
         'nodes.Node', on_delete=models.PROTECT, related_name='instances', verbose_name='节点'
     )
+    storage_pool = models.ForeignKey(
+        'infrastructure.ManagedStoragePool', on_delete=models.PROTECT,
+        null=True, blank=True, related_name='instances', verbose_name='存储池',
+    )
     image = models.ForeignKey(
         'images.Image',
         on_delete=models.PROTECT,
@@ -199,6 +203,10 @@ class ResourceReservation(models.Model):
 
     node = models.ForeignKey(
         'nodes.Node', on_delete=models.CASCADE, related_name='reservations', verbose_name='节点'
+    )
+    storage_pool = models.ForeignKey(
+        'infrastructure.ManagedStoragePool', on_delete=models.PROTECT,
+        null=True, blank=True, related_name='reservations', verbose_name='存储池',
     )
     task = models.OneToOneField(
         'tasks.Task', on_delete=models.CASCADE, related_name='reservation', verbose_name='任务'

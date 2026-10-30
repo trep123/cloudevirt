@@ -24,7 +24,13 @@ type StoragePool = {
   available_bytes: number;
   target: { path: string };
   active: boolean;
+  managed: boolean;
+  assigned_user_ids: number[];
+  default_user_ids: number[];
+  is_default: boolean;
+  revision: number | null;
 };
+type UserOption = { id: number; username: string; is_active: boolean };
 type PoolResponse = {
   storage_roots?: string[];
   default_directory?: string;
@@ -35,6 +41,7 @@ type PoolResponse = {
 export function StoragePoolsPage() {
   const [nodes, setNodes] = useState<Node[]>([]),
     [node, setNode] = useState(0);
+  const [users, setUsers] = useState<UserOption[]>([]);
   const [data, setData] = useState<PoolResponse | null>(null),
     [config, setConfig] = useState<Configuration | null>(null);
   const [error, setError] = useState<string | null>(null),
@@ -46,14 +53,19 @@ export function StoragePoolsPage() {
     [task, setTask] = useState<string | null>(null),
     [refresh, setRefresh] = useState(0);
   const [directory, setDirectory] = useState("");
+  const [assignedUsers, setAssignedUsers] = useState<number[]>([]);
+  const [defaultUsers, setDefaultUsers] = useState<number[]>([]);
+  const [defaultPool, setDefaultPool] = useState(false);
+  const [editing, setEditing] = useState<StoragePool | null>(null);
   useEffect(() => {
     let live = true;
-    Promise.all([allResources<Node>("/nodes"), infra.configuration()])
-      .then(([n, c]) => {
+    Promise.all([allResources<Node>("/nodes"), infra.configuration(), allResources<UserOption>("/users")])
+      .then(([n, c, u]) => {
         if (live) {
           setNodes(n);
           setNode(n[0]?.id || 0);
           setConfig(c);
+          setUsers(u.filter((item) => item.is_active));
           if (!n.length) setLoading(false);
         }
       })
@@ -120,6 +132,9 @@ export function StoragePoolsPage() {
             setName("cv-");
             setKey(newRequestId());
             setDirectory("");
+            setAssignedUsers([]);
+            setDefaultUsers([]);
+            setDefaultPool(false);
             setError(null);
             setCreate(true);
           }}
@@ -150,6 +165,8 @@ export function StoragePoolsPage() {
                     <th>容量</th>
                     <th>使用率</th>
                     <th>状态</th>
+                    <th>授权用户 / 默认</th>
+                    <th>操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -192,6 +209,22 @@ export function StoragePoolsPage() {
                             : "—"}
                         </td>
                         <td>{p.active ? "运行中" : "未激活"}</td>
+                        <td>
+                          {p.managed ? `${p.assigned_user_ids.length} 人` : "未纳管"}
+                          {p.is_default ? " · 默认池" : ""}
+                          {p.default_user_ids.length ? ` · ${p.default_user_ids.length} 人默认` : ""}
+                        </td>
+                        <td>
+                          {p.managed && (
+                            <button className="action" onClick={() => {
+                              setEditing(p);
+                              setAssignedUsers(p.assigned_user_ids);
+                              setDefaultUsers(p.default_user_ids);
+                              setDefaultPool(p.is_default);
+                              setError(null);
+                            }}>分配使用权限</button>
+                          )}
+                        </td>
                       </tr>
                     );
                   })}
@@ -241,7 +274,7 @@ export function StoragePoolsPage() {
               try {
                 const result = await infra.save(
                   `/admin/nodes/${node}/storage-pools/`,
-                  { name, path: directory },
+                  { name, path: directory, assigned_user_ids: assignedUsers, default_user_ids: defaultUsers, is_default: defaultPool },
                   key,
                 );
                 setCreate(false);
@@ -283,9 +316,75 @@ export function StoragePoolsPage() {
               。不存在的子目录会自动创建；现有目录须已授予 Agent 与 QEMU
               访问权限。名称必须以 cv- 开头。
             </div>
+            <label>
+              允许使用的用户
+              <select multiple value={assignedUsers.map(String)} onChange={(e) =>
+                { const selected = Array.from(e.target.selectedOptions, (option) => Number(option.value)); setAssignedUsers(selected); setDefaultUsers((old) => old.filter((id) => selected.includes(id))); }}>
+                {users.map((user) => <option key={user.id} value={user.id}>{user.username}</option>)}
+              </select>
+              <small className="muted">按 Ctrl / Cmd 可多选；平台管理员始终可使用。未分配的普通用户继续使用节点原有默认目录。</small>
+            </label>
+            <label>
+              以此池为默认的用户
+              <select multiple value={defaultUsers.map(String)} onChange={(e) =>
+                setDefaultUsers(Array.from(e.target.selectedOptions, (option) => Number(option.value)))}>
+                {users.filter((user) => assignedUsers.includes(user.id)).map((user) =>
+                  <option key={user.id} value={user.id}>{user.username}</option>)}
+              </select>
+              <small className="muted">仅可选择已授权用户；同一用户在每个节点只有一个个人默认池。</small>
+            </label>
+            <label className="check">
+              <input type="checkbox" checked={defaultPool} onChange={(e) => setDefaultPool(e.target.checked)} />
+              设为此节点的默认存储池
+            </label>
           </form>
         </Drawer>
       ) : null}
+      {editing && (
+        <Drawer title={`分配存储池 · ${editing.name}`} onClose={() => !busy && setEditing(null)}
+          footer={<>
+            <button className="action" disabled={busy} onClick={() => setEditing(null)}>取消</button>
+            <button className="action primary" disabled={busy} form="pool-access-form" type="submit">{busy ? "保存中…" : "保存分配"}</button>
+          </>}>
+          <form id="pool-access-form" className="infra-form" onSubmit={async (e) => {
+            e.preventDefault();
+            setBusy(true);
+            setError(null);
+            try {
+              await api.request(`/admin/nodes/${node}/storage-pools/${encodeURIComponent(editing.name)}/access/`, {
+                method: "PUT",
+                body: JSON.stringify({ revision: editing.revision, assigned_user_ids: assignedUsers, default_user_ids: defaultUsers, is_default: defaultPool }),
+              });
+              setEditing(null);
+              setRefresh((value) => value + 1);
+            } catch (err) {
+              setError(describeError(err));
+            } finally {
+              setBusy(false);
+            }
+          }}>
+            <ErrorBanner message={error} />
+            <p className="muted">目录：{editing.target.path}</p>
+            <label>允许使用的用户
+              <select multiple value={assignedUsers.map(String)} onChange={(e) =>
+                { const selected = Array.from(e.target.selectedOptions, (option) => Number(option.value)); setAssignedUsers(selected); setDefaultUsers((old) => old.filter((id) => selected.includes(id))); }}>
+                {users.map((user) => <option key={user.id} value={user.id}>{user.username}</option>)}
+              </select>
+            </label>
+            <label>以此池为默认的用户
+              <select multiple value={defaultUsers.map(String)} onChange={(e) =>
+                setDefaultUsers(Array.from(e.target.selectedOptions, (option) => Number(option.value)))}>
+                {users.filter((user) => assignedUsers.includes(user.id)).map((user) =>
+                  <option key={user.id} value={user.id}>{user.username}</option>)}
+              </select>
+            </label>
+            <label className="check">
+              <input type="checkbox" checked={defaultPool} onChange={(e) => setDefaultPool(e.target.checked)} />
+              设为此节点的默认存储池
+            </label>
+          </form>
+        </Drawer>
+      )}
       {task ? (
         <TaskProgressDrawer
           id={task}

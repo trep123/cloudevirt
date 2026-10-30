@@ -20,6 +20,7 @@ func unusedDiskHandler(deps Dependencies) http.HandlerFunc {
 		}
 		var body struct {
 			Relative string `json:"relative_path"`
+			StoragePool string `json:"storage_pool"`
 		}
 		d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
 		d.DisallowUnknownFields()
@@ -36,7 +37,12 @@ func unusedDiskHandler(deps Dependencies) http.HandlerFunc {
 		}
 		diskReferenceMutation.Lock()
 		defer diskReferenceMutation.Unlock()
-		if e := provider.RemoveUnusedDisk(r.Context(), deps.DiskDir, body.Relative); e != nil {
+		diskRoot, e := diskRootForPool(r.Context(), deps, body.StoragePool)
+		if e != nil {
+			fail(e)
+			return
+		}
+		if e := provider.RemoveUnusedDisk(r.Context(), diskRoot, body.Relative); e != nil {
 			fail(e)
 			return
 		}

@@ -16,6 +16,7 @@ DOMAIN="${CLOUDVIRT_DOMAIN:-}"
 PORT="${CLOUDVIRT_PORT:-443}"
 HTTPS=true
 ENABLE_OVS=false
+STORAGE_ROOTS=()
 ALLOW_DESTRUCTIVE=false
 TMP_DIR=""
 STEP=preflight
@@ -31,6 +32,7 @@ CloudVirt / Ubuntu 26.x amd64
   --port PORT           HTTPS listen port; default 443.
   --http                Use HTTP instead of self-signed HTTPS (default port 80).
   --enable-ovs          Configure a dedicated OVS bridge, DHCP and NAT.
+  --storage-root DIR    Approve an additional VM storage directory (repeatable).
   --allow-destructive   Allow Agent force-stop and deletion operations.
   --help                Show this help without changing the system.
 
@@ -68,6 +70,10 @@ while (($#)); do
             shift 2;;
         --http) HTTPS=false; [[ "$PORT" != 443 ]] || PORT=80; shift;;
         --enable-ovs) ENABLE_OVS=true; shift;;
+        --storage-root)
+            (($# >= 2)) || die "Missing value for $1"
+            STORAGE_ROOTS+=("$2")
+            shift 2;;
         --allow-destructive) ALLOW_DESTRUCTIVE=true; shift;;
         --help|-h) usage; exit 0;;
         *) die "Unknown option: $1";;
@@ -85,6 +91,13 @@ for install_root in "$APP_DIR" "$CONFIG_DIR" "$WEB_ROOT"; do
     [[ ! -L "$install_root" && $(realpath -m -- "$install_root") == "$install_root" ]] || die "Deployment roots and ancestors must not be symlinks: $install_root"
 done
 [[ "$PORT" =~ ^[0-9]{1,5}$ ]] && ((10#$PORT >= 1 && 10#$PORT <= 65535)) || die "Invalid web port"
+for root in "${STORAGE_ROOTS[@]}"; do
+    [[ "$root" =~ ^/[A-Za-z0-9_./-]+$ && "$root" != / && $(realpath -m -- "$root") == "$root" ]] || die "Invalid storage root: $root"
+    case "$root" in
+        /etc|/etc/*|/usr|/usr/*|/root|/root/*|/home|/home/*|/proc|/proc/*|/sys|/sys/*|/dev|/dev/*|/run|/run/*|/tmp|/tmp/*|/var/log|/var/log/*|/var/tmp|/var/tmp/*|/var/www|/var/www/*|/opt/cloudvirt|/opt/cloudvirt/*)
+            die "System directory cannot be a storage root: $root";;
+    esac
+done
 PORT=$((10#$PORT))
 case "$PORT" in 5432|8000|9100) die "Web port conflicts with an internal service";; esac
 command -v flock >/dev/null || die "flock is required (Ubuntu util-linux)"
@@ -198,6 +211,9 @@ getent passwd libvirt-qemu >/dev/null && usermod -a -G kvm libvirt-qemu
 install -d -o cloudvirt -g cloudvirt -m 0750 /var/log/cloudvirt
 install -d -m 0755 /var/lib/libvirt/images "$DATA_DIR"
 install -d -o cloudvirt-agent -g kvm -m 2770 "$DATA_DIR/images" "$DATA_DIR/disks"
+for root in "${STORAGE_ROOTS[@]}"; do
+    install -d -o cloudvirt-agent -g kvm -m 2770 "$root"
+done
 # The management account can read application code, but cannot modify it.
 chown -R root:root "$APP_DIR"
 find "$APP_DIR" -type d -exec chmod a+rx {} +
@@ -374,6 +390,23 @@ ENV
 elif [[ "$ALLOW_DESTRUCTIVE" == true ]]; then
     sed -i 's/^CLOUDVIRT_ALLOW_DESTRUCTIVE=.*/CLOUDVIRT_ALLOW_DESTRUCTIVE=true/' "$CONFIG_DIR/agent.env"
 fi
+ROOTS_CSV=$(sed -n 's/^CLOUDVIRT_STORAGE_ROOTS=//p' "$CONFIG_DIR/agent.env" | tail -1)
+IFS=, read -r -a EXISTING_ROOTS <<< "$ROOTS_CSV"
+for root in "${EXISTING_ROOTS[@]}"; do
+    [[ "$root" =~ ^/[A-Za-z0-9_./-]+$ && $(realpath -m -- "$root") == "$root" ]] || die "Invalid existing storage root: $root"
+    case "$root" in
+        /etc|/etc/*|/usr|/usr/*|/root|/root/*|/home|/home/*|/proc|/proc/*|/sys|/sys/*|/dev|/dev/*|/run|/run/*|/tmp|/tmp/*|/var/log|/var/log/*|/var/tmp|/var/tmp/*|/var/www|/var/www/*|/opt/cloudvirt|/opt/cloudvirt/*)
+            die "System directory cannot be a storage root: $root";;
+    esac
+done
+for root in "${STORAGE_ROOTS[@]}"; do
+    [[ ",$ROOTS_CSV," == *",$root,"* ]] || ROOTS_CSV="${ROOTS_CSV:+$ROOTS_CSV,}$root"
+done
+if grep -q '^CLOUDVIRT_STORAGE_ROOTS=' "$CONFIG_DIR/agent.env"; then
+    sed -i "s|^CLOUDVIRT_STORAGE_ROOTS=.*|CLOUDVIRT_STORAGE_ROOTS=$ROOTS_CSV|" "$CONFIG_DIR/agent.env"
+else
+    printf 'CLOUDVIRT_STORAGE_ROOTS=%s\n' "$ROOTS_CSV" >> "$CONFIG_DIR/agent.env"
+fi
 chown root:cloudvirt "$CONFIG_DIR/management.env"
 chmod 0640 "$CONFIG_DIR/management.env"
 chown root:cloudvirt-agent "$CONFIG_DIR/agent.env"
@@ -455,7 +488,7 @@ Group=cloudvirt-agent
 SupplementaryGroups=libvirt kvm
 UMask=0007
 ReadWritePaths=
-ReadWritePaths=$DATA_DIR /var/log/cloudvirt
+ReadWritePaths=$DATA_DIR ${ROOTS_CSV//,/ } /var/log/cloudvirt
 ENV
 for job in collect_node_status reconcile cleanup_console_sessions cleanup_account_batches; do
     interval=30

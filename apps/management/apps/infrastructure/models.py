@@ -1,5 +1,6 @@
 """Administrative resource organization; membership never grants resource access."""
 
+from django.conf import settings
 from django.db import models
 
 
@@ -65,4 +66,38 @@ class StorageBackend(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.name} ({self.driver}, draft)"
+        return f'{self.name} ({self.driver}, draft)'
+
+
+class ManagedStoragePool(models.Model):
+    """Node directory pool published for VM placement after Agent confirmation."""
+
+    node = models.ForeignKey(
+        'nodes.Node', on_delete=models.PROTECT, related_name='managed_storage_pools'
+    )
+    name = models.CharField(max_length=64)
+    path = models.CharField(max_length=4096)
+    allowed_users = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, blank=True, related_name='storage_pools'
+    )
+    default_users = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, blank=True, related_name='default_storage_pools'
+    )
+    is_default = models.BooleanField(default=False)
+    revision = models.PositiveIntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['node', 'name'], name='uniq_managed_storage_pool_node_name'
+            ),
+            models.UniqueConstraint(
+                fields=['node'],
+                condition=models.Q(is_default=True),
+                name='uniq_default_storage_pool_per_node',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.node_id}:{self.name}'

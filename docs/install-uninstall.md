@@ -20,6 +20,15 @@
 sudo bash install.sh --source "$PWD" --domain 192.168.100.100
 ```
 
+如需在默认数据目录以外创建目录存储池，安装或升级时重复传入允许的存储根目录：
+
+```bash
+sudo bash install.sh --source "$PWD" --domain 192.168.100.100 \
+  --storage-root /mnt/cloudvirt-vms --storage-root /srv/vm-disks
+```
+
+安装器会创建目录、授予节点 Agent 写入权限，并将路径加入 `CLOUDVIRT_STORAGE_ROOTS` 和 systemd 写入白名单。随后管理员可在“存储池”页面选择这些根目录或其子目录建池、分配可使用的用户，并为每个节点指定一个默认池，也可为每位用户指定个人默认池。个人默认优先于节点默认；用户有多个授权池且均无默认时，创建时须明确选择。根目录须是独立、非符号链接的绝对路径；挂载的文件系统应先可用。已有实例保留原落盘位置，只有新建实例会使用选定池。
+
 仓库内的 `offline/linux-amd64` 包会自动优先使用；也可指定 `--offline-dir /path/to/linux-amd64`。包和源码依赖锁均通过 SHA-256 校验，不匹配时停止安装。该包包含 Node.js、Python wheels、npm 缓存、Go vendor；从本地完整源码执行 `--source` 不会访问 GitHub 克隆源码。apt 软件包仍取自系统配置的仓库或镜像。重新生成方式见 [offline/README.md](../offline/README.md)。
 
 按需增加 --enable-ovs、--allow-destructive；重复安装保留数据库与密钥并备份，迁移前停止控制平面任务。不要在无维护窗口的生产环境直接重装。

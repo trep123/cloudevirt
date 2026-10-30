@@ -30,6 +30,8 @@ type DomainOperator interface {
 
 // createDomainRequest 是创建域请求体。
 type createDomainRequest struct {
+	StoragePool            string             `json:"storage_pool,omitempty"`
+	StoragePoolPath        string             `json:"storage_pool_path,omitempty"`
 	CloneMode              string             `json:"clone_mode,omitempty"`
 	UseExistingDisk        bool               `json:"use_existing_disk,omitempty"`
 	SourceDiskRelativePath string             `json:"source_disk_relative_path,omitempty"`
@@ -107,8 +109,17 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 			writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeInvalidArgument, "ISO 安装不支持链接克隆", nil), requestID)
 			return
 		}
+		diskRoot, rootErr := diskRootForPool(ctx, deps, payload.StoragePool)
+		if rootErr != nil {
+			writeAPIError(writer, deps.Logger, rootErr, requestID)
+			return
+		}
+		if payload.StoragePoolPath != "" && diskRoot != payload.StoragePoolPath {
+			writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeConflict, "存储池目录已变化", nil), requestID)
+			return
+		}
 		// 磁盘可能尚不存在，使用允许缺失的路径校验
-		diskPath, err := storage.SafePathAllowMissing(deps.DiskDir, payload.DiskRelativePath)
+		diskPath, err := storage.SafePathAllowMissing(diskRoot, payload.DiskRelativePath)
 		if err != nil {
 			writeAPIError(writer, deps.Logger, err, requestID)
 			return
@@ -148,7 +159,7 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 		}
 		seen := map[string]bool{diskPath: true}
 		for _, dataDisk := range payload.DataDisks {
-			path, pathErr := storage.SafePathAllowMissing(deps.DiskDir, dataDisk.RelativePath)
+			path, pathErr := storage.SafePathAllowMissing(diskRoot, dataDisk.RelativePath)
 			if pathErr != nil {
 				writeAPIError(writer, deps.Logger, pathErr, requestID)
 				return
@@ -214,7 +225,7 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 
 		unlock := lockCreation(payload.UUID)
 		defer unlock()
-		if _, err := journalMatches(deps.DiskDir, payload); err != nil {
+		if _, err := journalMatches(diskRoot, payload); err != nil {
 			writeAPIError(writer, deps.Logger, err, requestID)
 			return
 		}
@@ -234,14 +245,14 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 			claimPaths = append([]string{}, spec.AdditionalDiskPaths...)
 		}
 		if payload.Initialization != nil {
-			seed, err := storage.SafePathAllowMissing(deps.DiskDir, ".init-"+payload.UUID+".iso")
+			seed, err := storage.SafePathAllowMissing(diskRoot, ".init-"+payload.UUID+".iso")
 			if err != nil {
 				writeAPIError(writer, deps.Logger, err, requestID)
 				return
 			}
 			claimPaths = append(claimPaths, seed)
 		}
-		resume, claimErr := claimCreation(deps.DiskDir, payload, claimPaths)
+		resume, claimErr := claimCreation(diskRoot, payload, claimPaths)
 		if claimErr != nil {
 			writeAPIError(writer, deps.Logger, claimErr, requestID)
 			return
@@ -264,11 +275,11 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 				writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeConflict, "节点不支持磁盘引用检查", nil), requestID)
 				return
 			}
-			if err := checker.CheckUnusedDisk(ctx, deps.DiskDir, payload.DiskRelativePath); err != nil {
+			if err := checker.CheckUnusedDisk(ctx, diskRoot, payload.DiskRelativePath); err != nil {
 				writeAPIError(writer, deps.Logger, err, requestID)
 				return
 			}
-			info, err := storage.InspectExistingDisk(ctx, deps.DiskDir, payload.DiskRelativePath)
+			info, err := storage.InspectExistingDisk(ctx, diskRoot, payload.DiskRelativePath)
 			if err != nil {
 				writeAPIError(writer, deps.Logger, err, requestID)
 				return
@@ -289,14 +300,14 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 				writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeConflict, "节点不支持源磁盘引用校验", nil), requestID)
 				return
 			}
-			if err := checker.CheckUnusedDisk(ctx, deps.DiskDir, payload.SourceDiskRelativePath); err != nil {
+			if err := checker.CheckUnusedDisk(ctx, diskRoot, payload.SourceDiskRelativePath); err != nil {
 				writeAPIError(writer, deps.Logger, err, requestID)
 				return
 			}
 			if !diskReady && payload.CloneMode == "linked" {
-				diskErr = storage.CloneLinked(ctx, deps.DiskDir, payload.SourceDiskRelativePath, "", "", diskPath, payload.DiskGiB)
+				diskErr = storage.CloneLinked(ctx, diskRoot, payload.SourceDiskRelativePath, "", "", diskPath, payload.DiskGiB)
 			} else if !diskReady {
-				diskErr = storage.CloneRetainedDisk(ctx, deps.DiskDir, payload.SourceDiskRelativePath, diskPath, payload.DiskGiB)
+				diskErr = storage.CloneRetainedDisk(ctx, diskRoot, payload.SourceDiskRelativePath, diskPath, payload.DiskGiB)
 			}
 		} else if payload.ImageRelativePath != "" {
 			if payload.ImageFormat == "ISO" {
@@ -344,7 +355,7 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 		}
 
 		if payload.Initialization != nil {
-			seed, err := storage.CloudInitISO(ctx, deps.DiskDir, payload.UUID, payload.Name, *payload.Initialization)
+			seed, err := storage.CloudInitISO(ctx, diskRoot, payload.UUID, payload.Name, *payload.Initialization)
 			if err != nil {
 				writeAPIError(writer, deps.Logger, err, requestID)
 				return

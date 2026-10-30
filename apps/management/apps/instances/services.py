@@ -30,6 +30,7 @@ from apps.instances.models import (
 from apps.networks.models import Network
 from apps.networks.services import validate_network_for_instance
 from apps.nodes.access import user_can_access
+from apps.nodes.client import AgentClient
 from apps.nodes.models import NodePermission
 from apps.tasks.models import Task, TaskType
 from apps.tasks.services import enqueue
@@ -141,6 +142,7 @@ def create_instance(
     memory_mib: int,
     disk_gib: int,
     network_name: str = '',
+    storage_pool: str = '',
     autostart: bool = False,
     start_after_create: bool = True,
     template: int | None = None,
@@ -217,6 +219,14 @@ def create_instance(
         raise AppError(ErrorCode.PERMISSION_DENIED, '目标节点不在角色或用户的创建授权范围内')
     if not user_can_access(user, node, NodePermission.OPERATE):
         raise AppError(ErrorCode.PERMISSION_DENIED, '没有目标节点的操作权限')
+    from apps.infrastructure.placement import pool_available_bytes, select_storage_pool
+
+    selected_pool = select_storage_pool(user, node, storage_pool)
+    if selected_pool and existing_system_file:
+        raise AppError(ErrorCode.INVALID_ARGUMENT, '直接使用节点已有系统盘仅支持默认磁盘目录')
+    pool_listing = (
+        AgentClient(node.endpoint).get_json('/api/v1/storage-pools') if selected_pool else None
+    )
     scoped_key = (
         hashlib.sha256(f'{user.pk}:{idempotency_key}'.encode()).hexdigest()
         if idempotency_key
@@ -316,6 +326,7 @@ def create_instance(
                     or instance.creation_config.get('data_disks', []) != data_disks
                     or instance.creation_config.get('additional_networks', [])
                     != additional_networks
+                    or instance.storage_pool_id != (selected_pool.pk if selected_pool else None)
                 ):
                     raise AppError(ErrorCode.CONFLICT, '幂等键已用于其他配置，请先核对原任务')
                 return instance, previous
@@ -336,6 +347,8 @@ def create_instance(
             source = source_disk(user, existing_system_disk, locked_node.pk, lock=True)
             if image.pk != source.instance.image_id or disk_gib < source.size_gib:
                 raise AppError(ErrorCode.CONFLICT, '源磁盘或容量不匹配')
+            if source.instance.storage_pool_id != (selected_pool.pk if selected_pool else None):
+                raise AppError(ErrorCode.CONFLICT, '已有系统盘克隆须使用源磁盘所在存储池')
         enforce_quota(quota_user, vcpu=vcpu, memory_mib=memory_mib, disk_gib=total_disk_gib)
         if network is not None:
             network = (
@@ -354,6 +367,16 @@ def create_instance(
             )
 
         available = available_resources(locked_node)
+        if selected_pool:
+            from apps.infrastructure.models import ManagedStoragePool
+
+            selected_pool = ManagedStoragePool.objects.select_for_update().get(pk=selected_pool.pk)
+            checked_pool = select_storage_pool(user, locked_node, storage_pool)
+            if checked_pool is None or checked_pool.pk != selected_pool.pk:
+                raise AppError(ErrorCode.PERMISSION_DENIED, '存储池授权已变化')
+            available['disk_bytes'] = pool_available_bytes(
+                locked_node, selected_pool, pool_listing
+            )
         shortages = []
         if vcpu > available['vcpu']:
             shortages.append('vcpu')
@@ -373,6 +396,7 @@ def create_instance(
             name=name,
             libvirt_domain_name=domain_name,
             node=locked_node,
+            storage_pool=selected_pool,
             image=image,
             network_name=network_name,
             vcpu=vcpu,
@@ -408,6 +432,7 @@ def create_instance(
                 'autostart': autostart,
                 'template': template,
                 'template_version': template_version,
+                'storage_pool': selected_pool.name if selected_pool else '',
                 'vcpu': vcpu,
                 'memory_mib': memory_mib,
                 'disk_gib': disk_gib,
@@ -465,6 +490,7 @@ def create_instance(
                 'memory_mib': memory_mib,
                 'disk_gib': disk_gib,
                 'disk_relative_path': disk_name,
+                'storage_pool': selected_pool.name if selected_pool else '',
                 'network_name': network_name,
                 'network_type': network.type if network else '',
                 'network_bridge': network.bridge if network else '',
@@ -477,6 +503,7 @@ def create_instance(
         instance.save(update_fields=['current_task', 'operation_status', 'updated_at'])
         ResourceReservation.objects.create(
             node=locked_node,
+            storage_pool=selected_pool,
             task=task,
             instance=instance,
             vcpu_reserved=vcpu,

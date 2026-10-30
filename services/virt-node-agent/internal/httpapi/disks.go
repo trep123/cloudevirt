@@ -27,7 +27,12 @@ func diskListHandler(deps Dependencies) http.HandlerFunc {
 			), requestID)
 			return
 		}
-		files, err := storage.ListDiskFiles(request.Context(), deps.DiskDir)
+		diskRoot, err := diskRootForPool(request.Context(), deps, request.URL.Query().Get("storage_pool"))
+		if err != nil {
+			writeAPIError(writer, deps.Logger, err, requestID)
+			return
+		}
+		files, err := storage.ListDiskFiles(request.Context(), diskRoot)
 		if err != nil {
 			writeAPIError(writer, deps.Logger, err, requestID)
 			return
@@ -36,7 +41,7 @@ func diskListHandler(deps Dependencies) http.HandlerFunc {
 			files = []storage.DiskFile{}
 		}
 		writeJSON(writer, http.StatusOK, diskListResponse{
-			Directory: deps.DiskDir, Disks: files, SampledAt: time.Now().UTC(),
+			Directory: diskRoot, Disks: files, SampledAt: time.Now().UTC(),
 		})
 	}
 }
@@ -45,6 +50,7 @@ func inspectExistingDiskHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Relative string `json:"relative_path"`
+			StoragePool string `json:"storage_pool"`
 		}
 		d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
 		d.DisallowUnknownFields()
@@ -55,6 +61,11 @@ func inspectExistingDiskHandler(deps Dependencies) http.HandlerFunc {
 		}
 		diskReferenceMutation.RLock()
 		defer diskReferenceMutation.RUnlock()
+		diskRoot, rootErr := diskRootForPool(r.Context(), deps, body.StoragePool)
+		if rootErr != nil {
+			fail(rootErr)
+			return
+		}
 		checker, ok := deps.Virtualizer.(interface {
 			CheckUnusedDisk(context.Context, string, string) error
 		})
@@ -62,11 +73,11 @@ func inspectExistingDiskHandler(deps Dependencies) http.HandlerFunc {
 			fail(apierr.New(apierr.CodeConflict, "节点不支持磁盘引用检查", nil))
 			return
 		}
-		if err := checker.CheckUnusedDisk(r.Context(), deps.DiskDir, body.Relative); err != nil {
+		if err := checker.CheckUnusedDisk(r.Context(), diskRoot, body.Relative); err != nil {
 			fail(err)
 			return
 		}
-		info, err := storage.InspectExistingDisk(r.Context(), deps.DiskDir, body.Relative)
+		info, err := storage.InspectExistingDisk(r.Context(), diskRoot, body.Relative)
 		if err != nil {
 			fail(err)
 			return

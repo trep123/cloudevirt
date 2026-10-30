@@ -20,6 +20,11 @@ func hardwareHandler(deps Dependencies) http.HandlerFunc {
 			fail(apierr.New(apierr.CodeInvalidArgument, "域名无效", nil))
 			return
 		}
+		diskRoot, rootErr := diskRootForPool(r.Context(), deps, r.URL.Query().Get("storage_pool"))
+		if rootErr != nil {
+			fail(rootErr)
+			return
+		}
 		provider, ok := deps.Virtualizer.(interface {
 			HardwareInventory(context.Context, string, string) (libvirt.HardwareInventory, error)
 			ChangeHardware(context.Context, string, string, libvirt.HardwareChange) (libvirt.HardwareInventory, error)
@@ -38,9 +43,9 @@ func hardwareHandler(deps Dependencies) http.HandlerFunc {
 				fail(apierr.New(apierr.CodeInvalidArgument, "硬件参数无效", err))
 				return
 			}
-			result, err = provider.ChangeHardware(r.Context(), name, deps.DiskDir, payload)
+			result, err = provider.ChangeHardware(r.Context(), name, diskRoot, payload)
 		} else {
-			result, err = provider.HardwareInventory(r.Context(), name, deps.DiskDir)
+			result, err = provider.HardwareInventory(r.Context(), name, diskRoot)
 		}
 		if err != nil {
 			fail(err)

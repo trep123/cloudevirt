@@ -59,6 +59,7 @@ class InstanceListCreateView(InstanceScopeMixin, generics.ListCreateAPIView):
             memory_mib=data['memory_mib'],
             disk_gib=data['disk_gib'],
             network_name=data.get('network_name', ''),
+            storage_pool=data.get('storage_pool', ''),
             autostart=data.get('autostart', False),
             start_after_create=data.get('start_after_create', True),
             template=data.get('template'),

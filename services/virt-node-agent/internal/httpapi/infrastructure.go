@@ -34,6 +34,15 @@ func infrastructureHandler(deps Dependencies, snapshots bool) http.HandlerFunc {
 			return
 		}
 		fail := func(err error) { writeAPIError(w, deps.Logger, err, requestID) }
+		diskRoot := deps.DiskDir
+		if snapshots {
+			var rootErr error
+			diskRoot, rootErr = diskRootForPool(r.Context(), deps, r.URL.Query().Get("storage_pool"))
+			if rootErr != nil {
+				fail(rootErr)
+				return
+			}
+		}
 		if r.Method == http.MethodGet {
 			if snapshots {
 				result, err := operator.ListSnapshots(r.Context(), r.PathValue("name"))
@@ -75,7 +84,7 @@ func infrastructureHandler(deps Dependencies, snapshots bool) http.HandlerFunc {
 				fail(apierr.New(apierr.CodeOperationFailed, "节点未开启破坏性操作，禁止恢复或删除快照", nil))
 				return
 			}
-			err = operator.SnapshotAction(r.Context(), r.PathValue("name"), body.Name, body.Action, deps.DiskDir)
+			err = operator.SnapshotAction(r.Context(), r.PathValue("name"), body.Name, body.Action, diskRoot)
 		} else {
 			if body.Path == "" {
 				err = operator.CreateDirectoryPool(r.Context(), body.Name, deps.DiskDir)

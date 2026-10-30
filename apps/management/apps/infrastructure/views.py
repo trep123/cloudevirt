@@ -4,6 +4,7 @@ import hashlib
 import uuid
 from urllib.parse import quote
 
+from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Sum
 from django.shortcuts import get_object_or_404
@@ -24,7 +25,14 @@ from common.permissions import RequiresPasswordChange, check_permission
 from common.scope import instances_for
 
 from .configuration import configuration
-from .models import Cluster, ClusterNode, ConsoleConfiguration, PoolInstance, ResourcePool
+from .models import (
+    Cluster,
+    ClusterNode,
+    ConsoleConfiguration,
+    ManagedStoragePool,
+    PoolInstance,
+    ResourcePool,
+)
 
 
 class Administrator(BasePermission):
@@ -235,6 +243,13 @@ class SettingsView(APIView):
 class PoolCreateInput(serializers.Serializer):
     name = serializers.RegexField(r'^cv-[A-Za-z0-9][A-Za-z0-9_-]{0,55}$')
     path = serializers.CharField(max_length=4096, required=False, allow_blank=True)
+    assigned_user_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1), max_length=500, required=False, default=list
+    )
+    default_user_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1), max_length=500, required=False, default=list
+    )
+    is_default = serializers.BooleanField(default=False)
 
     def validate_path(self, value):
         import posixpath
@@ -247,6 +262,23 @@ class PoolCreateInput(serializers.Serializer):
         ):
             raise serializers.ValidationError('请输入不含路径穿越的 Linux 绝对目录')
         return posixpath.normpath(value) if value else ''
+
+    def validate_assigned_user_ids(self, value):
+        if len(set(value)) != len(value) or get_user_model().objects.filter(
+            pk__in=value, is_active=True
+        ).count() != len(value):
+            raise serializers.ValidationError('用户 ID 重复、不存在或已禁用')
+        return value
+
+    def validate_default_user_ids(self, value):
+        return self.validate_assigned_user_ids(value)
+
+    def validate(self, data):
+        if set(data['default_user_ids']) - set(data['assigned_user_ids']):
+            raise serializers.ValidationError(
+                {'default_user_ids': '默认用户必须先获得此池的使用授权'}
+            )
+        return data
 
 
 def node_for(pk):
@@ -293,7 +325,25 @@ class StoragePoolsView(APIView):
 
     def get(self, request, node_id):
         node = node_for(node_id)
-        return Response(AgentClient(node.endpoint).get_json('/api/v1/storage-pools'))
+        data = AgentClient(node.endpoint).get_json('/api/v1/storage-pools')
+        managed = {
+            pool.name: pool
+            for pool in ManagedStoragePool.objects.filter(node=node).prefetch_related(
+                'allowed_users', 'default_users'
+            )
+        }
+        for row in data.get('results', []):
+            pool = managed.get(row.get('name'))
+            row['managed'] = pool is not None
+            row['assigned_user_ids'] = (
+                list(pool.allowed_users.values_list('id', flat=True)) if pool else []
+            )
+            row['default_user_ids'] = (
+                list(pool.default_users.values_list('id', flat=True)) if pool else []
+            )
+            row['is_default'] = pool.is_default if pool else False
+            row['revision'] = pool.revision if pool else None
+        return Response(data)
 
     @transaction.atomic
     def post(self, request, node_id):
@@ -307,6 +357,107 @@ class StoragePoolsView(APIView):
             resource_type='node',
             resource_id=node.pk,
             payload=dict(serializer.validated_data),
+        )
+
+
+class StoragePoolAccessView(APIView):
+    permission_classes = ADMIN_PERMISSIONS
+
+    @transaction.atomic
+    def put(self, request, node_id, name):
+        node = get_object_or_404(Node.objects.select_for_update(), pk=node_id, is_deleted=False)
+        pool = get_object_or_404(
+            ManagedStoragePool.objects.select_for_update(), node=node, name=name
+        )
+        form = PoolCreateInput(
+            data={
+                'name': pool.name,
+                'path': pool.path,
+                'assigned_user_ids': request.data.get('assigned_user_ids'),
+                'default_user_ids': request.data.get('default_user_ids', []),
+                'is_default': request.data.get('is_default'),
+            }
+        )
+        form.is_valid(raise_exception=True)
+        revision = request.data.get('revision')
+        if type(revision) is not int or revision != pool.revision:
+            raise AppError(ErrorCode.CONFLICT, '存储池授权已变化，请刷新后重试')
+        if form.validated_data['is_default']:
+            ManagedStoragePool.objects.filter(node=node, is_default=True).exclude(
+                pk=pool.pk
+            ).update(is_default=False)
+        pool.is_default = form.validated_data['is_default']
+        pool.revision += 1
+        pool.save(update_fields=['is_default', 'revision'])
+        pool.allowed_users.set(form.validated_data['assigned_user_ids'])
+        default_ids = form.validated_data['default_user_ids']
+        for other in ManagedStoragePool.objects.filter(node=node).exclude(pk=pool.pk):
+            other.default_users.remove(*default_ids)
+        pool.default_users.set(default_ids)
+        audit(
+            request,
+            'STORAGE_POOL_ACCESS_UPDATE',
+            'storage_pool',
+            pool.pk,
+            {
+                'name': pool.name,
+                'users': form.validated_data['assigned_user_ids'],
+                'default_users': default_ids,
+                'is_default': pool.is_default,
+            },
+        )
+        return Response(
+            {
+                'name': pool.name,
+                'assigned_user_ids': form.validated_data['assigned_user_ids'],
+                'default_user_ids': default_ids,
+                'is_default': pool.is_default,
+                'revision': pool.revision,
+            }
+        )
+
+
+class AvailableStoragePoolsView(APIView):
+    permission_classes = [IsAuthenticated, RequiresPasswordChange]
+
+    def get(self, request):
+        check_permission(request.user, 'instances.add_instance')
+        node_id = request.query_params.get('node')
+        if not node_id or not node_id.isdecimal():
+            raise AppError(ErrorCode.INVALID_ARGUMENT, '请指定节点 ID')
+        node = get_object_or_404(Node, pk=int(node_id), is_deleted=False)
+        from apps.accounts.administration import limit_nodes
+        from apps.nodes.access import user_can_access
+        from apps.nodes.models import NodePermission
+
+        if node.pk not in limit_nodes(
+            request.user, [node.pk], 'instances.add_instance'
+        ) or not user_can_access(request.user, node, NodePermission.OPERATE):
+            raise AppError(ErrorCode.PERMISSION_DENIED)
+        pools = ManagedStoragePool.objects.filter(node=node)
+        if not is_admin(request.user):
+            pools = pools.filter(allowed_users=request.user)
+        listing = AgentClient(node.endpoint).get_json('/api/v1/storage-pools')
+        live = {
+            item.get('name')
+            for item in listing.get('results', [])
+            if item.get('active') and item.get('type') == 'dir'
+        }
+        rows = list(pools.filter(name__in=live).order_by('name').values('name', 'is_default'))
+        if not is_admin(request.user):
+            personal = set(pools.filter(default_users=request.user).values_list('name', flat=True))
+            if personal:
+                for row in rows:
+                    row['is_default'] = row['name'] in personal
+        default = next((row['name'] for row in rows if row['is_default']), '')
+        if not default and len(rows) == 1:
+            default = rows[0]['name']
+        return Response(
+            {
+                'results': rows,
+                'default': default,
+                'legacy_available': is_admin(request.user) or not pools.exists(),
+            }
         )
 
 
@@ -324,6 +475,11 @@ class SnapshotsView(APIView):
         return Response(
             AgentClient(instance.node.endpoint).get_json(
                 f'/api/v1/domains/{quote(instance.libvirt_domain_name, safe="")}/snapshots'
+                + (
+                    f'?storage_pool={quote(instance.storage_pool.name, safe="")}'
+                    if instance.storage_pool_id
+                    else ''
+                )
             )
         )
 

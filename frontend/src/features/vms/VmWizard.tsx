@@ -59,6 +59,9 @@ export function VmWizard({
     [disk, setDisk] = useState(20),
     [network, setNetwork] = useState("");
   const [quota, setQuota] = useState<Quota | null>(null);
+  const [storagePools, setStoragePools] = useState<{ name: string; is_default: boolean }[]>([]);
+  const [storagePool, setStoragePool] = useState("");
+  const [legacyStorage, setLegacyStorage] = useState(true);
   const [versions, setVersions] = useState<
       {
         id: number;
@@ -109,11 +112,20 @@ export function VmWizard({
   useEffect(() => {
     let active = true;
     setCaps(null);
+    setStoragePools([]);
+    setStoragePool("");
     if (node)
-      void api
-        .request<CreationCapabilities>(`/nodes/${node}/capabilities`)
-        .then((value) => {
-          if (active) setCaps(value);
+      void Promise.all([
+        api.request<CreationCapabilities>(`/nodes/${node}/capabilities`),
+        api.request<{ results: { name: string; is_default: boolean }[]; default: string; legacy_available: boolean }>(`/storage-pools/available/?node=${node}`),
+      ])
+        .then(([value, choices]) => {
+          if (active) {
+            setCaps(value);
+            setStoragePools(choices.results);
+            setLegacyStorage(choices.legacy_available);
+            setStoragePool(choices.default || (choices.legacy_available ? "__legacy__" : ""));
+          }
         })
         .catch((e) => {
           if (active) setError(describeError(e));
@@ -250,7 +262,8 @@ export function VmWizard({
     }
     if (
       step === 2 &&
-      (!Number.isInteger(disk) ||
+      ((!storagePool && !legacyStorage) ||
+        !Number.isInteger(disk) ||
         disk < 1 ||
         disk > diskLimit ||
         dataDisks.some(
@@ -321,6 +334,7 @@ export function VmWizard({
         vcpu: cpu,
         memory_mib: Math.round(memory * 1024),
         disk_gib: disk,
+        storage_pool: sourceDisk ? "__legacy__" : storagePool,
         network_name: network,
         autostart,
         start_after_create: startAfter,
@@ -345,7 +359,7 @@ export function VmWizard({
   const DESCS = [
     "为虚拟机命名并选择已审核的操作系统镜像。",
     "选择目标宿主节点并分配 vCPU 与内存。",
-    "配置系统盘容量，磁盘由节点存储目录承载。",
+    "选择授权存储池并配置系统盘容量。",
     "选择要接入的虚拟网络。",
     "核对配置，确认后将以异步任务提交到节点。",
   ];
@@ -685,6 +699,19 @@ export function VmWizard({
                   </>
                 ) : step === 2 ? (
                   <>
+                    <Field label="存储池" hint="仅列出当前账号在所选节点可使用的目录池">
+                      <select value={sourceDisk ? "__legacy__" : storagePool}
+                        disabled={Boolean(sourceDisk)}
+                        onChange={(e) => setStoragePool(e.target.value)}>
+                        {!legacyStorage && <option value="">请选择存储池</option>}
+                        {legacyStorage && <option value="__legacy__">节点原有磁盘目录</option>}
+                        {storagePools.map((item) => (
+                          <option key={item.name} value={item.name}>
+                            {item.name}{item.is_default ? " · 默认" : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
                     <Field
                       label="系统盘克隆方式"
                       hint={
@@ -772,14 +799,14 @@ export function VmWizard({
                         添加数据盘
                       </button>
                       <p className="muted">
-                        所有磁盘合计计入个人配额，当前使用节点配置的磁盘目录。
+                        所有磁盘合计计入个人配额，写入选定的存储池。
                       </p>
                     </div>
                     <Field label="磁盘格式">
                       <input disabled value="qcow2" />
                     </Field>
                     <p className="muted field-wide">
-                      使用节点已配置的磁盘目录。容量由后端在事务内检查并预留。
+                      容量由后端按选定存储池检查并预留；节点已有系统盘仍使用原磁盘目录。
                     </p>
                   </>
                 ) : step === 3 ? (
