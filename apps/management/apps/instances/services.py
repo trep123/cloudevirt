@@ -146,6 +146,7 @@ def create_instance(
     template: int | None = None,
     template_version: int | None = None,
     existing_system_disk: int | None = None,
+    existing_system_file: str | None = None,
     data_disks: list[int] | None = None,
     additional_networks: list[str] | None = None,
     hardware: dict | None = None,
@@ -220,7 +221,9 @@ def create_instance(
         source_disk(user, existing_system_disk, node.pk)
         if template_version or initialization:
             raise AppError(ErrorCode.CONFLICT, '已有系统盘不能与模板或初始化混用')
-    if not existing_system_disk and (image.status != ImageStatus.READY or image.is_deleted):
+    if not (existing_system_disk or existing_system_file) and (
+        image.status != ImageStatus.READY or image.is_deleted
+    ):
         raise AppError(
             ErrorCode.CONFLICT,
             '镜像不可用',
@@ -246,10 +249,17 @@ def create_instance(
         locked_node = type(node).objects.select_for_update().get(pk=node.pk)
         # Also serialize cross-node requests and idempotency lookup for this account.
         quota_user = get_user_model().objects.select_for_update().get(pk=user.pk)
-        image = type(image).objects.select_for_update().get(pk=image.pk)
-        if not existing_system_disk and (image.is_deleted or image.status != ImageStatus.READY):
+        if image is not None:
+            image = type(image).objects.select_for_update().get(pk=image.pk)
+        if not (existing_system_disk or existing_system_file) and (
+            image.is_deleted or image.status != ImageStatus.READY
+        ):
             raise AppError(ErrorCode.CONFLICT, '镜像已删除或尚未校验完成')
-        if not existing_system_disk and image.node_id and image.node_id != locked_node.pk:
+        if (
+            not (existing_system_disk or existing_system_file)
+            and image.node_id
+            and image.node_id != locked_node.pk
+        ):
             raise AppError(ErrorCode.CONFLICT, '镜像文件位于其他节点，请选择镜像所属节点')
         if scoped_key:
             previous = Task.objects.filter(
@@ -274,7 +284,7 @@ def create_instance(
                     != (
                         name,
                         node.pk,
-                        image.pk,
+                        image.pk if image else None,
                         vcpu,
                         memory_mib,
                         disk_gib,
@@ -287,6 +297,7 @@ def create_instance(
                     or instance.creation_config.get('hardware', {}) != hardware
                     or instance.creation_config.get('initialization') != initialization
                     or instance.creation_config.get('static_networks', {}) != static_networks
+                    or instance.creation_config.get('existing_system_file') != existing_system_file
                     or instance.creation_config.get('source_disk', {}).get('id')
                     != existing_system_disk
                     or instance.creation_config.get('template_version') != template_version
@@ -296,6 +307,16 @@ def create_instance(
                 ):
                     raise AppError(ErrorCode.CONFLICT, '幂等键已用于其他配置，请先核对原任务')
                 return instance, previous
+        if existing_system_file:
+            from apps.instances.disk_sources import inspect_file
+
+            if image is not None or existing_system_disk or template_version or initialization:
+                raise AppError(ErrorCode.CONFLICT, '直接挂载来源配置冲突')
+            info = inspect_file(user, locked_node, existing_system_file)
+            if disk_gib != (info['virtual_size_bytes'] + GIB - 1) // GIB:
+                raise AppError(ErrorCode.CONFLICT, '系统盘容量已变化')
+            disk_name = existing_system_file
+            disk_bytes = sum(data_disks) * GIB
         source = None
         if existing_system_disk:
             source = source_disk(user, existing_system_disk, locked_node.pk, lock=True)
@@ -348,6 +369,7 @@ def create_instance(
             initialization_status='PENDING' if initialization else 'NOT_CONFIGURED',
             creation_config={
                 'schema_version': 1,
+                'existing_system_file': existing_system_file,
                 **(
                     {'source_disk': {'id': source.pk, 'relative_path': source.relative_path}}
                     if source
@@ -380,7 +402,9 @@ def create_instance(
                     'relative_path': image.relative_path,
                     'format': image.format,
                     'checksum': image.checksum_sha256,
-                },
+                }
+                if image
+                else {},
             },
             vnc_password=secrets.token_hex(4),
             created_by=user,
@@ -388,7 +412,7 @@ def create_instance(
         Disk.objects.create(
             instance=instance,
             role=DiskRole.SYSTEM,
-            name=disk_name,
+            name=disk_name.rsplit('/', 1)[-1],
             relative_path=disk_name,
             size_gib=disk_gib,
             status=DiskStatus.CREATING,

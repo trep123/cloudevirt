@@ -86,6 +86,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	api.HandleFunc("GET /api/v1/domains/{name}/ssh-targets", sshTargetsHandler(deps))
 	api.HandleFunc("GET /api/v1/domains/{name}/interfaces", domainInterfacesHandler(deps))
 	api.HandleFunc("GET /api/v1/networks", networkListHandler(deps))
+	api.HandleFunc("POST /api/v1/disks/inspect", inspectExistingDiskHandler(deps))
 	api.HandleFunc("GET /api/v1/disks", diskListHandler(deps))
 	api.HandleFunc("DELETE /api/v1/disks", unusedDiskHandler(deps))
 	api.HandleFunc("POST /api/v1/domains", createDomainHandler(deps))

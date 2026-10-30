@@ -52,25 +52,73 @@ def cloning(disk_id):
     )
 
 
+def inspect_file(user, node, path, check_registered=True):
+    from pathlib import PurePosixPath
+
+    from apps.accounts.administration import limit_nodes
+    from apps.nodes.access import user_can_access
+    from apps.nodes.client import AgentClient
+    from apps.nodes.models import NodePermission
+
+    require_admin(user, 'instances.add_instance')
+    if (
+        not isinstance(path, str)
+        or not path
+        or len(path) > 255
+        or len(PurePosixPath(path).name) > 128
+        or path.startswith('/')
+        or '\\' in path
+        or '..' in PurePosixPath(path).parts
+        or str(PurePosixPath(path)) != path
+    ):
+        raise AppError(ErrorCode.INVALID_ARGUMENT, '请使用节点磁盘目录内的规范相对路径')
+    if node.pk not in limit_nodes(user, [node.pk], 'instances.add_instance') or not user_can_access(
+        user, node, NodePermission.OPERATE
+    ):
+        raise AppError(ErrorCode.PERMISSION_DENIED)
+    if check_registered and Disk.objects.filter(relative_path=path).exists():
+        raise AppError(ErrorCode.CONFLICT, '文件已登记为数据卷，不能重复直接挂载')
+    info = AgentClient(node.endpoint).request_json(
+        '/api/v1/disks/inspect', 'POST', {'relative_path': path}
+    )
+    if (
+        info.get('format') != 'QCOW2'
+        or not isinstance(info.get('virtual_size_bytes'), int)
+        or info['virtual_size_bytes'] <= 0
+    ):
+        raise AppError(ErrorCode.CONFLICT, '节点未返回有效的独立 QCOW2 系统盘')
+    return info
+
+
 class SystemDiskSourcesView(APIView):
     permission_classes = [CanCreateInstance, RequiresPasswordChange]
 
     def get(self, request):
+        from apps.accounts.administration import limit_nodes
+        from apps.nodes.client import AgentClient
+        from apps.nodes.models import Node
+
         require_admin(request.user, 'instances.add_instance')
-        query = sources().filter(instance__node__is_deleted=False)
+        if not request.query_params.get('node'):
+            return Response({'results': [], 'directory': ''})
+        from rest_framework import serializers
+
+        node_id = serializers.IntegerField(min_value=1).run_validation(request.query_params['node'])
+        node = get_object_or_404(Node, pk=node_id, is_deleted=False)
+        if node.pk not in limit_nodes(request.user, [node.pk], 'instances.add_instance'):
+            raise AppError(ErrorCode.PERMISSION_DENIED)
+        path = request.query_params.get('path')
+        if path:
+            return Response(inspect_file(request.user, node, path))
+        listing = AgentClient(node.endpoint).get_json('/api/v1/disks')
+        registered = set(Disk.objects.values_list('relative_path', flat=True))
         return Response(
             {
+                'directory': listing.get('directory', ''),
                 'results': [
-                    {
-                        'id': d.pk,
-                        'name': d.name,
-                        'instance_name': d.instance.name,
-                        'node': d.instance.node_id,
-                        'node_name': d.instance.node.name,
-                        'size_gib': d.size_gib,
-                        'image': d.instance.image_id,
-                    }
-                    for d in query.order_by('-pk')[:200]
-                ]
+                    d
+                    for d in listing.get('disks', [])
+                    if d.get('format') == 'QCOW2' and d.get('name') not in registered
+                ],
             }
         )

@@ -54,7 +54,7 @@ class InstanceSerializer(serializers.ModelSerializer):
     """实例输出结构，区分期望/观测/任务三种状态。"""
 
     node_name = serializers.CharField(source='node.name', read_only=True)
-    image_name = serializers.CharField(source='image.name', read_only=True)
+    image_name = serializers.CharField(source='image.name', read_only=True, allow_null=True)
     disks = DiskSerializer(many=True, read_only=True)
 
     class Meta:
@@ -104,6 +104,7 @@ class InstanceCreateSerializer(serializers.Serializer):
     autostart = serializers.BooleanField(required=False, default=False)
     start_after_create = serializers.BooleanField(required=False, default=True)
     template = serializers.IntegerField(required=False, min_value=1)
+    existing_system_file = serializers.CharField(required=False, max_length=255)
     existing_system_disk = serializers.IntegerField(required=False, min_value=1)
     template_version = serializers.IntegerField(required=False, min_value=1)
     hardware = HardwareSerializer(required=False, default=dict)
@@ -127,6 +128,24 @@ class InstanceCreateSerializer(serializers.Serializer):
     def to_internal_value(self, data):
         from apps.templates.versions import resolve_version
 
+        if data.get('existing_system_file'):
+            from apps.accounts.administration import require_admin
+
+            request = self.context.get('request')
+            if request is None:
+                raise serializers.ValidationError({'existing_system_file': '需要平台管理员授权'})
+            require_admin(request.user, 'instances.add_instance')
+            if (
+                data.get('image')
+                or data.get('template_version')
+                or data.get('existing_system_disk')
+                or data.get('initialization')
+            ):
+                raise serializers.ValidationError(
+                    {'existing_system_file': '直接使用磁盘不可与镜像、模板、克隆或初始化混用'}
+                )
+            data = {**data, 'image': None}
+            self.fields['image'].allow_null = True
         if data.get('existing_system_disk'):
             from apps.instances.disk_sources import source_disk
 
@@ -191,6 +210,13 @@ class InstanceCreateSerializer(serializers.Serializer):
                 or not visible_templates(request.user).filter(pk=template_id).exists()
             ):
                 raise serializers.ValidationError({'template': '模板不存在或无权访问'})
+        if data.get('existing_system_file'):
+            from apps.instances.disk_sources import inspect_file
+
+            info = inspect_file(request.user, data['node'], data['existing_system_file'])
+            if data['disk_gib'] != (info['virtual_size_bytes'] + 1024**3 - 1) // 1024**3:
+                raise serializers.ValidationError({'disk_gib': '请检查磁盘并使用实际容量'})
+            return data
         image = data['image']
         if data.get('existing_system_disk'):
             from apps.instances.disk_sources import source_disk

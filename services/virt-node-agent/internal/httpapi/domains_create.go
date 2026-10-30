@@ -30,6 +30,7 @@ type DomainOperator interface {
 
 // createDomainRequest 是创建域请求体。
 type createDomainRequest struct {
+	UseExistingDisk        bool               `json:"use_existing_disk,omitempty"`
 	SourceDiskRelativePath string             `json:"source_disk_relative_path,omitempty"`
 	MAC                    string             `json:"mac"`
 	Initialization         *storage.CloudInit `json:"initialization"`
@@ -73,8 +74,6 @@ type createDomainResponse struct {
 // createDomainHandler 创建并启动域；同名域已存在时按幂等返回现状。
 func createDomainHandler(deps Dependencies) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
-		diskReferenceMutation.RLock()
-		defer diskReferenceMutation.RUnlock()
 		requestID := RequestIDFromContext(request.Context())
 		ctx := request.Context()
 
@@ -88,6 +87,13 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 			return
 		}
 
+		if payload.UseExistingDisk {
+			diskReferenceMutation.Lock()
+			defer diskReferenceMutation.Unlock()
+		} else {
+			diskReferenceMutation.RLock()
+			defer diskReferenceMutation.RUnlock()
+		}
 		// 磁盘可能尚不存在，使用允许缺失的路径校验
 		diskPath, err := storage.SafePathAllowMissing(deps.DiskDir, payload.DiskRelativePath)
 		if err != nil {
@@ -211,6 +217,9 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 		}
 
 		claimPaths := append([]string{diskPath}, spec.AdditionalDiskPaths...)
+		if payload.UseExistingDisk {
+			claimPaths = append([]string{}, spec.AdditionalDiskPaths...)
+		}
 		if payload.Initialization != nil {
 			seed, err := storage.SafePathAllowMissing(deps.DiskDir, ".init-"+payload.UUID+".iso")
 			if err != nil {
@@ -230,7 +239,32 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 			format, size, err := storage.DiskInfo(ctx, diskPath)
 			diskReady = err == nil && format == "QCOW2" && size == int64(payload.DiskGiB)*1024*1024*1024
 		}
-		if payload.SourceDiskRelativePath != "" {
+		if payload.UseExistingDisk {
+			if payload.ImageRelativePath != "" || payload.SourceDiskRelativePath != "" || payload.Initialization != nil {
+				writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeInvalidArgument, "直接使用系统盘不可同时指定镜像、克隆或初始化", nil), requestID)
+				return
+			}
+			checker, ok := deps.Virtualizer.(interface {
+				CheckUnusedDisk(context.Context, string, string) error
+			})
+			if !ok {
+				writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeConflict, "节点不支持磁盘引用检查", nil), requestID)
+				return
+			}
+			if err := checker.CheckUnusedDisk(ctx, deps.DiskDir, payload.DiskRelativePath); err != nil {
+				writeAPIError(writer, deps.Logger, err, requestID)
+				return
+			}
+			info, err := storage.InspectExistingDisk(ctx, deps.DiskDir, payload.DiskRelativePath)
+			if err != nil {
+				writeAPIError(writer, deps.Logger, err, requestID)
+				return
+			}
+			if int64(payload.DiskGiB) != (info.VirtualSizeBytes+1024*1024*1024-1)/(1024*1024*1024) {
+				writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeConflict, "系统盘容量已变化", nil), requestID)
+				return
+			}
+		} else if payload.SourceDiskRelativePath != "" {
 			if payload.ImageRelativePath != "" || payload.Initialization != nil || payload.SourceDiskRelativePath == payload.DiskRelativePath {
 				writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeInvalidArgument, "源磁盘参数冲突", nil), requestID)
 				return

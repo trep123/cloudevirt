@@ -35,34 +35,14 @@ export function VmWizard({
   onCancel: () => void;
 }) {
   const [diskSources, setDiskSources] = useState<
-      {
-        id: number;
-        name: string;
-        instance_name: string;
-        node: number;
-        node_name: string;
-        size_gib: number;
-        image: number;
-      }[]
+      { name: string; virtual_size_bytes: number }[]
     >([]),
-    [sourceDisk, setSourceDisk] = useState("");
-  useEffect(() => {
-    if (!isAdmin) return;
-    let alive = true;
-    api
-      .request<{ results: typeof diskSources }>(
-        "/instances/system-disk-sources",
-      )
-      .then((v) => {
-        if (alive) setDiskSources(v.results);
-      })
-      .catch((e) => {
-        if (alive) setError(describeError(e));
-      });
-    return () => {
-      alive = false;
-    };
-  }, [isAdmin]);
+    [sourceDisk, setSourceDisk] = useState(""),
+    [useFile, setUseFile] = useState(false),
+    [fileChecked, setFileChecked] = useState(false),
+    [fileBusy, setFileBusy] = useState(false),
+    [diskDirectory, setDiskDirectory] = useState("");
+  const fileIdentity = useRef("");
   const [step, setStep] = useState(0),
     [images, setImages] = useState<Image[]>([]),
     [nodes, setNodes] = useState<Node[]>([]),
@@ -196,7 +176,56 @@ export function VmWizard({
       alive = false;
     };
   }, []);
+  fileIdentity.current = `${node}:${sourceDisk}`;
+  useEffect(() => {
+    if (!isAdmin || !useFile || !node) return;
+    let alive = true;
+    setDiskDirectory("");
+    setDiskSources([]);
+    api
+      .request<{ results: typeof diskSources; directory: string }>(
+        `/instances/system-disk-sources?node=${node}`,
+      )
+      .then((v) => {
+        if (alive) {
+          setDiskSources(v.results);
+          setDiskDirectory(v.directory);
+        }
+      })
+      .catch((e) => {
+        if (alive) setError(describeError(e));
+      });
+    return () => {
+      alive = false;
+    };
+  }, [isAdmin, useFile, node]);
+  async function checkFile() {
+    if (!node || !sourceDisk || fileBusy) return;
+    const identity = fileIdentity.current;
+    setFileBusy(true);
+    setError(null);
+    try {
+      const v = await api.request<{ virtual_size_bytes: number }>(
+        `/instances/system-disk-sources?node=${node}&path=${encodeURIComponent(sourceDisk)}`,
+      );
+      if (fileIdentity.current === identity) {
+        setDisk(Math.ceil(v.virtual_size_bytes / 1024 ** 3));
+        setFileChecked(true);
+      }
+    } catch (e) {
+      if (fileIdentity.current === identity) {
+        setFileChecked(false);
+        setError(describeError(e));
+      }
+    } finally {
+      setFileBusy(false);
+    }
+  }
   function next() {
+    if (step === 0 && useFile && !fileChecked) {
+      setError("请先选择节点、填写相对路径并检查系统盘。");
+      return;
+    }
     if (
       step === 0 &&
       (!/^[A-Za-z0-9][A-Za-z0-9-]{1,62}[A-Za-z0-9]$/.test(name) ||
@@ -284,7 +313,7 @@ export function VmWizard({
           : {}),
         name,
         ...(sourceDisk
-          ? { existing_system_disk: Number(sourceDisk) }
+          ? { existing_system_file: sourceDisk }
           : { image: Number(image) }),
         node: Number(node),
         vcpu: cpu,
@@ -413,6 +442,8 @@ export function VmWizard({
                       <select
                         value={version}
                         onChange={(e) => {
+                          setUseFile(false);
+                          setFileChecked(false);
                           setSourceDisk("");
                           setVersion(e.target.value);
                           setNode("");
@@ -461,40 +492,101 @@ export function VmWizard({
                     </Field>
                     {isAdmin && (
                       <Field
-                        label="已有系统磁盘（仅管理员）"
-                        hint="仅显示保留且未占用的系统盘；克隆为独立磁盘，原盘保留，不与部署模板或初始化混用。"
+                        label="已有系统磁盘文件（平台管理员）"
+                        hint="直接挂载节点磁盘目录中的独立 QCOW2 文件，不复制，不需要导入镜像。文件不能被其他虚拟机使用。"
                       >
-                        <select
-                          value={sourceDisk}
-                          onChange={(e) => {
-                            setSourceDisk(e.target.value);
-                            setPool("");
-                            setVersion("");
-                            setInitialize(false);
-                            const d = diskSources.find(
-                              (d) => d.id === Number(e.target.value),
-                            );
-                            if (d) {
+                        <label className="check">
+                          <input
+                            type="checkbox"
+                            checked={useFile}
+                            onChange={(e) => {
+                              setUseFile(e.target.checked);
+                              setFileChecked(false);
+                              setSourceDisk("");
+                              setVersion("");
                               setImage("");
-                              setNode(String(d.node));
-                              setDisk(d.size_gib);
-                            }
-                          }}
-                        >
-                          <option value="">不使用已有系统盘</option>
-                          {diskSources.map((d) => (
-                            <option key={d.id} value={d.id}>
-                              {d.instance_name} · {d.size_gib} GiB ·{" "}
-                              {d.node_name} · {d.name}
-                            </option>
-                          ))}
-                        </select>
+                              setInitialize(false);
+                              setPool("");
+                            }}
+                          />
+                          直接使用节点已有系统盘
+                        </label>
+                        {useFile && (
+                          <>
+                            <select
+                              aria-label="系统盘所在节点"
+                              value={node}
+                              onChange={(e) => {
+                                setNode(e.target.value);
+                                setSourceDisk("");
+                                setFileChecked(false);
+                              }}
+                            >
+                              <option value="">选择节点</option>
+                              {nodes.map((n) => (
+                                <option key={n.id} value={n.id}>
+                                  {n.name}
+                                </option>
+                              ))}
+                            </select>
+                            <small>
+                              节点允许目录：{diskDirectory || "选择节点后读取"}
+                            </small>
+                            <select
+                              aria-label="目录中的系统盘文件"
+                              value={
+                                diskSources.some((d) => d.name === sourceDisk)
+                                  ? sourceDisk
+                                  : ""
+                              }
+                              onChange={(e) => {
+                                setSourceDisk(e.target.value);
+                                setFileChecked(false);
+                              }}
+                            >
+                              <option value="">
+                                选择候选文件，或在下方填写相对路径
+                              </option>
+                              {diskSources.map((d) => (
+                                <option value={d.name} key={d.name}>
+                                  {d.name} ·{" "}
+                                  {Math.ceil(d.virtual_size_bytes / 1024 ** 3)}{" "}
+                                  GiB
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              aria-label="系统盘文件相对路径"
+                              placeholder="例如 ubuntu.qcow2 或 systems/ubuntu.qcow2"
+                              value={sourceDisk}
+                              onChange={(e) => {
+                                setSourceDisk(e.target.value);
+                                setFileChecked(false);
+                              }}
+                            />
+                            <button
+                              type="button"
+                              className="action"
+                              disabled={!node || !sourceDisk || fileBusy}
+                              onClick={() => void checkFile()}
+                            >
+                              {fileBusy
+                                ? "正在检查…"
+                                : fileChecked
+                                  ? "已检查，可直接使用"
+                                  : "检查磁盘"}
+                            </button>
+                            <small>
+                              此文件将作为新虚拟机系统盘直接写入。以后删除虚拟机时，若选择删除磁盘，也会删除此原文件。
+                            </small>
+                          </>
+                        )}
                       </Field>
                     )}
                     <Field label="操作系统镜像" hint="仅列出已就绪的镜像">
                       <select
                         value={image}
-                        disabled={Boolean(sourceDisk) || locked.has("image")}
+                        disabled={useFile || locked.has("image")}
                         onChange={(e) => {
                           setImage(e.target.value);
                           setNode("");
@@ -583,7 +675,7 @@ export function VmWizard({
                         min="1"
                         max={diskLimit}
                         value={disk}
-                        disabled={locked.has("disk_gib")}
+                        disabled={useFile || locked.has("disk_gib")}
                         onChange={(e) => setDisk(Number(e.target.value))}
                       />
                     </Field>
@@ -779,7 +871,7 @@ export function VmWizard({
                         [
                           "系统来源",
                           sourceDisk
-                            ? `已有系统盘 #${sourceDisk}`
+                            ? `节点文件：${sourceDisk}`
                             : selectedImage?.name,
                         ],
                         ["节点", selectedNode?.name],
@@ -859,7 +951,7 @@ export function VmWizard({
                 [
                   "系统来源",
                   sourceDisk
-                    ? `已有系统盘 #${sourceDisk}`
+                    ? `节点文件：${sourceDisk}`
                     : selectedImage?.name || "—",
                 ],
                 ["节点", selectedNode?.name || "—"],

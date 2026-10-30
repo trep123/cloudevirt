@@ -104,11 +104,15 @@ def execute_instance_create(task: Task) -> dict:
             retained = source_disk(actor, config['source_disk']['id'], instance.node_id)
             if retained.relative_path != config['source_disk']['relative_path']:
                 raise AppError(ErrorCode.CONFLICT, '源磁盘路径已变化')
-        source = config.get('image') or {
-            'relative_path': instance.image.relative_path,
-            'format': instance.image.format,
-            'checksum': instance.image.checksum_sha256,
-        }
+        source = config.get('image') or (
+            {
+                'relative_path': instance.image.relative_path,
+                'format': instance.image.format,
+                'checksum': instance.image.checksum_sha256,
+            }
+            if instance.image
+            else {'relative_path': '', 'format': '', 'checksum': ''}
+        )
         capabilities = client.get_json('/api/v1/node/capabilities')
         validate_creation_capabilities(config, capabilities)
         if not all(
@@ -143,6 +147,15 @@ def execute_instance_create(task: Task) -> dict:
                 image_relative_path='',
                 image_format='',
                 image_checksum='',
+            )
+        if config.get('existing_system_file'):
+            from apps.accounts.administration import require_admin
+
+            require_admin(actor, 'instances.add_instance')
+            if capabilities.get('existing_disk_attach') is not True:
+                raise AppError(ErrorCode.CONFLICT, '节点需升级以支持直接使用系统盘')
+            payload.update(
+                use_existing_disk=True, image_relative_path='', image_format='', image_checksum=''
             )
         creation_requested = True
         result = client.create_domain(payload)

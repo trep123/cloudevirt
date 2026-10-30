@@ -35,13 +35,16 @@ class CreatePreflightView(APIView):
         enforce_quota(
             request.user, vcpu=data['vcpu'], memory_mib=data['memory_mib'], disk_gib=total_disk
         )
-        if not data.get('existing_system_disk') and len(image.checksum_sha256) != 64:
+        if image and not data.get('existing_system_disk') and len(image.checksum_sha256) != 64:
             raise AppError(ErrorCode.CONFLICT, '镜像摘要缺失，请重新登记校验')
         resources = available_resources(node)
         requested = {
             'vcpu': data['vcpu'],
             'memory_mib': data['memory_mib'],
-            'disk_bytes': total_disk * 1024**3,
+            'disk_bytes': (
+                sum(data.get('data_disks', [])) if data.get('existing_system_file') else total_disk
+            )
+            * 1024**3,
         }
         if any(requested[key] > resources[key] for key in requested):
             raise AppError(
@@ -52,13 +55,19 @@ class CreatePreflightView(APIView):
         capabilities = AgentClient(node.endpoint).get_json('/api/v1/node/capabilities')
         if data.get('existing_system_disk') and capabilities.get('retained_disk_clone') is not True:
             raise AppError(ErrorCode.CONFLICT, '节点需升级以支持已有系统盘克隆')
+        if (
+            data.get('existing_system_file')
+            and capabilities.get('existing_disk_attach') is not True
+        ):
+            raise AppError(ErrorCode.CONFLICT, '节点需升级以支持直接使用磁盘')
         validate_creation_capabilities(data, capabilities)
         if not all(
             capabilities.get(key) is True for key in ['image_clone', 'iso_install', 'start_control']
         ):
             raise AppError(ErrorCode.CONFLICT, '节点 Agent 尚未支持可靠镜像创建，请先升级')
         normalized = {
-            key: (value.pk if key in ['node', 'image'] else value) for key, value in data.items()
+            key: (value.pk if key in ['node', 'image'] and value is not None else value)
+            for key, value in data.items()
         }
         response = Response(
             {
@@ -69,7 +78,9 @@ class CreatePreflightView(APIView):
                 'capabilities': capabilities,
                 'valid_for_seconds': 60,
                 'warnings': ['预校验不预留容量，正式提交会再次检查'],
-                'deployment_mode': 'iso' if image.format == 'ISO' else 'image',
+                'deployment_mode': 'existing_disk'
+                if data.get('existing_system_file')
+                else ('iso' if image and image.format == 'ISO' else 'image'),
             }
         )
         response['Cache-Control'] = 'no-store'

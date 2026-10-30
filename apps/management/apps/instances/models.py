@@ -65,7 +65,12 @@ class Instance(models.Model):
         'nodes.Node', on_delete=models.PROTECT, related_name='instances', verbose_name='节点'
     )
     image = models.ForeignKey(
-        'images.Image', on_delete=models.PROTECT, related_name='instances', verbose_name='镜像'
+        'images.Image',
+        on_delete=models.PROTECT,
+        related_name='instances',
+        verbose_name='镜像',
+        null=True,
+        blank=True,
     )
     network_name = models.CharField('网络名称', max_length=64, blank=True, default='')
     vnc_password = models.CharField('VNC 口令', max_length=16, blank=True, default='')

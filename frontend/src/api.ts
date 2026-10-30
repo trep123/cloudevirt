@@ -307,6 +307,7 @@ export const api = {
           node: number;
           image?: number;
           existing_system_disk?: number;
+          existing_system_file?: string;
           vcpu: number;
           memory_mib: number;
           disk_gib: number;

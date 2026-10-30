@@ -103,3 +103,92 @@ class DiskSourceTests(TestCase):
         self.assertEqual(
             self.client.get('/api/v1/instances/system-disk-sources').json()['results'], []
         )
+
+
+class DirectDiskFileTests(TestCase):
+    def setUp(self):
+        self.admin = make_user('direct-admin', 'Admin')
+        self.user = make_user('direct-user', 'Operator')
+        self.node = make_node(name='direct-node')
+        self.client.force_login(self.admin)
+        self.data = {
+            'name': 'vm-direct',
+            'node': self.node.pk,
+            'existing_system_file': 'systems/installed.qcow2',
+            'vcpu': 2,
+            'memory_mib': 1024,
+            'disk_gib': 1,
+            'start_after_create': False,
+        }
+
+    def test_unregistered_file_needs_no_image_and_is_used_without_cloning(self):
+        from unittest.mock import patch
+
+        from apps.instances.executors import execute_instance_create
+
+        with patch(
+            'apps.nodes.client.AgentClient.request_json',
+            return_value={'format': 'QCOW2', 'virtual_size_bytes': 1024**3},
+        ):
+            response = self.client.post(
+                '/api/v1/admin/vms/',
+                self.data,
+                content_type='application/json',
+                HTTP_IDEMPOTENCY_KEY='direct-key',
+            )
+        self.assertEqual(response.status_code, 202, response.content)
+        vm = Instance.objects.get(name='vm-direct')
+        self.assertIsNone(vm.image_id)
+        self.assertEqual(vm.disks.get(role='SYSTEM').relative_path, 'systems/installed.qcow2')
+        self.assertEqual(vm.disks.get(role='SYSTEM').name, 'installed.qcow2')
+        self.assertEqual(vm.reservations.get().disk_reserved_bytes, 0)
+        with patch('apps.instances.executors.AgentClient') as client:
+            client.return_value.get_json.return_value = {
+                'existing_disk_attach': True,
+                'image_clone': True,
+                'iso_install': True,
+                'start_control': True,
+            }
+            client.return_value.create_domain.return_value = {'state': 'SHUTOFF'}
+            execute_instance_create(vm.current_task)
+            sent = client.return_value.create_domain.call_args.args[0]
+            self.assertTrue(sent['use_existing_disk'])
+            self.assertEqual(sent['disk_relative_path'], self.data['existing_system_file'])
+            self.assertEqual(sent['image_relative_path'], '')
+        vm.refresh_from_db()
+        self.assertEqual(vm.operation_status, 'SUCCEEDED')
+        self.assertEqual(self.client.get(f'/api/v1/admin/vms/{vm.pk}/').status_code, 200)
+
+    def test_admin_only_paths_and_duplicate_files_are_enforced(self):
+        from unittest.mock import patch
+
+        self.client.force_login(self.user)
+        self.assertEqual(
+            self.client.post(
+                '/api/v1/instances', self.data, content_type='application/json'
+            ).status_code,
+            403,
+        )
+        self.client.force_login(self.admin)
+        for path in ['/etc/disk.qcow2', '../disk.qcow2', 'a/../b.qcow2']:
+            response = self.client.post(
+                '/api/v1/instances',
+                {**self.data, 'existing_system_file': path},
+                content_type='application/json',
+            )
+            self.assertEqual(response.status_code, 400, response.content)
+        with patch(
+            'apps.nodes.client.AgentClient.request_json',
+            return_value={'format': 'QCOW2', 'virtual_size_bytes': 1024**3},
+        ):
+            response = self.client.post(
+                '/api/v1/instances', self.data, content_type='application/json'
+            )
+            self.assertEqual(response.status_code, 202, response.content)
+            response = self.client.post(
+                '/api/v1/instances',
+                {**self.data, 'name': 'duplicate-direct'},
+                content_type='application/json',
+            )
+            self.assertEqual(response.status_code, 409, response.content)
+        self.assertFalse(Instance.objects.filter(name='duplicate-direct').exists())
