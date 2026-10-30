@@ -296,3 +296,54 @@ class AccountAdministrationTests(TestCase):
             f'/api/v1/users/{self.admin.pk}', {'roles': ['Viewer']}, content_type='application/json'
         )
         self.assertEqual(response.status_code, 409, response.content)
+
+    def test_role_catalog_declares_assignable_dependencies(self):
+        from apps.accounts.administration import assignable
+
+        catalog = self.client.get('/api/v1/console/permissions').json()['results']
+        by_code = {row['code']: row for row in catalog}
+        self.assertIn(
+            'instances.view_instance', by_code['instances.manage_snapshot_instance']['dependencies']
+        )
+        self.assertIn('images.view_image', by_code['instances.add_instance']['dependencies'])
+        for row in catalog:
+            if row['assignable']:
+                self.assertTrue(all(assignable(code) for code in row['dependencies']))
+        self.assertFalse(by_code['accounts.manage_role']['assignable'])
+
+    def test_custom_role_permission_assignment_updates_real_authorization(self):
+        from apps.accounts.role_views import RoleInput
+        from apps.accounts.roles import sync_role_permissions
+
+        role = self.role(
+            'snapshot_operator',
+            permissions=[
+                'instances.view_instance',
+                'instances.manage_snapshot_instance',
+            ],
+        ).json()
+        user = get_user_model().objects.create_user('custom-snapshot-user')
+        user.groups.add(role['id'])
+        self.assertTrue(user.has_perm('instances.manage_snapshot_instance'))
+        sync_role_permissions()
+        user = get_user_model().objects.get(pk=user.pk)
+        self.assertTrue(user.has_perm('instances.manage_snapshot_instance'))
+        result = self.client.patch(
+            f'/api/v1/console/roles/{role["id"]}',
+            {
+                'display_name': '只读',
+                'permissions': ['instances.view_instance'],
+                'revision': role['revision'],
+            },
+            content_type='application/json',
+        )
+        self.assertEqual(result.status_code, 200, result.content)
+        user = get_user_model().objects.get(pk=user.pk)
+        self.assertFalse(user.has_perm('instances.manage_snapshot_instance'))
+        invalid = RoleInput(
+            data={
+                'display_name': '缺少查看权限',
+                'permissions': ['instances.manage_snapshot_instance'],
+            }
+        )
+        self.assertFalse(invalid.is_valid())

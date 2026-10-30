@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
+import { Drawer } from "../../components/ConsoleUI";
+import { allResources } from "../infrastructure/client";
+import { selectPermissions, type RolePermission } from "./permissionSelection";
+import "./roles.css";
 import { api } from "../../api";
 import { Card, ErrorBanner, describeError } from "../../components/ui";
 export type ManagedRole = {
@@ -15,12 +19,6 @@ export type ManagedRole = {
   user_count: number;
   revision: number;
 };
-type Permission = {
-  code: string;
-  name: string;
-  module: string;
-  assignable: boolean;
-};
 const blank = {
   code: "",
   display_name: "",
@@ -33,7 +31,7 @@ const blank = {
 };
 export function RolesPage() {
   const [roles, setRoles] = useState<ManagedRole[]>([]),
-    [catalog, setCatalog] = useState<Permission[]>([]),
+    [catalog, setCatalog] = useState<RolePermission[]>([]),
     [nodes, setNodes] = useState<{ id: number; name: string }[]>([]),
     [error, setError] = useState<string | null>(null),
     [editing, setEditing] = useState<number | null | undefined>(undefined),
@@ -44,12 +42,12 @@ export function RolesPage() {
     try {
       const [r, p, n] = await Promise.all([
         api.request<{ results: ManagedRole[] }>("/console/roles"),
-        api.request<{ results: Permission[] }>("/console/permissions"),
-        api.nodes(),
+        api.request<{ results: RolePermission[] }>("/console/permissions"),
+        allResources<{ id: number; name: string }>("/nodes"),
       ]);
       setRoles(r.results);
       setCatalog(p.results);
-      setNodes(n.results);
+      setNodes(n);
       setError(null);
     } catch (error) {
       setError(describeError(error));
@@ -59,6 +57,8 @@ export function RolesPage() {
     void reload();
   }, [reload]);
   function edit(role: ManagedRole) {
+    setError(null);
+    setFilter("");
     setEditing(role.id);
     setForm({
       code: role.code,
@@ -71,6 +71,28 @@ export function RolesPage() {
       revision: role.revision,
     });
   }
+  function copy(role: ManagedRole) {
+    setError(null);
+    setFilter("");
+    setEditing(null);
+    setForm({ ...blank, display_name: `${role.display_name}副本`.slice(0, 64),
+      description: role.description, scope: role.scope === "nodes" ? "nodes" : "owned",
+      node_ids: role.scope === "nodes" ? [...role.node_ids] : [],
+      permissions: selectPermissions([], role.permissions, true, catalog),
+    });
+  }
+  function toggle(codes: string[], enabled: boolean) {
+    setForm(current => ({ ...current,
+      permissions: selectPermissions(current.permissions, codes, enabled, catalog),
+    }));
+  }
+  const modules: Record<string, string> = {
+    instances: "虚拟机、数据卷与快照", nodes: "物理节点", images: "镜像",
+    networks: "网络", templates: "模板", tasks: "任务", monitoring: "监控",
+  };
+  const visible = catalog.filter(p => p.assignable &&
+    `${p.code} ${p.name} ${modules[p.module] || p.module}`.toLowerCase().includes(filter.toLowerCase()));
+  const moduleNames = [...new Set(visible.map(p => p.module))];
   async function save(event: React.FormEvent) {
     event.preventDefault();
     if (busy) return;
@@ -125,8 +147,10 @@ export function RolesPage() {
           className="action primary"
           disabled={busy}
           onClick={() => {
+            setError(null);
+            setFilter("");
             setEditing(null);
-            setForm(blank);
+            setForm({ ...blank, node_ids: [], permissions: [] });
           }}
         >
           创建自定义角色
@@ -179,6 +203,9 @@ export function RolesPage() {
                   </td>
                   <td>{role.user_count}</td>
                   <td>
+                    <button className="action" disabled={busy || !catalog.length} onClick={() => copy(role)}>
+                      复制为新角色
+                    </button>
                     <button
                       className="action"
                       disabled={busy || role.builtin}
@@ -202,8 +229,14 @@ export function RolesPage() {
         </div>
       </Card>
       {editing !== undefined && (
-        <Card title={editing === null ? "创建角色" : "编辑角色"}>
-          <form onSubmit={save}>
+        <Drawer wide title={editing === null ? "创建自定义角色" : "编辑角色与权限"}
+          onClose={() => { if (!busy) setEditing(undefined); }}
+          footer={<><span className="muted">已选 {form.permissions.length} 项权限</span>
+            <button className="action" disabled={busy} onClick={() => setEditing(undefined)}>取消</button>
+            <button form="role-editor" className="action primary" disabled={busy} type="submit">{busy ? "保存中…" : "保存角色"}</button></>}>
+          <ErrorBanner message={error} />
+          <form id="role-editor" className="role-editor" onSubmit={save}>
+            <p className="banner banner-info">角色决定可执行操作，节点范围决定操作位置。自定义角色始终只访问本人资源；为用户分配多个角色时权限合并，配额不叠加。</p>
             <div className="inline">
               <label>
                 角色编码
@@ -280,61 +313,36 @@ export function RolesPage() {
                 ))}
               </div>
             )}
-            <h3>权限分配</h3>
-            <input
-              aria-label="搜索权限"
-              placeholder="按权限名称、编码搜索"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-            />
-            <p className="muted">
-              操作权限需要同时选择对应查看权限。灰色权限仅属于内置管理员或尚未开放独立授权。
-            </p>
-            <div
-              className="perm-grid"
-              style={{ maxHeight: 320, overflow: "auto" }}
-            >
-              {catalog
-                .filter((permission) =>
-                  (permission.code + " " + permission.name)
-                    .toLowerCase()
-                    .includes(filter.toLowerCase()),
-                )
-                .map((permission) => (
-                  <label key={permission.code}>
-                    <input
-                      type="checkbox"
-                      disabled={!permission.assignable || busy}
-                      checked={form.permissions.includes(permission.code)}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          permissions: e.target.checked
-                            ? [...form.permissions, permission.code]
-                            : form.permissions.filter(
-                                (code) => code !== permission.code,
-                              ),
-                        })
-                      }
-                    />
-                    {permission.name}
-                    <small className="muted"> {permission.code}</small>
-                  </label>
-                ))}
+            <div className="role-permission-head"><h3>权限分配</h3><span className="perm-tag">已选 {form.permissions.length} 项</span></div>
+            <input aria-label="搜索权限" placeholder="搜索模块、权限名称或编码" value={filter}
+              onChange={e => setFilter(e.target.value)} />
+            <p className="muted">勾选操作自动补齐查看权限；取消查看权限会同步移除依赖操作。管理员专属能力不开放给自定义角色。</p>
+            <div className="role-permission-tools">
+              <button type="button" className="action sm" disabled={busy || !visible.length}
+                onClick={() => toggle(visible.map(p => p.code), true)}>选择当前搜索结果</button>
+              <button type="button" className="action sm" disabled={busy || !form.permissions.length}
+                onClick={() => setForm({ ...form, permissions: [] })}>清空权限</button>
             </div>
-            <button className="action primary" disabled={busy} type="submit">
-              {busy ? "保存中…" : "保存角色"}
-            </button>
-            <button
-              className="action"
-              type="button"
-              disabled={busy}
-              onClick={() => setEditing(undefined)}
-            >
-              取消
-            </button>
+            {!moduleNames.length && <p className="empty">没有匹配的可分配权限。</p>}
+            {moduleNames.map(module => {
+              const items = visible.filter(p => p.module === module);
+              return <section className="role-permission-module" key={module}>
+                <div className="role-permission-head"><strong>{modules[module] || module}</strong>
+                  <label><input type="checkbox" disabled={busy}
+                    checked={items.every(p => form.permissions.includes(p.code))}
+                    onChange={e => toggle(items.map(p => p.code), e.target.checked)} />选择本组</label>
+                </div>
+                <div className="role-permission-grid">{items.map(permission =>
+                  <label className={form.permissions.includes(permission.code) ? "selected" : ""} key={permission.code}>
+                    <input type="checkbox" disabled={busy} checked={form.permissions.includes(permission.code)}
+                      onChange={e => toggle([permission.code], e.target.checked)} />
+                    <span>{permission.name}<small>{permission.code}</small></span>
+                  </label>
+                )}</div>
+              </section>;
+            })}
           </form>
-        </Card>
+        </Drawer>
       )}
     </>
   );

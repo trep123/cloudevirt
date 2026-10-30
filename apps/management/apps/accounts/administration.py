@@ -66,6 +66,22 @@ def assignable(code):
     return code in available and code not in ADMIN_ONLY and not code.startswith('monitoring.')
 
 
+def permission_dependencies(code):
+    """Single dependency contract shared by role validation and the editor."""
+    views = {
+        'instances': 'instances.view_instance',
+        'nodes': 'nodes.view_node',
+        'images': 'images.view_image',
+        'tasks': 'tasks.view_task',
+        'templates': 'templates.view_template',
+    }
+    dependencies = {views[code.split('.')[0]]} if code.split('.')[0] in views else set()
+    dependencies.discard(code)
+    if code == 'instances.add_instance':
+        dependencies |= {'nodes.view_node', 'images.view_image', 'networks.view_network'}
+    return sorted(dependencies)
+
+
 def validated_roles(values):
     if (
         not isinstance(values, list)

@@ -14,6 +14,7 @@ from .administration import (
     BUILTINS,
     assignable,
     invalidate_user,
+    permission_dependencies,
     permission_map,
     require_admin,
     serialize_admin_changes,
@@ -81,22 +82,11 @@ class RoleInput(serializers.Serializer):
             raise serializers.ValidationError(
                 {'permissions': ['不存在或不可分配的权限：' + ','.join(sorted(invalid))]}
             )
-        dependencies = {
-            'instances': 'instances.view_instance',
-            'nodes': 'nodes.view_node',
-            'images': 'images.view_image',
-            'tasks': 'tasks.view_task',
-            'templates': 'templates.view_template',
-        }
-        for code in codes:
-            dependency = dependencies.get(code.split('.')[0])
-            if dependency and dependency not in codes:
-                raise serializers.ValidationError({'permissions': [f'{code} 依赖 {dependency}']})
-        if 'instances.add_instance' in codes:
-            missing = {'nodes.view_node', 'images.view_image', 'networks.view_network'} - codes
+        for code in sorted(codes):
+            missing = set(permission_dependencies(code)) - codes
             if missing:
                 raise serializers.ValidationError(
-                    {'permissions': ['创建虚拟机还依赖 ' + ','.join(sorted(missing))]}
+                    {'permissions': [code + ' 依赖 ' + ','.join(sorted(missing))]}
                 )
         attrs['permissions'] = sorted(codes)
         return attrs
@@ -233,6 +223,10 @@ class PermissionCatalogView(APIView):
                         'name': permission.name,
                         'module': permission.content_type.app_label,
                         'assignable': assignable(code),
+                        'dependencies': permission_dependencies(code),
+                        'restriction': ''
+                        if assignable(code)
+                        else '仅限内置管理员或尚未开放独立授权',
                     }
                     for code, permission in sorted(permission_map().items())
                 ]

@@ -1,0 +1,13 @@
+.role-editor { display:grid; gap:16px; }
+.role-editor .inline { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.role-permission-head,.role-permission-tools { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.role-permission-head h3 { margin:0; }
+.role-permission-head label { display:flex; align-items:center; gap:8px; font-size:13px; }
+.role-permission-tools { justify-content:flex-start; }
+.role-permission-module { border:1px solid var(--border,#e2e8f0); border-radius:8px; overflow:hidden; }
+.role-permission-module>.role-permission-head { padding:12px 16px; background:var(--app-bg,#f5f7fa); }
+.role-permission-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; padding:12px; }
+.role-permission-grid>label { display:flex; align-items:flex-start; gap:8px; padding:12px; border:1px solid transparent; border-radius:6px; cursor:pointer; }
+.role-permission-grid>label.selected { background:#eff6ff; border-color:#bfdbfe; }
+.role-permission-grid small { display:block; color:var(--text-secondary,#64748b); font-size:11px; overflow-wrap:anywhere; margin-top:4px; }
+@media(max-width:720px) { .role-editor .inline,.role-permission-grid { grid-template-columns:1fr; } }
