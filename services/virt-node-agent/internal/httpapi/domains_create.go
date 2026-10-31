@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/tl2004/cloude-virt/services/virt-node-agent/internal/apierr"
@@ -120,6 +121,10 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		// 磁盘可能尚不存在，使用允许缺失的路径校验
+		if !payload.UseExistingDisk {
+			if err := storage.EnsureDiskParent(diskRoot, payload.DiskRelativePath); err != nil { writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeInvalidArgument, "无法创建虚拟机用户目录", err), requestID); return }
+		}
+		for _, disk := range payload.DataDisks { if err := storage.EnsureDiskParent(diskRoot, disk.RelativePath); err != nil { writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeInvalidArgument, "无法创建数据盘用户目录", err), requestID); return } }
 		diskPath, err := storage.SafePathAllowMissing(diskRoot, payload.DiskRelativePath)
 		if err != nil {
 			writeAPIError(writer, deps.Logger, err, requestID)
@@ -246,7 +251,7 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 			claimPaths = append([]string{}, spec.AdditionalDiskPaths...)
 		}
 		if payload.Initialization != nil {
-			seed, err := storage.SafePathAllowMissing(diskRoot, ".init-"+payload.UUID+".iso")
+			seed, err := storage.SafePathAllowMissing(diskRoot, filepath.Join(filepath.Dir(payload.DiskRelativePath), ".init-"+payload.UUID+".iso"))
 			if err != nil {
 				writeAPIError(writer, deps.Logger, err, requestID)
 				return
@@ -358,7 +363,7 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 		}
 
 		if payload.Initialization != nil {
-			seed, err := storage.CloudInitISO(ctx, diskRoot, payload.UUID, payload.Name, *payload.Initialization)
+			seed, err := storage.CloudInitISO(ctx, filepath.Dir(diskPath), payload.UUID, payload.Name, *payload.Initialization)
 			if err != nil {
 				writeAPIError(writer, deps.Logger, err, requestID)
 				return

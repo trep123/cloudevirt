@@ -16,6 +16,10 @@ func imageUploadHandler(deps Dependencies) http.HandlerFunc {
 		id, extension := r.PathValue("id"), r.URL.Query().Get("extension")
 		root, rootErr := imageRootForPool(r.Context(), deps, r.URL.Query().Get("storage_pool"))
 		if rootErr != nil { fail(rootErr); return }
+		if directory := r.URL.Query().Get("directory"); directory != "" {
+			root, rootErr = storage.EnsureManagedDirectory(root, directory)
+			if rootErr != nil { fail(apierr.New(apierr.CodeInvalidArgument, "无法创建镜像用户目录", rootErr)); return }
+		}
 		var progress storage.UploadProgress
 		var err error
 		switch r.Method {

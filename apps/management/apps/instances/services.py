@@ -259,7 +259,8 @@ def create_instance(
     disk_bytes = total_disk_gib * GIB
     instance_uuid = uuid_module.uuid4()
     domain_name = domain_name_for(instance_uuid)
-    disk_name = f'{instance_uuid}-system.qcow2'
+    disk_directory = f'vms/user-{user.pk}/{instance_uuid}'
+    disk_name = f'{disk_directory}/system.qcow2'
 
     with transaction.atomic():
         locked_node = type(node).objects.select_for_update().get(pk=node.pk)
@@ -372,9 +373,7 @@ def create_instance(
             checked_pool = select_storage_pool(user, locked_node, storage_pool)
             if checked_pool is None or checked_pool.pk != selected_pool.pk:
                 raise AppError(ErrorCode.PERMISSION_DENIED, '存储池授权已变化')
-            available['disk_bytes'] = pool_available_bytes(
-                locked_node, selected_pool, pool_listing
-            )
+            available['disk_bytes'] = pool_available_bytes(locked_node, selected_pool, pool_listing)
         shortages = []
         if vcpu > available['vcpu']:
             shortages.append('vcpu')
@@ -457,11 +456,11 @@ def create_instance(
             status=DiskStatus.CREATING,
         )
         for index, size in enumerate(data_disks, 1):
-            filename = f'{instance_uuid}-data-{index}.qcow2'
+            filename = f'{disk_directory}/data-{index}.qcow2'
             Disk.objects.create(
                 instance=instance,
                 role=DiskRole.DATA,
-                name=filename,
+                name=filename.rsplit('/', 1)[-1],
                 relative_path=filename,
                 size_gib=size,
                 bus=hardware.get('data_disk_bus', 'virtio'),

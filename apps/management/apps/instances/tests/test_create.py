@@ -34,6 +34,10 @@ class CreateInstanceServiceTests(TestCase):
         self.assertEqual(instance.libvirt_domain_name, f'cv-{str(instance.uuid)[:8]}')
         self.assertEqual(instance.disks.count(), 1)
         self.assertEqual(instance.disks.first().size_gib, 20)
+        self.assertEqual(
+            instance.disks.first().relative_path,
+            f'vms/user-{self.user.pk}/{instance.uuid}/system.qcow2',
+        )
         reservation = ResourceReservation.objects.get(instance=instance)
         self.assertEqual(reservation.status, ReservationStatus.HELD)
         self.assertEqual(reservation.disk_reserved_bytes, 20 * 1024 * 1024 * 1024)

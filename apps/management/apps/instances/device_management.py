@@ -228,7 +228,10 @@ class InstanceHardwareView(APIView):
                 )
                 if not target:
                     raise AppError(ErrorCode.CONFLICT, '无可用设备号')
-                filename = f'{instance.uuid}-hw-{uuid.uuid4().hex[:12]}.qcow2'
+                filename = (
+                    f'vms/user-{instance.created_by_id or 0}/{instance.uuid}/'
+                    f'data-{uuid.uuid4().hex[:12]}.qcow2'
+                )
                 meta.update(
                     filename=filename, target=target, bus=data['bus'], size_gib=data['size_gib']
                 )
@@ -390,7 +393,7 @@ class InstanceHardwareView(APIView):
             disk = Disk.objects.create(
                 instance=instance,
                 role='DATA',
-                name=meta['filename'],
+                name=meta['filename'].rsplit('/', 1)[-1],
                 relative_path=meta['filename'],
                 size_gib=meta['size_gib'],
                 target_dev=meta['target'],

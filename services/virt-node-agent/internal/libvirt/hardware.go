@@ -399,6 +399,7 @@ func (c *Client) ChangeHardware(ctx context.Context, name, root string, change H
 			updated = strings.Replace(updated, "<devices>", "<cpu mode='host-model'>"+topology+"</cpu><devices>", 1)
 		}
 	case "disk-add", "disk-attach", "disk-detach", "disk-resize":
+		if change.Operation == "disk-add" { if err := storage.EnsureDiskParent(root, change.RelativePath); err != nil { return before, err } }
 		path, err := storage.SafePathAllowMissing(root, change.RelativePath)
 		if err != nil {
 			return before, err

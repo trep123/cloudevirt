@@ -22,6 +22,6 @@ export function StoragePoolField({ node, value, onChange, disabled = false }: {
       {data?.results.map((pool) => <option key={pool.name} value={pool.name}>{pool.name} · {pool.path}</option>)}
     </select>
     {error && <small role="alert">{error}</small>}
-    <small>相对路径以所选池目录为起点；普通用户使用管理员指定的默认池。</small>
+    <small>已有文件的相对路径以池目录为起点；新上传镜像自动存入 images/user-用户ID/上传ID/，普通用户使用管理员指定的默认池。</small>
   </label>;
 }

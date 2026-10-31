@@ -129,11 +129,20 @@ class AgentClient:
             raise AppError(ErrorCode.OPERATION_FAILED, '节点 Agent 响应格式错误') from exc
 
     def upload_chunk(
-        self, upload_id: str, offset: int, size: int, extension: str, data: bytes, storage_pool=''
+        self,
+        upload_id: str,
+        offset: int,
+        size: int,
+        extension: str,
+        data: bytes,
+        storage_pool='',
+        directory='',
     ):
         query = f'?offset={offset}&size={size}&extension={extension}'
         if storage_pool:
             query += '&storage_pool=' + quote(storage_pool, safe='')
+        if directory:
+            query += '&directory=' + quote(directory, safe='')
         request = urllib.request.Request(
             f'{self.endpoint}/api/v1/images/uploads/{upload_id}{query}',
             data=data,

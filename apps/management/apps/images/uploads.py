@@ -30,11 +30,15 @@ CHUNK_BYTES = 8 * 1024 * 1024
 def pool_query(image, prefix='&'):
     from urllib.parse import quote
 
-    return (
+    query = (
         prefix + 'storage_pool=' + quote(image.storage_pool.name, safe='')
         if image.storage_pool_id
         else ''
     )
+    directory = str(PurePath(image.relative_path).parent)
+    if directory.startswith('images/user-'):
+        query += ('&' if query else prefix) + 'directory=' + quote(directory, safe='')
+    return query
 
 
 def pool_kwargs(image):
@@ -234,7 +238,7 @@ class UploadCreateView(APIView):
                     node=data['node'],
                     storage_pool=selected_pool,
                     created_by=request.user,
-                    relative_path=f'upload-{data["id"].hex}{data["extension"]}',
+                    relative_path=f'images/user-{request.user.pk}/{data["id"].hex}/upload-{data["id"].hex}{data["extension"]}',
                     format='QCOW2',
                     status=ImageStatus.UPLOADING,
                     os_family=data['os_family'],
@@ -323,6 +327,9 @@ class UploadChunkView(APIView):
             upload.size_bytes,
             upload.extension,
             data,
+            directory=str(PurePath(upload.image.relative_path).parent)
+            if upload.image.relative_path.startswith('images/user-')
+            else '',
             **pool_kwargs(upload.image),
         )
         upload.save(update_fields=['updated_at'])

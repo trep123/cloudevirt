@@ -2,6 +2,7 @@
 
 import uuid
 from unittest import mock
+from urllib.parse import quote
 
 from django.test import TestCase
 
@@ -16,6 +17,9 @@ INFO = {'format': 'QCOW2', 'size_bytes': 4, 'virtual_size_bytes': 1024, 'checksu
 
 
 class UploadTests(TestCase):
+    def directory(self, upload_id):
+        return f'images/user-{self.owner.pk}/{uuid.UUID(upload_id).hex}'
+
     def setUp(self):
         self.owner = make_user('upload-owner', 'Operator')
         self.other = make_user('upload-other', 'Operator')
@@ -53,6 +57,9 @@ class UploadTests(TestCase):
         )
         self.assertEqual(Image.objects.count(), 1)
         self.assertEqual(Image.objects.get().node_id, self.node.pk)
+        self.assertTrue(
+            Image.objects.get().relative_path.startswith(self.directory(upload_id) + '/')
+        )
         self.assertEqual(Image.objects.get().status, ImageStatus.UPLOADING)
 
     @mock.patch('apps.images.uploads.AgentClient')
@@ -98,7 +105,7 @@ class UploadTests(TestCase):
         )
         agent.assert_called_once_with(self.node.endpoint, timeout=120)
         agent.return_value.upload_chunk.assert_called_once_with(
-            uuid.UUID(upload_id).hex, 0, 4, '.qcow2', b'data'
+            uuid.UUID(upload_id).hex, 0, 4, '.qcow2', b'data', directory=self.directory(upload_id)
         )
 
     @mock.patch('apps.images.uploads.AgentClient')
@@ -131,7 +138,8 @@ class UploadTests(TestCase):
         self.assertEqual(image.status, ImageStatus.READY)
         self.assertEqual(image.checksum_sha256, INFO['checksum_sha256'])
         agent.return_value.request_json.assert_called_once_with(
-            f'/api/v1/images/uploads/{uuid.UUID(upload_id).hex}/complete',
+            f'/api/v1/images/uploads/{uuid.UUID(upload_id).hex}/complete'
+            f'?directory={quote(self.directory(upload_id), safe="")}',
             'POST',
             {'size_bytes': 4, 'extension': '.qcow2'},
         )
@@ -165,7 +173,9 @@ class UploadTests(TestCase):
         self.assertEqual(response.status_code, 204)
         self.assertTrue(Image.objects.get().is_deleted)
         agent.return_value.request_json.assert_called_once_with(
-            f'/api/v1/images/uploads/{uuid.UUID(upload_id).hex}?extension=.qcow2', 'DELETE'
+            f'/api/v1/images/uploads/{uuid.UUID(upload_id).hex}?extension=.qcow2'
+            f'&directory={quote(self.directory(upload_id), safe="")}',
+            'DELETE',
         )
 
     @mock.patch('apps.nodes.client.AgentClient.delete_image')

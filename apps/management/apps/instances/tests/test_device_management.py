@@ -174,7 +174,9 @@ class DeviceManagementTests(TestCase):
         task = Task.objects.get()
         change = task.payload['change']
         self.assertEqual(change['target'], 'sdc')
-        self.assertNotIn('/', change['relative_path'])
+        self.assertTrue(
+            change['relative_path'].startswith(f'vms/user-{self.owner.pk}/{self.vm.uuid}/')
+        )
         self.run_task(
             {
                 'uuid': str(self.vm.uuid),
