@@ -20,6 +20,8 @@ STORAGE_ROOTS=()
 BRIDGE_ALLOWED=()
 ALLOW_DESTRUCTIVE=false
 TMP_DIR=""
+INSTALL_STATE=""
+INSTALL_TRACKING=false
 STEP=preflight
 
 usage() {
@@ -49,9 +51,14 @@ HELP
 }
 
 log() { printf '\n[CloudVirt] %s\n' "$*"; }
-die() { printf '\n[CloudVirt] ERROR: %s\n' "$*" >&2; exit 1; }
+die() {
+    printf '\n[CloudVirt] ERROR: %s\n' "$*" >&2
+    [[ ${INSTALL_TRACKING:-false} != true ]] || touch "$INSTALL_STATE/provenance-incomplete"
+    exit 1
+}
 on_error() {
     local rc=$?
+    [[ ${INSTALL_TRACKING:-false} != true ]] || touch "$INSTALL_STATE/provenance-incomplete"
     printf '\n[CloudVirt] Failed at step %s (line %s, exit %s).\n' "$STEP" "$1" "$rc" >&2
     printf 'Existing database and disk images were not deleted. Review: journalctl -u cloudvirt-management -u cloudvirt-agent -u cloudvirt-worker -n 80\n' >&2
     exit "$rc"
@@ -133,6 +140,15 @@ fi
 [[ "$DOMAIN" =~ ^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$ ]] || die "Specify --domain with a hostname or IPv4 address"
 
 STEP=packages
+INSTALL_STATE=/var/lib/cloudvirt-installer
+[[ ! -L "$INSTALL_STATE" && $(realpath -m -- "$INSTALL_STATE") == "$INSTALL_STATE" ]] || die "Invalid installer state directory"
+install -d -o root -g root -m 0700 "$INSTALL_STATE"
+INSTALL_TRACKING=true
+if [[ ! -e "$INSTALL_STATE/baseline-packages.txt" ]]; then
+    [[ ! -e "$CONFIG_DIR/install-secrets.env" ]] || touch "$INSTALL_STATE/provenance-incomplete"
+    dpkg-query -W -f='${binary:Package}\t${Status}\n' | awk -F '\t' '$2 == "install ok installed" {print $1}' | sort -u > "$INSTALL_STATE/baseline-packages.txt"
+fi
+dpkg-query -W -f='${binary:Package}\t${Status}\n' | awk -F '\t' '$2 == "install ok installed" {print $1}' | sort -u > "$INSTALL_STATE/before-packages.txt"
 log "Installing Ubuntu packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
@@ -211,11 +227,20 @@ find "$APP_DIR/scripts" -maxdepth 1 -type f -name '*.sh' -exec sed -i 's/\r$//' 
 chmod 0755 "$APP_DIR" "$APP_DIR/scripts"
 
 STEP=accounts
-getent passwd cloudvirt >/dev/null || useradd --system --home-dir /var/lib/cloudvirt --create-home --shell /usr/sbin/nologin cloudvirt
-getent passwd cloudvirt-agent >/dev/null || useradd --system --home-dir /var/lib/cloudvirt-agent --create-home --shell /usr/sbin/nologin cloudvirt-agent
+if ! getent passwd cloudvirt >/dev/null; then
+    useradd --system --home-dir /var/lib/cloudvirt --create-home --shell /usr/sbin/nologin cloudvirt
+    printf 'cloudvirt\n' >> "$INSTALL_STATE/created-users.txt"
+fi
+if ! getent passwd cloudvirt-agent >/dev/null; then
+    useradd --system --home-dir /var/lib/cloudvirt-agent --create-home --shell /usr/sbin/nologin cloudvirt-agent
+    printf 'cloudvirt-agent\n' >> "$INSTALL_STATE/created-users.txt"
+fi
 usermod -a -G libvirt,kvm cloudvirt-agent
 getent passwd libvirt-qemu >/dev/null && usermod -a -G kvm libvirt-qemu
 install -d -o cloudvirt -g cloudvirt -m 0750 /var/log/cloudvirt
+for root in "$DATA_DIR" "$DATA_DIR/images" "$DATA_DIR/disks" "${STORAGE_ROOTS[@]}"; do
+    [[ -e "$root" ]] || printf '%s\n' "$root" >> "$INSTALL_STATE/created-storage-directories.txt"
+done
 install -d -m 0755 /var/lib/libvirt/images "$DATA_DIR"
 install -d -o cloudvirt-agent -g kvm -m 2770 "$DATA_DIR/images" "$DATA_DIR/disks"
 for root in "${STORAGE_ROOTS[@]}"; do
@@ -455,6 +480,7 @@ virsh -c qemu:///system list --all >/dev/null
 if ! virsh -c qemu:///system net-info default >/dev/null 2>&1; then
     [[ -r /usr/share/libvirt/networks/default.xml ]] || die "libvirt default network XML is unavailable"
     virsh -c qemu:///system net-define /usr/share/libvirt/networks/default.xml
+    touch "$INSTALL_STATE/created-default-network"
 fi
 if ! virsh -c qemu:///system net-list --name | grep -qx default; then
     virsh -c qemu:///system net-start default
@@ -698,6 +724,14 @@ for service in cloudvirt-agent cloudvirt-management cloudvirt-worker cloudvirt-n
     systemctl is-active --quiet "$service" || die "Service is not active: $service"
 done
 log "Deployment completed"
+dpkg-query -W -f='${binary:Package}\t${Status}\n' | awk -F '\t' '$2 == "install ok installed" {print $1}' | sort -u > "$INSTALL_STATE/current-packages.txt"
+comm -13 "$INSTALL_STATE/before-packages.txt" "$INSTALL_STATE/current-packages.txt" > "$INSTALL_STATE/new-packages.txt"
+if [[ -f "$INSTALL_STATE/added-packages.txt" ]]; then
+    cat "$INSTALL_STATE/new-packages.txt" "$INSTALL_STATE/added-packages.txt" | sort -u > "$INSTALL_STATE/added-packages.next"
+else
+    cp "$INSTALL_STATE/new-packages.txt" "$INSTALL_STATE/added-packages.next"
+fi
+mv "$INSTALL_STATE/added-packages.next" "$INSTALL_STATE/added-packages.txt"
 printf 'Console: %s\n' "$ORIGIN"
 if [[ -f "$CONFIG_DIR/initial-admin.txt" ]]; then
     printf 'Initial administrator credentials: sudo cat %s/initial-admin.txt\n' "$CONFIG_DIR"
