@@ -35,6 +35,7 @@ export function VmWizard({
   onCancel: () => void;
 }) {
   const [cloneMode, setCloneMode] = useState("full");
+  const [sourceMode, setSourceMode] = useState("disk");
   const [diskSources, setDiskSources] = useState<
       { name: string; virtual_size_bytes: number }[]
     >([]),
@@ -365,6 +366,11 @@ export function VmWizard({
     "核对配置，确认后将以异步任务提交到节点。",
   ];
   const selectedImage = images.find((i) => String(i.id) === image);
+  const isoInstall = selectedImage?.format === "ISO";
+  useEffect(() => {
+    if (selectedImage) setSourceMode(selectedImage.format === "ISO" ? "iso" : "disk");
+    if (selectedImage?.format === "ISO") { setCloneMode("full"); setInitialize(false); }
+  }, [image, selectedImage?.format]);
   const selectedNode = nodes.find((n) => String(n.id) === node);
   const selectedVersion = versions.find((v) => v.id === Number(version));
   const locked = new Set(selectedVersion?.constraints.locked || []);
@@ -619,7 +625,15 @@ export function VmWizard({
                         )}
                       </fieldset>
                     )}
-                    <Field label="操作系统镜像" hint="仅列出已就绪的镜像">
+                    <Field label="系统部署方式" hint="ISO 是安装介质；磁盘镜像是已安装系统的磁盘文件">
+                      <select value={sourceMode} disabled={useFile || locked.has("image")} onChange={(e) => {
+                        setSourceMode(e.target.value); setImage(""); setNode(""); setCloneMode("full"); setInitialize(false);
+                      }}>
+                        <option value="disk">从磁盘镜像克隆（QCOW2 / RAW）</option>
+                        <option value="iso">从 ISO 安装操作系统</option>
+                      </select>
+                    </Field>
+                    <Field label={sourceMode === "iso" ? "安装光盘镜像（ISO）" : "系统磁盘镜像"} hint={sourceMode === "iso" ? "只显示已校验的 ISO；创建空白系统盘并只读挂载安装光盘" : "仅列出已就绪的 QCOW2 / RAW 磁盘镜像"}>
                       <select
                         value={image}
                         disabled={useFile || locked.has("image")}
@@ -630,7 +644,7 @@ export function VmWizard({
                         }}
                       >
                         <option value="">选择已审核镜像</option>
-                        {images.map((i) => (
+                        {images.filter((i) => sourceMode === "iso" ? i.format === "ISO" : i.format !== "ISO").map((i) => (
                           <option key={i.id} value={i.id}>
                             {i.name} · {i.os_family || i.format}
                             {i.node_name ? ` · ${i.node_name}` : ""}
@@ -638,6 +652,7 @@ export function VmWizard({
                         ))}
                       </select>
                     </Field>
+                    {sourceMode === "iso" && <p className="banner banner-info field-wide">创建后通过控制台完成安装。启动顺序为光驱 → 硬盘；任务成功只表示虚拟机已创建，不代表系统安装完成。ISO 必须已上传或登记并校验就绪。</p>}
                     <p className="muted field-wide">
                       资源归属于当前账号，并受个人配额及节点授权约束。项目隔离尚未启用。
                     </p>
@@ -720,9 +735,9 @@ export function VmWizard({
                       </select>
                     </Field>
                     <Field
-                      label="系统盘克隆方式"
+                      label={isoInstall ? "系统盘创建方式" : "系统盘克隆方式"}
                       hint={
-                        cloneMode === "linked"
+                        isoInstall ? "创建空白 QCOW2 系统盘；ISO 只读挂载为 SATA 光驱，不会复制为系统盘。" : cloneMode === "linked"
                           ? "建立 QCOW2 差异盘，依赖节点保存的只读基础盘；首次使用会准备基础副本，后续克隆更快。"
                           : cloneMode === "direct"
                             ? "直接写入所选原文件，不复制。"
@@ -731,9 +746,10 @@ export function VmWizard({
                     >
                       <select
                         value={cloneMode}
+                        disabled={isoInstall}
                         onChange={(e) => setCloneMode(e.target.value)}
                       >
-                        <option value="full">全克隆（独立系统盘）</option>
+                        <option value="full">{isoInstall ? "新建空白系统盘（ISO 安装）" : "全克隆（独立系统盘）"}</option>
                         <option
                           value="linked"
                           disabled={
@@ -961,7 +977,8 @@ export function VmWizard({
                         ["CPU 模式 / 拓扑", `${hardware.cpu_mode || "节点默认"} · ${hardware.sockets ? `${hardware.sockets} 插槽 × ${hardware.cores} 核 × ${hardware.threads} 线程` : "自动拓扑"}`],
                         ["固件 / 安全设备", `${(hardware.firmware || "bios").toUpperCase()} · Secure Boot ${hardware.secure_boot ? "启用" : "关闭"} · TPM ${hardware.tpm ? "启用" : "关闭"}`],
                         ["存储", `${disk} GB · qcow2`],
-                        ["存储池 / 克隆", `${storagePools.find((item) => item.name === storagePool)?.name || "节点原有磁盘目录"} · ${cloneMode === "linked" ? "链接克隆" : cloneMode === "direct" ? "直接使用已有盘" : "全克隆"}`],
+                        ["安装方式 / 启动", isoInstall ? "ISO 安装 · 只读 SATA 光驱 → 系统硬盘" : "磁盘镜像部署 · 从系统盘启动"],
+                        ["存储池 / 系统盘", `${storagePools.find((item) => item.name === storagePool)?.name || "节点原有磁盘目录"} · ${isoInstall ? "新建空白系统盘" : cloneMode === "linked" ? "链接克隆" : cloneMode === "direct" ? "直接使用已有盘" : "全克隆"}`],
                         ["附加数据盘", dataDisks.length ? dataDisks.map((size, i) => `磁盘 ${i + 1}：${size} GiB`).join("；") + ` · ${hardware.data_disk_bus || "virtio"}` : "无"],
                         ["网络", network || "不接入"],
                         ["网卡设备", `${hardware.nic_model || "virtio"} · ${[network, ...extraNetworks].filter(Boolean).length} 个接入网络`],
