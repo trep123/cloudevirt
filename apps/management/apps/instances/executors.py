@@ -8,6 +8,7 @@ import logging
 import time
 
 from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 
 from apps.instances.hardware import validate_creation_capabilities
@@ -390,6 +391,11 @@ def execute_instance_delete(task: Task) -> dict:
     client = AgentClient(instance.node.endpoint)
     pool_kwargs = {'storage_pool': instance.storage_pool.name} if instance.storage_pool_id else {}
     live_disks = instance.disks.exclude(status='DELETED')
+    record_event(
+        task,
+        to_status=task.status,
+        message='开始节点删除：先停止并解除域定义，再按请求清理未被引用的磁盘',
+    )
     if purge_disk and live_disks.filter(role='DATA').exists():
         result = client.delete_domain_disks(
             instance.libvirt_domain_name,
@@ -403,8 +409,21 @@ def execute_instance_delete(task: Task) -> dict:
             **pool_kwargs,
         )
 
+    if not isinstance(result, dict):
+        raise AppError(ErrorCode.OPERATION_FAILED, '节点删除响应格式无效，请先核对节点实际状态')
     if purge_disk and live_disks.exists() and result.get('disk_removed') is not True:
         raise AppError(ErrorCode.CONFLICT, '节点未确认关联磁盘清理完成，请核对任务后重试')
+    record_event(
+        task, to_status=task.status, message='节点已确认删除结果，正在提交磁盘状态和资源释放'
+    )
+    return _commit_instance_delete(instance, purge_disk, result)
+
+
+@transaction.atomic
+def _commit_instance_delete(instance, purge_disk, result):
+    """Commit local deletion bookkeeping together after the Agent acknowledges it."""
+    instance = Instance.objects.select_for_update().get(pk=instance.pk)
+    live_disks = instance.disks.exclude(status='DELETED')
     instance.is_deleted = True
     from apps.networks.models import IPLease
 

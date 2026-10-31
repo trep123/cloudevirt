@@ -224,7 +224,7 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 			return
 		}
 
-		unlock := lockCreation(payload.UUID)
+		unlock := lockCreation(payload.Name)
 		defer unlock()
 		if _, err := journalMatches(diskRoot, payload); err != nil {
 			writeAPIError(writer, deps.Logger, err, requestID)

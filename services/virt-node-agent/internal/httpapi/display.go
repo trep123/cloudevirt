@@ -11,8 +11,12 @@ import (
 
 func displayHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		diskReferenceMutation.RLock()
+		defer diskReferenceMutation.RUnlock()
 		id := RequestIDFromContext(r.Context())
 		name := r.PathValue("name")
+		unlock := lockCreation(name)
+		defer unlock()
 		fail := func(err error) { writeAPIError(w, deps.Logger, err, id) }
 		if !domainxml.ValidName(name) {
 			fail(apierr.New(apierr.CodeInvalidArgument, "域名无效", nil))

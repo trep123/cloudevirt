@@ -36,6 +36,8 @@ func infrastructureHandler(deps Dependencies, snapshots bool) http.HandlerFunc {
 		fail := func(err error) { writeAPIError(w, deps.Logger, err, requestID) }
 		diskRoot := deps.DiskDir
 		if snapshots {
+			unlock := lockCreation(r.PathValue("name"))
+			defer unlock()
 			var rootErr error
 			diskRoot, rootErr = diskRootForPool(r.Context(), deps, r.URL.Query().Get("storage_pool"))
 			if rootErr != nil {

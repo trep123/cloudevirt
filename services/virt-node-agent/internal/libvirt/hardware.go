@@ -18,6 +18,9 @@ import (
 )
 
 type HardwareChange struct {
+	ImageRelativePath string `json:"image_relative_path,omitempty"`
+	ImageStoragePool string `json:"image_storage_pool,omitempty"`
+	MediaPath string `json:"-"`
 	Live         bool                  `json:"live,omitempty"`
 	Operation    string                `json:"operation"`
 	UUID         string                `json:"uuid"`
@@ -63,12 +66,19 @@ type HardwareNIC struct {
 	NetworkName string `json:"source" xml:"-"`
 }
 type HardwareInventory struct {
+	CDROMs []HardwareCDROM `json:"cdroms"`
 	System HardwareSystem `json:"system"`
 	UUID      string         `json:"uuid"`
 	VCPU      int            `json:"vcpu"`
 	MemoryMiB int            `json:"memory_mib"`
 	Disks     []HardwareDisk `json:"disks"`
 	NICs      []HardwareNIC  `json:"nics"`
+}
+type HardwareCDROM struct {
+	Source string `json:"source"`
+	Target string `json:"target"`
+	Bus string `json:"bus"`
+	Mounted bool `json:"mounted"`
 }
 type HardwareSystem struct {
 	OS struct {
@@ -169,11 +179,15 @@ func parseHardware(ctx context.Context, content, root string) (HardwareInventory
 		return HardwareInventory{}, apierr.New(apierr.CodeConflict, "未知内存单位", nil)
 	}
 	result := HardwareInventory{UUID: parsed.UUID, VCPU: parsed.VCPU, MemoryMiB: memory, Disks: []HardwareDisk{}, NICs: parsed.Devices.NICs}
+	result.CDROMs = []HardwareCDROM{}
 	if err := xml.Unmarshal([]byte(content), &result.System); err != nil { return result, err }
 	if result.NICs == nil {
 		result.NICs = []HardwareNIC{}
 	}
 	for _, d := range parsed.Devices.Disks {
+		if d.Device == "cdrom" {
+			result.CDROMs = append(result.CDROMs, HardwareCDROM{Target:d.Target.Dev, Bus:d.Target.Bus, Mounted:d.Source.File != "", Source:d.Source.File})
+		}
 		if d.Device != "disk" {
 			continue
 		}
@@ -337,6 +351,11 @@ func (c *Client) ChangeHardware(ctx context.Context, name, root string, change H
 	}
 	updated := content
 	switch change.Operation {
+	case "cdrom-set", "cdrom-remove":
+		updated, err = replaceCDROM(content, change.Target, change.MediaPath, change.Operation == "cdrom-remove")
+		if err != nil { return before, err }
+		updated, err = opticalBootOrder(updated, change.Operation == "cdrom-remove")
+		if err != nil { return before, err }
 	case "compute":
 		if change.VCPU < 1 || change.VCPU > 128 || change.MemoryMiB < 128 || change.MemoryMiB > 1048576 {
 			return fail("CPU 或内存超出范围")
@@ -515,6 +534,11 @@ func (c *Client) ChangeHardware(ctx context.Context, name, root string, change H
 	actual, err := c.HardwareInventory(ctx, name, root)
 	if err != nil {
 		return before, err
+	}
+	if change.Operation == "cdrom-set" {
+		verified := false
+		for _, drive := range actual.CDROMs { if drive.Target == change.Target && drive.Source == change.MediaPath { verified = true } }
+		if !verified { return actual, apierr.New(apierr.CodeConflict, "节点未确认 ISO 光驱配置", nil) }
 	}
 	return actual, nil
 }

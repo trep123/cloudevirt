@@ -165,6 +165,11 @@ def delete_image(
         AppError: 未指定节点或 Agent 拒绝删除。
     """
     references = image.instances.filter(is_deleted=False).count()
+    from apps.instances.models import Instance
+
+    references += Instance.objects.filter(
+        is_deleted=False, creation_config__installation_media=image.pk
+    ).count()
     from apps.tasks.models import ACTIVE_STATUSES, Task
 
     if image.status == ImageStatus.UPLOADING:
@@ -173,6 +178,10 @@ def delete_image(
         resource_type='image', resource_id=str(image.pk), status__in=ACTIVE_STATUSES
     ).exists():
         raise AppError(ErrorCode.OPERATION_IN_PROGRESS, '镜像仍在校验，请等待任务结束')
+    if Task.objects.filter(
+        type='INSTANCE_HARDWARE', status__in=ACTIVE_STATUSES, payload__metadata__image_id=image.pk
+    ).exists():
+        raise AppError(ErrorCode.OPERATION_IN_PROGRESS, '镜像存在未完成的光驱挂载任务')
     if references:
         raise AppError(
             ErrorCode.IMAGE_IN_USE,

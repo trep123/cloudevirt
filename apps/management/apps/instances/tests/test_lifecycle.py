@@ -35,6 +35,36 @@ def prepare_instance(username: str = 'life-operator'):
 
 
 class LifecycleExecutorTests(TestCase):
+    def test_delete_database_failure_does_not_partially_release_resources(self):
+        from apps.instances.executors import execute_instance_delete
+        from apps.tasks.services import enqueue
+
+        task = enqueue(
+            task_type=TaskType.INSTANCE_DELETE,
+            resource_type='instance',
+            resource_id=str(self.instance.pk),
+            payload={'purge_disk': True},
+        )
+        disk = self.instance.disks.first()
+        with (
+            mock.patch(
+                'apps.nodes.client.AgentClient.delete_domain', return_value={'disk_removed': True}
+            ),
+            mock.patch.object(
+                type(disk), 'save', side_effect=RuntimeError('simulated database failure')
+            ),
+        ):
+            with self.assertRaises(RuntimeError):
+                execute_instance_delete(task)
+        self.instance.refresh_from_db()
+        disk.refresh_from_db()
+        self.assertFalse(self.instance.is_deleted)
+        self.assertNotEqual(disk.status, DiskStatus.DELETED)
+        self.assertNotEqual(
+            ResourceReservation.objects.get(instance=self.instance).status,
+            ReservationStatus.RELEASED,
+        )
+
     """执行器对各动作的处理。"""
 
     def setUp(self) -> None:

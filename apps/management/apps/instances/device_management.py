@@ -43,9 +43,13 @@ class DeviceInput(StrictInput):
             'disk-resize',
             'nic-add',
             'nic-remove',
+            'cdrom-set',
+            'cdrom-remove',
         ]
     )
     live = serializers.BooleanField(required=False)
+    image_id = serializers.IntegerField(min_value=1, required=False)
+    target = serializers.RegexField(r'^sda$', required=False)
     vcpu = serializers.IntegerField(min_value=1, max_value=128, required=False)
     memory_mib = serializers.IntegerField(min_value=128, max_value=1048576, required=False)
     disk_id = serializers.IntegerField(min_value=1, required=False)
@@ -64,6 +68,8 @@ class DeviceInput(StrictInput):
             'disk-resize': {'disk_id', 'size_gib'},
             'nic-add': {'network_name', 'model'},
             'nic-remove': {'mac'},
+            'cdrom-set': {'target', 'image_id'},
+            'cdrom-remove': {'target'},
         }[data['operation']]
         if data.get('live') and data['operation'] != 'nic-add':
             raise serializers.ValidationError({'live': '热变更仅支持新增网卡'})
@@ -276,6 +282,30 @@ class InstanceHardwareView(APIView):
                         if target is None:
                             raise AppError(ErrorCode.CONFLICT, '无可用磁盘设备号')
                         payload['target'] = target
+        elif op in {'cdrom-set', 'cdrom-remove'}:
+            if (
+                instance.disks.filter(target_dev=data['target'])
+                .exclude(status__in=['DETACHED', 'DELETED'])
+                .exists()
+            ):
+                raise AppError(ErrorCode.CONFLICT, '安装光驱设备号已被磁盘占用，禁止替换')
+            payload['target'] = data['target']
+            if op == 'cdrom-set':
+                from apps.images.models import Image
+
+                image = get_object_or_404(
+                    Image,
+                    pk=data['image_id'],
+                    is_deleted=False,
+                    status='READY',
+                    format='ISO',
+                    node=node,
+                )
+                payload.update(
+                    image_relative_path=image.relative_path,
+                    image_storage_pool=image.storage_pool.name if image.storage_pool_id else '',
+                )
+                meta['image_id'] = image.pk
         elif op == 'nic-add':
             if instance.network_interfaces.count() >= 8:
                 raise AppError(ErrorCode.CONFLICT, '最多支持 8 个网卡')
@@ -394,9 +424,17 @@ class InstanceHardwareView(APIView):
 
 
 def verify_result(result, change):
+    if not isinstance(result, dict):
+        return False
     if result.get('uuid') != change['uuid']:
         return False
     op = change['operation']
+    if op in {'cdrom-set', 'cdrom-remove'}:
+        device = next(
+            (item for item in result.get('cdroms', []) if item.get('target') == change['target']),
+            None,
+        )
+        return (device is None) if op == 'cdrom-remove' else bool(device and device.get('mounted'))
     if op == 'compute':
         return (
             result.get('vcpu') == change['vcpu']
@@ -432,6 +470,23 @@ def execute_hardware_change(task):
     meta = task.payload['metadata']
     try:
         authorize_hardware(task.requested_by, instance, change['operation'])
+        if change['operation'] == 'cdrom-set':
+            from apps.images.models import Image
+
+            image = Image.objects.filter(
+                pk=meta['image_id'],
+                node=instance.node,
+                is_deleted=False,
+                status='READY',
+                format='ISO',
+            ).first()
+            if (
+                image is None
+                or image.relative_path != change['image_relative_path']
+                or (image.storage_pool.name if image.storage_pool_id else '')
+                != change['image_storage_pool']
+            ):
+                raise AppError(ErrorCode.CONFLICT, '安装镜像状态或位置已变化，请重新提交')
         if change['operation'] in {'disk-attach', 'disk-detach'} and not is_admin(
             task.requested_by
         ):
@@ -453,7 +508,8 @@ def execute_hardware_change(task):
         task.save(update_fields=['payload', 'updated_at'])
         Instance.objects.filter(pk=instance.pk).update(operation_status='PREPARING')
         result = AgentClient(instance.node.endpoint).domain_hardware(
-            instance.libvirt_domain_name, change,
+            instance.libvirt_domain_name,
+            change,
             storage_pool=instance.storage_pool.name if instance.storage_pool_id else '',
         )
         if not verify_result(result, change):
@@ -495,6 +551,8 @@ def execute_hardware_change(task):
                         'size_gib', flat=True
                     )
                 )
+            elif op in {'cdrom-set', 'cdrom-remove'}:
+                config['installation_media'] = meta.get('image_id') if op == 'cdrom-set' else None
             elif op == 'nic-add':
                 InstanceNIC.objects.get_or_create(
                     instance=instance,

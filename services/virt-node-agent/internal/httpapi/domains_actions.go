@@ -35,6 +35,8 @@ func domainActionHandler(deps Dependencies, action string) http.HandlerFunc {
 		}
 
 		ctx := request.Context()
+		unlock := lockCreation(name)
+		defer unlock()
 		var err error
 		switch action {
 		case "start":

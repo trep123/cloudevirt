@@ -11,6 +11,31 @@ from common.errors import AppError, ErrorCode
 
 
 class DeviceManagementTests(TestCase):
+    @patch('apps.instances.device_management.AgentClient')
+    def test_iso_mount_is_task_backed_and_records_reference(self, agent):
+        iso = make_image(
+            name='install-media', node=self.node, format='ISO', relative_path='install.iso'
+        )
+        response = self.post(operation='cdrom-set', target='sda', image_id=iso.pk)
+        self.assertEqual(response.status_code, 202, response.content)
+        task = Task.objects.get()
+        agent.return_value.domain_hardware.return_value = {
+            'uuid': str(self.vm.uuid),
+            'cdroms': [{'target': 'sda', 'mounted': True}],
+        }
+        execute_hardware_change(task)
+        self.vm.refresh_from_db()
+        self.assertEqual(self.vm.creation_config['installation_media'], iso.pk)
+        self.assertEqual(ResourceReservation.objects.get(task=task).status, 'COMMITTED')
+
+    def test_iso_operations_reject_running_vm_and_non_iso(self):
+        image = make_image(name='not-iso-media', relative_path='not-iso.qcow2', node=self.node)
+        self.assertEqual(
+            self.post(operation='cdrom-set', target='sda', image_id=image.pk).status_code, 404
+        )
+        Instance.objects.filter(pk=self.vm.pk).update(observed_state='RUNNING')
+        self.assertEqual(self.post(operation='cdrom-remove', target='sda').status_code, 409)
+
     def test_response_loss_reuses_completed_task_instead_of_allocating_another_disk(self):
         data = {'operation': 'disk-add', 'size_gib': 2, 'bus': 'virtio'}
         first = self.client.post(

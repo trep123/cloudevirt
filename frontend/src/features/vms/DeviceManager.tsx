@@ -7,6 +7,8 @@ import {
 import { ErrorBanner, describeError } from "../../components/ui";
 import { Icon } from "../../components/icons";
 import type { Instance, Network } from "../../types";
+import type { Image } from "../../types";
+import { allResources } from "../infrastructure/client";
 type Disk = {
   target: string;
   bus: string;
@@ -18,6 +20,7 @@ type Disk = {
 };
 type NIC = { mac: string; model: string; source: string; type: string };
 type Inventory = {
+  cdroms?: {target:string; bus:string; mounted:boolean; source:string}[];
   system?: {
     os: { firmware: string; loader: string; type: { machine: string; arch: string }; boot: { device: string }[] | null };
     cpu: { mode: string; model: string; topology: { sockets: number; cores: number; threads: number } | null };
@@ -50,6 +53,15 @@ export function DeviceManager({
   section: "compute" | "disks" | "nics";
 }) {
   const pendingKeys = useRef(new Map<string, string>());
+  const [isoImages, setIsoImages] = useState<Image[]>([]);
+  const [isoImage, setIsoImage] = useState("");
+  useEffect(() => {
+    let alive = true;
+    if (admin && section === "disks") void allResources<Image>("/images").then((images) => {
+      if (alive) setIsoImages(images.filter((image) => image.format === "ISO" && image.status === "READY" && image.node === vm.node));
+    }).catch((err) => { if (alive) setError(describeError(err)); });
+    return () => { alive = false; };
+  }, [admin, section, vm.node]);
   const [confirmation, setConfirmation] = useState<{
       payload: Record<string, unknown>;
       description: string;
@@ -375,6 +387,23 @@ export function DeviceManager({
       )}
       {info && section === "disks" && (
         <>
+          <section className="card">
+            <h3>安装光驱 · ISO 镜像</h3>
+            <p className="muted">安装光驱使用 SATA sda，修改前须关机。弹出或移除光驱不删除镜像文件；cloud-init 光驱不在此处修改。</p>
+            {(info.cdroms || []).map((drive) => <p key={drive.target}>{drive.target} · {drive.bus} · {drive.mounted ? drive.source.split("/").pop() : "无介质"}</p>)}
+            {admin && <div className="infra-form">
+              <label>安装 ISO<select value={isoImage} disabled={locked} onChange={(e) => setIsoImage(e.target.value)}>
+                <option value="">选择本节点已就绪的 ISO</option>
+                {isoImages.map((image) => <option key={image.id} value={image.id}>{image.name} · {image.storage_pool_name || "节点原有镜像目录"}</option>)}
+              </select></label>
+              <div className="device-actions">
+                <button className="action" disabled={locked || !isoImage || !info.cdroms || info.disks.some((disk) => disk.target === "sda")} onClick={() => void submit({operation:"cdrom-set",target:"sda",image_id:Number(isoImage)},"挂载或更换安装 ISO，设置光驱优先启动")}>挂载 / 更换 ISO</button>
+                <button className="action danger" disabled={locked || !info.cdroms?.some((drive) => drive.target === "sda")} onClick={() => void submit({operation:"cdrom-remove",target:"sda"},"弹出安装介质并移除安装光驱（保留 ISO 文件）")}>弹出 / 移除光驱</button>
+              </div>
+              {!info.cdroms && <p className="muted">节点尚未返回光驱清单，请升级 Agent。</p>}
+              {info.disks.some((disk) => disk.target === "sda") && <p className="muted">sda 已被磁盘占用，禁止替换为光驱。</p>}
+            </div>}
+          </section>
           <div className="table-scroll">
             <table className="data-table">
               <thead>
