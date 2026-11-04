@@ -100,6 +100,5 @@ make lint             # 全量静态检查（ruff + gofmt + go vet + tsc）
 
 ## 安装与卸载
 
-Ubuntu 26 一键安装与保留业务数据的卸载说明见 [docs/install-uninstall.md](docs/install-uninstall.md)。`uninstall.sh` 默认仅预览，必须显式传入 `--apply` 才执行。
-
-完全清理使用独立的 `uninstall-full.sh`，默认也只预览。执行须同时指定 `--apply --confirm DELETE-CLOUDVIRT`，会永久删除平台业务数据、配置、部署文件及可追溯的新增软件包，保留当前项目源码与离线包。旧安装缺少软件包来源记录时需提供审计后的 `--packages` 清单；本仓库生成脚本不代表已经执行清理。
+- [安装与升级说明](docs/install.md)：Ubuntu 26 一键部署、离线依赖、存储与网络选项。
+- [卸载说明](docs/uninstall.md)：普通卸载保留业务数据；完全清理永久删除平台管理的数据与安装产物，保留项目源码和仓库中的离线包。两种卸载默认只预览。
