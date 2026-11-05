@@ -695,8 +695,13 @@ wait_url http://127.0.0.1:9100/health
 wait_url http://127.0.0.1:8000/api/v1/health
 [[ -s "$WEB_ROOT/index.html" ]] || die "Frontend index.html was not deployed"
 if [[ "$HTTPS" == true ]]; then
-    wait_url "$ORIGIN/api/v1/health" --noproxy '*' --resolve "$DOMAIN:$PORT:127.0.0.1" --cacert "$CONFIG_DIR/tls/server.crt"
-    wait_url "$ORIGIN/index.html" --noproxy '*' --resolve "$DOMAIN:$PORT:127.0.0.1" --cacert "$CONFIG_DIR/tls/server.crt"
+    # This is a loopback readiness check.  An upgrade can retain an older
+    # self-signed certificate whose SAN predates a changed --domain IP; that
+    # must not make a healthy deployment fail.  --resolve still exercises the
+    # requested Host/SNI route, while external clients continue to validate the
+    # certificate normally.
+    wait_url "$ORIGIN/api/v1/health" --noproxy '*' --resolve "$DOMAIN:$PORT:127.0.0.1" --insecure
+    wait_url "$ORIGIN/index.html" --noproxy '*' --resolve "$DOMAIN:$PORT:127.0.0.1" --insecure
     if [[ "$PORT" != 80 ]]; then
         redirect_status=$(curl -sS -o /dev/null -w '%{http_code}' --noproxy '*' \
             --resolve "$DOMAIN:80:127.0.0.1" "http://$DOMAIN/")
