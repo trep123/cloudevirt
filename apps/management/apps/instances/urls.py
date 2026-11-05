@@ -13,6 +13,7 @@ from apps.instances.views import (
     InstanceActionView,
     InstanceAddressesView,
     InstanceConsoleView,
+    InstanceConsoleBootKeyView,
     InstanceDetailView,
     InstanceInterfacesView,
     InstanceListCreateView,
@@ -39,6 +40,7 @@ urlpatterns = [
         InstanceConsoleView.as_view(),
         name='instance-console',
     ),
+    path('instances/<int:pk>/console/boot-key', InstanceConsoleBootKeyView.as_view()),
     # 动作路由必须在详情路由之前，避免 "start" 等被当作 pk
     path('instances/<int:pk>/<str:action>', InstanceActionView.as_view(), name='instance-action'),
     path('instances/<int:pk>', InstanceDetailView.as_view(), name='instance-detail'),

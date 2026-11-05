@@ -226,6 +226,12 @@ class AgentClient:
             {'enabled': enabled},
         )
 
+    def domain_boot_key(self, name: str) -> dict:
+        """经由宿主机 libvirt 向运行中的域发送 ISO 引导空格键。"""
+        return self.request_json(
+            f'/api/v1/domains/{quote(name, safe="")}/boot-key', 'POST', {}
+        )
+
     def delete_domain(
         self, name: str, disk_relative_path: str = '', *, storage_pool: str = ''
     ) -> dict:

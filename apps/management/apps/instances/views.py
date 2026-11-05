@@ -228,6 +228,30 @@ class InstanceConsoleView(APIView):
         )
 
 
+class InstanceConsoleBootKeyView(APIView):
+    """Inject the fixed optical-media boot key through the node Agent."""
+
+    permission_classes = [CanViewInstance, RequiresPasswordChange]
+
+    def post(self, request, pk: int) -> Response:
+        instance = instances_for(request.user).filter(pk=pk).first()
+        if instance is None:
+            raise AppError(ErrorCode.NOT_FOUND)
+        if instance.observed_state != 'RUNNING' or instance.observed_state_is_stale:
+            raise AppError(ErrorCode.CONFLICT, '虚拟机未确认运行，无法发送安装启动键')
+        result = AgentClient(instance.node.endpoint).domain_boot_key(instance.libvirt_domain_name)
+        if result.get('accepted') is not True or result.get('key') != 'SPACE':
+            raise AppError(ErrorCode.OPERATION_FAILED, '节点未确认接收安装启动键')
+        record_audit(
+            action=AuditAction.INSTANCE_CONSOLE_BOOT_KEY,
+            actor=request.user,
+            target_type='instance',
+            target_id=str(instance.pk),
+            details={'key': 'SPACE', 'transport': 'libvirt-host-injection'},
+        )
+        return Response({'accepted': True, 'key': 'SPACE'})
+
+
 class InstanceActionView(APIView):
     """实例生命周期动作：start / shutdown / force-stop / reboot。"""
 

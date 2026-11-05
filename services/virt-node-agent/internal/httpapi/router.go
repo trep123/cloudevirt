@@ -97,6 +97,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	api.HandleFunc("POST /api/v1/domains/{name}/force-stop", domainActionHandler(deps, "force-stop"))
 	api.HandleFunc("POST /api/v1/domains/{name}/reboot", domainActionHandler(deps, "reboot"))
 	api.HandleFunc("POST /api/v1/domains/{name}/autostart", domainAutostartHandler(deps))
+	api.HandleFunc("POST /api/v1/domains/{name}/boot-key", domainBootKeyHandler(deps))
 	api.HandleFunc("DELETE /api/v1/domains/{name}", deleteDomainHandler(deps))
 	api.HandleFunc("POST /api/v1/images/inspect", inspectImageHandler(deps))
 	api.HandleFunc("DELETE /api/v1/images", deleteImageHandler(deps))

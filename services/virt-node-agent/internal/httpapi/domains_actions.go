@@ -44,6 +44,34 @@ func domainAutostartHandler(deps Dependencies) http.HandlerFunc {
 	}
 }
 
+// domainBootKeyHandler uses libvirt's host-side keyboard injection for the
+// short "Press any key to boot from CD or DVD" prompt. Browser VNC focus is
+// deliberately not part of this path.
+func domainBootKeyHandler(deps Dependencies) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		requestID := RequestIDFromContext(request.Context())
+		name := request.PathValue("name")
+		if !domainxml.ValidName(name) {
+			writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeInvalidArgument, "域名格式非法", nil), requestID)
+			return
+		}
+		operator, ok := deps.Virtualizer.(interface {
+			SendDomainBootKey(context.Context, string) error
+		})
+		if !ok {
+			writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeConflict, "节点尚未提供宿主机按键注入能力", nil), requestID)
+			return
+		}
+		unlock := lockCreation(name)
+		defer unlock()
+		if err := operator.SendDomainBootKey(request.Context(), name); err != nil {
+			writeAPIError(writer, deps.Logger, err, requestID)
+			return
+		}
+		writeJSON(writer, http.StatusOK, map[string]any{"name": name, "key": "SPACE", "accepted": true})
+	}
+}
+
 // domainActionResponse 是域操作结果。
 type domainActionResponse struct {
 	Name   string `json:"name"`

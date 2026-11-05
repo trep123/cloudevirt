@@ -38,6 +38,7 @@ export function VncConsole({
   const ready = useRef(false),
     readOnly = useRef(false);
   const [pageFull, setPageFull] = useState(false);
+  const [bootSending, setBootSending] = useState(false);
   const [state, setState] = useState<DesktopState>("idle"),
     [message, setMessage] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<DesktopMetrics | null>(null);
@@ -219,17 +220,27 @@ export function VncConsole({
           {installationMedia && (
             <button
               className="action sm"
-              disabled={!connected || viewOnly}
-              onClick={() => {
-                if (engine.current?.continueBoot()) {
-                  setCaptured(true);
-                  setMessage("已聚焦远程画面并发送启动键。正在从安装介质引导，请稍候。");
+              disabled={!connected || viewOnly || bootSending}
+              onClick={async () => {
+                setBootSending(true);
+                setMessage(null);
+                try {
+                  const result = await api.request<{ accepted: boolean }>(
+                    `/instances/${instanceId}/console/boot-key`,
+                    { method: "POST", body: JSON.stringify({}) },
+                  );
+                  if (!result.accepted) throw new Error("节点未确认接收启动键");
+                  setMessage("节点已通过 libvirt 直接向虚拟机注入启动键。正在从安装介质引导，请稍候。");
+                } catch (error) {
+                  setMessage(error instanceof Error ? error.message : "发送安装启动键失败");
+                } finally {
+                  setBootSending(false);
                 }
               }}
-              title="聚焦远程画面并发送启动键，继续从安装介质启动"
+              title="由节点 Agent 直接向 QEMU 注入启动键，继续从安装介质启动"
             >
               <Icon name="key" size={14} />
-              继续启动安装介质
+              {bootSending ? "正在发送启动键…" : "继续启动安装介质"}
             </button>
           )}
           <span className="console-toolbar-divider" />

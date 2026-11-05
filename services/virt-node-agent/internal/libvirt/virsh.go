@@ -406,6 +406,20 @@ func (c *Client) RebootDomain(ctx context.Context, name string) error {
 	return err
 }
 
+// SendDomainBootKey sends the single, fixed key required by optical media boot
+// prompts. It is intentionally not a generic remote-key injection primitive.
+func (c *Client) SendDomainBootKey(ctx context.Context, name string) error {
+	state, err := c.DomainState(ctx, name)
+	if err != nil {
+		return err
+	}
+	if state != StateRunning {
+		return apierr.New(apierr.CodeConflict, "虚拟机未运行，无法发送启动键", nil)
+	}
+	_, err = c.run(ctx, "send-key", name, "--codeset", "linux", "--holdtime", "250", "KEY_SPACE")
+	return err
+}
+
 // DestroyDomain 强制关闭域（断电语义，调用方需完成授权与确认）。
 func (c *Client) DestroyDomain(ctx context.Context, name string) error {
 	_, err := c.run(ctx, "destroy", name)
