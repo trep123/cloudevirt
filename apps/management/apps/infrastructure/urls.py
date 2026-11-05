@@ -12,6 +12,7 @@ from .views import (
     SettingsView,
     SnapshotsView,
     StoragePoolAccessView,
+    StoragePoolStateView,
     StoragePoolVolumesView,
     StoragePoolsView,
 )
@@ -34,6 +35,10 @@ urlpatterns = [
     path(
         'admin/nodes/<int:node_id>/storage-pools/<str:name>/volumes/',
         StoragePoolVolumesView.as_view(),
+    ),
+    path(
+        'admin/nodes/<int:node_id>/storage-pools/<str:name>/state/',
+        StoragePoolStateView.as_view(),
     ),
     path('storage-pools/available/', AvailableStoragePoolsView.as_view()),
     path('snapshots/instances/<int:instance_id>/', SnapshotsView.as_view()),

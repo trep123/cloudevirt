@@ -70,6 +70,7 @@ export function StoragePoolsPage() {
   const [defaultUsers, setDefaultUsers] = useState<number[]>([]);
   const [defaultPool, setDefaultPool] = useState(false);
   const [editing, setEditing] = useState<StoragePool | null>(null);
+  const [selectedPool, setSelectedPool] = useState<StoragePool | null>(null);
   const [volumePool, setVolumePool] = useState<StoragePool | null>(null);
   const [volumeData, setVolumeData] = useState<VolumeResponse | null>(null);
   const [volumeSearch, setVolumeSearch] = useState("");
@@ -118,6 +119,7 @@ export function StoragePoolsPage() {
     };
   }, [node, refresh]);
   const browseVolumes = async (pool: StoragePool) => {
+    setSelectedPool(pool);
     setVolumePool(pool);
     setVolumeSearch("");
     setVolumeData(null);
@@ -134,11 +136,28 @@ export function StoragePoolsPage() {
       setVolumeLoading(false);
     }
   };
+  const changePoolState = async (pool: StoragePool, action: "start" | "stop" | "refresh") => {
+    if (action === "stop" && !window.confirm(`停止存储池 ${pool.name}？正在运行的虚拟机仍可访问已打开的磁盘文件，但不能再依赖此池执行新建或浏览操作。`)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.request(`/admin/nodes/${node}/storage-pools/${encodeURIComponent(pool.name)}/state/`, {
+        method: "POST",
+        body: JSON.stringify({ action }),
+      });
+      setSelectedPool(null);
+      setRefresh((value) => value + 1);
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <>
       <PageHeader
         title="存储池"
-        description="查询节点 libvirt 存储池，可在允许的存储范围内指定目录创建目录池"
+        description="按 virt-manager 的池与卷模型管理节点目录存储；选择一个池可查看容量、卷和运行状态"
       >
         <select
           aria-label="所属节点"
@@ -173,7 +192,7 @@ export function StoragePoolsPage() {
             setCreate(true);
           }}
         >
-          创建目录存储池
+          新建目录存储池
         </button>
       </PageHeader>
       <ErrorBanner message={error} />
@@ -217,7 +236,11 @@ export function StoragePoolsPage() {
                             : "正常"
                         : "—";
                     return (
-                      <tr key={p.uuid || p.name}>
+                      <tr
+                        key={p.uuid || p.name}
+                        className={selectedPool?.name === p.name ? "storage-pool-selected" : "storage-pool-row"}
+                        onClick={() => setSelectedPool(p)}
+                      >
                         <td>
                           <strong>{p.name}</strong>
                           <p className="muted">{p.uuid}</p>
@@ -250,12 +273,13 @@ export function StoragePoolsPage() {
                         </td>
                         <td>
                           {p.managed && (
-                            <button className="action" disabled={!p.active || busy} onClick={() => void browseVolumes(p)}>
+                            <button className="action" disabled={!p.active || busy} onClick={(event) => { event.stopPropagation(); void browseVolumes(p); }}>
                               浏览卷
                             </button>
                           )}
                           {p.managed && (
-                            <button className="action" onClick={() => {
+                            <button className="action" onClick={(event) => {
+                              event.stopPropagation();
                               setEditing(p);
                               setAssignedUsers(p.assigned_user_ids);
                               setDefaultUsers(p.default_user_ids);
@@ -263,7 +287,8 @@ export function StoragePoolsPage() {
                               setError(null);
                             }}>分配使用权限</button>
                           )}
-                          {p.managed && <button className="action danger" disabled={busy} onClick={async () => {
+                          {p.managed && <button className="action danger" disabled={busy} onClick={async (event) => {
+                            event.stopPropagation();
                             if (!window.confirm(`删除存储池 ${p.name}？仅移除空池定义与授权，保留目录；有关联资源或目录非空时将拒绝删除。`)) return;
                             setBusy(true); setError(null);
                             try {
@@ -285,6 +310,40 @@ export function StoragePoolsPage() {
           </>
         ) : null}
       </section>
+      {selectedPool && (
+        <section className="card storage-pool-workbench" aria-label={`${selectedPool.name} 存储池详情`}>
+          <header className="storage-pool-workbench-head">
+            <div>
+              <p className="eyebrow">已选择存储池</p>
+              <h2>{selectedPool.name}</h2>
+              <p className="muted">{selectedPool.type === "dir" ? "目录池" : selectedPool.type} · {selectedPool.target.path || "未提供目标路径"}</p>
+            </div>
+            <span className={`storage-pool-state ${selectedPool.active ? "active" : "inactive"}`}>{selectedPool.active ? "已激活" : "未激活"}</span>
+          </header>
+          <div className="storage-pool-detail-grid">
+            <div className="storage-pool-capacity">
+              <span>容量使用</span>
+              <strong>{selectedPool.active ? `${formatBytes(selectedPool.allocation_bytes)} / ${formatBytes(selectedPool.capacity_bytes)}` : "池未激活"}</strong>
+              <div className="storage-pool-meter" aria-label="存储池容量使用率"><i style={{ width: `${selectedPool.active && selectedPool.capacity_bytes ? Math.min(100, (selectedPool.allocation_bytes * 100) / selectedPool.capacity_bytes) : 0}%` }} /></div>
+              <small>可用 {selectedPool.active ? formatBytes(selectedPool.available_bytes) : "—"}</small>
+            </div>
+            <dl className="storage-pool-facts">
+              <div><dt>UUID</dt><dd>{selectedPool.uuid || "—"}</dd></div>
+              <div><dt>平台管理</dt><dd>{selectedPool.managed ? "已纳管" : "只读发现"}</dd></div>
+              <div><dt>使用授权</dt><dd>{selectedPool.managed ? `${selectedPool.assigned_user_ids.length} 位用户` : "—"}</dd></div>
+              <div><dt>默认分配</dt><dd>{selectedPool.is_default ? "节点默认池" : selectedPool.default_user_ids.length ? `${selectedPool.default_user_ids.length} 位用户默认` : "未设置"}</dd></div>
+            </dl>
+          </div>
+          <footer className="storage-pool-workbench-actions">
+            {selectedPool.managed ? <>
+              {selectedPool.active ? <button className="action" disabled={busy} onClick={() => void changePoolState(selectedPool, "refresh")}>刷新池</button> : <button className="action primary" disabled={busy} onClick={() => void changePoolState(selectedPool, "start")}>启动存储池</button>}
+              {selectedPool.active && <button className="action danger" disabled={busy} onClick={() => void changePoolState(selectedPool, "stop")}>停止存储池</button>}
+              <button className="action" disabled={!selectedPool.active || busy} onClick={() => void browseVolumes(selectedPool)}>浏览存储卷</button>
+              <button className="action" disabled={busy} onClick={() => { setEditing(selectedPool); setAssignedUsers(selectedPool.assigned_user_ids); setDefaultUsers(selectedPool.default_user_ids); setDefaultPool(selectedPool.is_default); }}>配置授权</button>
+            </> : <p className="muted">发现到的非托管池仅供查看；为避免绕过平台权限和目录校验，不能在此修改。</p>}
+          </footer>
+        </section>
+      )}
       {create ? (
         <Drawer
           title="创建目录存储池"

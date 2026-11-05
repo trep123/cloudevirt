@@ -763,6 +763,31 @@
 .storage-volume-table { max-height: min(56vh, 560px); }
 .storage-volume-table table { min-width: 650px; }
 .storage-volume-table code { white-space: nowrap; color: #42536d; }
+.storage-pool-row { cursor: pointer; }
+.storage-pool-row:hover > td { background: #f7faff; }
+.storage-pool-selected > td { background: #edf4ff; }
+.storage-pool-workbench { margin-top: 16px; padding: 22px; }
+.storage-pool-workbench-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
+.storage-pool-workbench-head h2 { margin: 2px 0 6px; font-size: 20px; color: var(--text-primary); }
+.storage-pool-workbench-head .eyebrow { margin: 0; color: var(--primary); font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.storage-pool-state { flex: 0 0 auto; border-radius: 999px; padding: 6px 10px; font-size: 12px; font-weight: 700; }
+.storage-pool-state.active { color: #087443; background: #e9f9ef; }
+.storage-pool-state.inactive { color: #62728a; background: #f0f3f7; }
+.storage-pool-detail-grid { display: grid; grid-template-columns: minmax(240px, .9fr) minmax(320px, 1.1fr); gap: 28px; padding: 20px 0; }
+.storage-pool-capacity { display: grid; align-content: start; gap: 8px; }
+.storage-pool-capacity > span, .storage-pool-capacity small, .storage-pool-facts dt { color: var(--text-secondary); font-size: 12px; }
+.storage-pool-capacity strong { font-size: 18px; color: var(--text-primary); }
+.storage-pool-meter { height: 8px; overflow: hidden; border-radius: 999px; background: #e8eef7; }
+.storage-pool-meter i { display: block; height: 100%; min-width: 0; border-radius: inherit; background: var(--primary); }
+.storage-pool-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 24px; margin: 0; }
+.storage-pool-facts div { min-width: 0; }
+.storage-pool-facts dt { margin-bottom: 5px; }
+.storage-pool-facts dd { overflow: hidden; margin: 0; color: var(--text-primary); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.storage-pool-workbench-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding-top: 16px; border-top: 1px solid var(--border); }
+.storage-pool-workbench-actions .muted { margin: 0; }
 @media (max-width: 700px) {
   .vm-options-panel { padding: 14px; }
+  .storage-pool-workbench { padding: 16px; }
+  .storage-pool-detail-grid { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .storage-pool-facts { grid-template-columns: minmax(0, 1fr); gap: 12px; }
 }

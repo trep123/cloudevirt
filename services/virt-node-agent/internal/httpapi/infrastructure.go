@@ -107,17 +107,42 @@ func infrastructureHandler(deps Dependencies, snapshots bool) http.HandlerFunc {
 		}
 		infrastructureMutation.Lock()
 		defer infrastructureMutation.Unlock()
-		if !snapshots && body.Action == "delete" {
-			root, err := diskRootForPool(r.Context(), deps, body.Name)
-			if err != nil || root != body.Path {
-				fail(apierr.New(apierr.CodeConflict, "存储池目录已变化或不可用", err))
+		if !snapshots {
+			switch body.Action {
+			case "delete":
+				root, err := diskRootForPool(r.Context(), deps, body.Name)
+				if err != nil || root != body.Path {
+					fail(apierr.New(apierr.CodeConflict, "存储池目录已变化或不可用", err))
+					return
+				}
+				remover, ok := deps.Virtualizer.(interface { DeleteDirectoryPool(context.Context, string, string) error })
+				if !ok { fail(apierr.New(apierr.CodeConflict, "节点需升级", nil)); return }
+				if err := remover.DeleteDirectoryPool(r.Context(), body.Name, root); err != nil { fail(err); return }
+				writeJSON(w, 200, map[string]any{"deleted": true})
+				return
+			case "start", "stop", "refresh":
+				if _, err := diskRootForPool(r.Context(), deps, body.Name); err != nil {
+					fail(err)
+					return
+				}
+				stateOperator, ok := deps.Virtualizer.(interface {
+					StoragePoolAction(context.Context, string, string) error
+				})
+				if !ok {
+					fail(apierr.New(apierr.CodeConflict, "节点尚未提供存储池状态控制能力", nil))
+					return
+				}
+				if err := stateOperator.StoragePoolAction(r.Context(), body.Name, body.Action); err != nil {
+					fail(err)
+					return
+				}
+				writeJSON(w, 200, map[string]any{"name": body.Name, "action": body.Action, "acknowledged": true})
+				return
+			case "", "create":
+			default:
+				fail(apierr.New(apierr.CodeInvalidArgument, "不支持的存储池操作", nil))
 				return
 			}
-			remover, ok := deps.Virtualizer.(interface { DeleteDirectoryPool(context.Context, string, string) error })
-			if !ok { fail(apierr.New(apierr.CodeConflict, "节点需升级", nil)); return }
-			if err := remover.DeleteDirectoryPool(r.Context(), body.Name, root); err != nil { fail(err); return }
-			writeJSON(w, 200, map[string]any{"deleted": true})
-			return
 		}
 		var err error
 		if snapshots {

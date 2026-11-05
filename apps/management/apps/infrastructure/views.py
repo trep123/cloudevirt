@@ -376,6 +376,40 @@ class StoragePoolVolumesView(APIView):
         return Response(data)
 
 
+class StoragePoolStateView(APIView):
+    """Lifecycle controls for one platform-managed directory pool only."""
+
+    permission_classes = ADMIN_PERMISSIONS
+
+    @transaction.atomic
+    def post(self, request, node_id, name):
+        node = get_object_or_404(Node.objects.select_for_update(), pk=node_id, is_deleted=False)
+        node_for(node.pk)
+        pool = get_object_or_404(
+            ManagedStoragePool.objects.select_for_update(), node=node, name=name
+        )
+        action = request.data.get('action')
+        if action not in {'start', 'stop', 'refresh'}:
+            raise AppError(ErrorCode.INVALID_ARGUMENT, '仅支持启动、停止或刷新存储池')
+        if not node.is_schedulable:
+            raise AppError(ErrorCode.NODE_OFFLINE)
+        result = AgentClient(node.endpoint, timeout=180).request_json(
+            '/api/v1/storage-pools',
+            'POST',
+            {'name': pool.name, 'path': pool.path, 'action': action},
+        )
+        if result.get('acknowledged') is not True or result.get('action') != action:
+            raise AppError(ErrorCode.OPERATION_FAILED, '节点未确认存储池操作')
+        audit(
+            request,
+            'STORAGE_POOL_' + action.upper(),
+            'storage_pool',
+            pool.pk,
+            {'name': pool.name, 'path': pool.path, 'action': action},
+        )
+        return Response({'name': pool.name, 'action': action, 'acknowledged': True})
+
+
 class StoragePoolAccessView(APIView):
     permission_classes = ADMIN_PERMISSIONS
 

@@ -206,6 +206,32 @@ func (c *Client) CreateDirectoryPoolAt(ctx context.Context, name, root, target s
 	return err
 }
 
+// StoragePoolAction performs the small lifecycle operations that libvirt
+// exposes for an already-defined directory pool. Pool creation and deletion
+// remain separate operations because they have different filesystem safety
+// guarantees. Callers must authorize the pool before reaching this method.
+func (c *Client) StoragePoolAction(ctx context.Context, name, action string) error {
+	if !domainxml.ValidName(name) || !strings.HasPrefix(name, "cv-") {
+		return apierr.New(apierr.CodeInvalidArgument, "仅允许操作 CloudVirt 目录存储池", nil)
+	}
+	switch action {
+	case "start":
+		if _, err := c.run(ctx, "pool-start", name); err != nil {
+			return err
+		}
+		_, err := c.run(ctx, "pool-autostart", name)
+		return err
+	case "stop":
+		_, err := c.run(ctx, "pool-destroy", name)
+		return err
+	case "refresh":
+		_, err := c.run(ctx, "pool-refresh", name)
+		return err
+	default:
+		return apierr.New(apierr.CodeInvalidArgument, "不支持的存储池操作", nil)
+	}
+}
+
 // DeleteDirectoryPool removes only an empty pool definition; it never deletes files.
 func (c *Client) DeleteDirectoryPool(ctx context.Context, name, path string) error {
 	entries, err := os.ReadDir(path)
