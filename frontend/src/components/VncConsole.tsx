@@ -6,6 +6,7 @@ import {
   type DesktopMetrics,
 } from "../features/console/DesktopEngine";
 import { Icon } from "./icons";
+import { api } from "../api";
 
 const labels: Record<DesktopState, string> = {
   idle: "未连接",
