@@ -12,6 +12,7 @@ from apps.infrastructure.executors import execute_infrastructure
 from apps.instances.device_management import execute_hardware_change
 from apps.instances.disk_cleanup import execute_disk_delete
 from apps.instances.display import execute_instance_display
+from apps.instances.configuration import execute_instance_config
 from apps.instances.executors import (
     execute_instance_action,
     execute_instance_create,
@@ -54,6 +55,7 @@ EXECUTORS = {
     'NETWORK_BRIDGE_CREATE': execute_bridge,
     TaskType.INSTANCE_HARDWARE: execute_hardware_change,
     TaskType.INSTANCE_DISPLAY: execute_instance_display,
+    TaskType.INSTANCE_CONFIG: execute_instance_config,
     TaskType.ACCOUNT_BATCH: execute_account_batch,
     TaskType.IMAGE_IMPORT: execute_image_import,
     'STORAGE_POOL_CREATE': execute_infrastructure,

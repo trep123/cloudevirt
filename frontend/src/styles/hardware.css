@@ -723,3 +723,26 @@
   border-color: var(--primary);
   color: white;
 }
+
+.vm-options-panel {
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface, #fff);
+}
+.vm-options-kpis { margin: 0; }
+.vm-option-editor {
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+  border: 1px solid #dbe6f7;
+  border-radius: 10px;
+  background: #f8fbff;
+}
+.vm-option-editor h4 { margin: 0; color: var(--text-primary); }
+.vm-option-editor .action { justify-self: start; }
+@media (max-width: 700px) {
+  .vm-options-panel { padding: 14px; }
+}

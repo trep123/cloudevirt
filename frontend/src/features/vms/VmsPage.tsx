@@ -27,6 +27,7 @@ import { Icon } from "../../components/icons";
 import { VmWizard } from "./VmWizard";
 import { DisplayPanel } from "./DisplayPanel";
 import { DeviceManager } from "./DeviceManager";
+import { VmOptionsPanel } from "./VmOptionsPanel";
 import { SnapshotsPage } from "../infrastructure/SnapshotsPage";
 import type { CurrentUser, Instance, Paginated } from "../../types";
 const ACTIVE = [
@@ -41,6 +42,7 @@ const TABS = [
   "概览",
   "监控",
   "硬件",
+  "配置",
   "磁盘",
   "网络",
   "快照",
@@ -395,6 +397,12 @@ export function VmsPage({ user, path }: { user: CurrentUser; path: string }) {
                       }
                     />
                   </div>
+                ) : tab === "配置" ? (
+                  <VmOptionsPanel
+                    id={detail.id}
+                    admin={admin}
+                    storagePool={detail.storage_pool_name || ""}
+                  />
                 ) : tab === "磁盘" ? (
                   <DeviceManager
                     vm={detail}

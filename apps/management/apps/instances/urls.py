@@ -6,6 +6,7 @@ from apps.instances.device_management import InstanceHardwareView
 from apps.instances.disk_cleanup import DiskDeleteView
 from apps.instances.disk_sources import SystemDiskSourcesView
 from apps.instances.display import InstanceDisplayView
+from apps.instances.configuration import InstanceOptionsView
 from apps.instances.preflight import CreatePreflightView
 from apps.instances.views import (
     DiskListView,
@@ -22,6 +23,7 @@ urlpatterns = [
     path('disks/<int:pk>', DiskDeleteView.as_view()),
     path('instances/<int:pk>/hardware', InstanceHardwareView.as_view()),
     path('instances/<int:pk>/display', InstanceDisplayView.as_view()),
+    path('instances/<int:pk>/options', InstanceOptionsView.as_view()),
     path('instances/preflight', CreatePreflightView.as_view()),
     path('instances', InstanceListCreateView.as_view(), name='instance-list'),
     path(

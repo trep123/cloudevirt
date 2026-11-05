@@ -218,6 +218,14 @@ class AgentClient:
         """执行域操作：start / shutdown / force-stop / reboot。"""
         return self.request_json(f'/api/v1/domains/{name}/{action}', 'POST', {})
 
+    def domain_autostart(self, name: str, enabled: bool) -> dict:
+        """配置宿主机重启后的域自启动，不改变当前运行状态。"""
+        return self.request_json(
+            f'/api/v1/domains/{quote(name, safe="")}/autostart',
+            'POST',
+            {'enabled': enabled},
+        )
+
     def delete_domain(
         self, name: str, disk_relative_path: str = '', *, storage_pool: str = ''
     ) -> dict:

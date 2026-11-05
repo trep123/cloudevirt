@@ -2,12 +2,47 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 
 	"github.com/tl2004/cloude-virt/services/virt-node-agent/internal/apierr"
 	"github.com/tl2004/cloude-virt/services/virt-node-agent/internal/domainxml"
 	"github.com/tl2004/cloude-virt/services/virt-node-agent/internal/storage"
 )
+
+// domainAutostartHandler changes only host-boot behavior.  It deliberately
+// does not start or stop the domain as a side effect.
+func domainAutostartHandler(deps Dependencies) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		requestID := RequestIDFromContext(request.Context())
+		name := request.PathValue("name")
+		if !domainxml.ValidName(name) {
+			writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeInvalidArgument, "域名格式非法", nil), requestID)
+			return
+		}
+		var body struct { Enabled *bool `json:"enabled"` }
+		decoder := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 1024))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&body); err != nil || body.Enabled == nil {
+			writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeInvalidArgument, "开机自启参数无效", err), requestID)
+			return
+		}
+		operator, ok := deps.Virtualizer.(interface {
+			SetDomainAutostart(context.Context, string, bool) error
+		})
+		if !ok {
+			writeAPIError(writer, deps.Logger, apierr.New(apierr.CodeConflict, "节点不支持开机自启配置", nil), requestID)
+			return
+		}
+		unlock := lockCreation(name)
+		defer unlock()
+		if err := operator.SetDomainAutostart(request.Context(), name, *body.Enabled); err != nil {
+			writeAPIError(writer, deps.Logger, err, requestID)
+			return
+		}
+		writeJSON(writer, http.StatusOK, map[string]any{"name": name, "autostart": *body.Enabled})
+	}
+}
 
 // domainActionResponse 是域操作结果。
 type domainActionResponse struct {
