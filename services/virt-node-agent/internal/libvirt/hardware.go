@@ -40,6 +40,7 @@ type HardwareDisk struct {
 	RelativePath string `json:"relative_path"`
 	SizeBytes    int64  `json:"size_bytes"`
 	Managed      bool   `json:"managed"`
+	InfoError    string `json:"info_error,omitempty"`
 }
 type HardwareNIC struct {
 	Type string `json:"type" xml:"type,attr"`
@@ -194,14 +195,20 @@ func parseHardware(ctx context.Context, content, root string) (HardwareInventory
 			continue
 		}
 		item := HardwareDisk{Target: d.Target.Dev, Bus: d.Target.Bus}
-		relative, err := filepath.Rel(root, d.Source.File)
-		if err == nil {
-			if _, err = storage.SafePath(root, relative); err == nil {
+		if d.Source.File == "" {
+			item.InfoError = "磁盘未配置文件路径"
+		} else {
+			relative, relErr := filepath.Rel(root, d.Source.File)
+			if relErr != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+				item.InfoError = "磁盘位于当前授权存储池之外"
+			} else if _, pathErr := storage.SafePath(root, relative); pathErr != nil {
+				item.InfoError = "磁盘路径不可访问或不在授权存储池内"
+			} else {
 				item.Managed = true
 				item.RelativePath = relative
 				_, item.SizeBytes, err = storage.DiskInfo(ctx, d.Source.File)
 				if err != nil {
-					return result, err
+					item.InfoError = "无法读取磁盘容量信息"
 				}
 			}
 		}

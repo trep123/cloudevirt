@@ -17,6 +17,7 @@ type Disk = {
   managed: boolean;
   disk_id: number | null;
   role: string;
+  info_error?: string;
 };
 type NIC = { mac: string; model: string; source: string; type: string };
 type Inventory = {
@@ -454,7 +455,7 @@ export function DeviceManager({
                         </span>
                         <div>
                           <strong>{d.target}</strong>
-                          <small>{d.managed ? "受管 QCOW2" : "外部设备"}</small>
+                          <small>{d.info_error || (d.managed ? "受管 QCOW2" : "外部设备")}</small>
                         </div>
                       </div>
                     </td>
@@ -474,7 +475,7 @@ export function DeviceManager({
                         {d.bus.toUpperCase()}
                       </code>
                     </td>
-                    <td>{Math.round(d.size_bytes / 1024 ** 3)} GiB</td>
+                    <td>{d.info_error ? "不可读取" : `${Math.round(d.size_bytes / 1024 ** 3)} GiB`}</td>
                     <td>
                       {(admin || (manageDataDisks && d.role === "DATA")) &&
                       d.disk_id &&

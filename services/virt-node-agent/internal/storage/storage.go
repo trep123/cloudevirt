@@ -260,9 +260,8 @@ func CreateDisk(ctx context.Context, path string, sizeGiB int) error {
 func DiskInfo(ctx context.Context, path string) (string, int64, error) {
 	commandCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	// --force-share 允许读取正在被 QEMU 打开的镜像
 	output, err := exec.CommandContext(
-		commandCtx, "qemu-img", "info", "--force-share", "--output=json", "--", path,
+		commandCtx, "qemu-img", "info", "--output=json", "--", path,
 	).Output()
 	if err != nil {
 		return "", 0, apierr.New(apierr.CodeOperationFailed, "读取磁盘信息失败", err)
