@@ -13,6 +13,7 @@ from apps.accounts.roles import is_admin
 from apps.audit.services import record_audit
 from apps.instances.actions import ensure_no_active_task
 from apps.instances.models import Disk, Instance
+from apps.instances.storage_pool import agent_storage_pool
 from apps.nodes.access import accessible_node_ids
 from apps.nodes.client import AgentClient
 from apps.nodes.models import Node
@@ -121,7 +122,7 @@ def execute_disk_delete(task):
     result = AgentClient(node.endpoint, timeout=180).request_json(
         '/api/v1/disks', 'DELETE', {
             'relative_path': disk.relative_path,
-            'storage_pool': instance.storage_pool.name if instance.storage_pool_id else '',
+            'storage_pool': agent_storage_pool(instance),
         }
     )
     if (

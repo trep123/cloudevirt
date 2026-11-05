@@ -21,6 +21,7 @@ from apps.instances.hardware import StrictInput
 from apps.instances.models import Disk, Instance, ResourceReservation
 from apps.instances.serializers import DiskSerializer
 from apps.instances.services import GIB, available_resources
+from apps.instances.storage_pool import agent_storage_pool
 from apps.networks.models import InstanceNIC, IPLease, Network
 from apps.networks.services import validate_network_for_instance
 from apps.nodes.client import AgentClient
@@ -110,7 +111,7 @@ class InstanceHardwareView(APIView):
         instance = get_object_or_404(instances_for(request.user), pk=pk)
         result = AgentClient(instance.node.endpoint).domain_hardware(
             instance.libvirt_domain_name,
-            storage_pool=instance.storage_pool.name if instance.storage_pool_id else '',
+            storage_pool=agent_storage_pool(instance),
         )
         if result.get('uuid') != str(instance.uuid):
             raise AppError(ErrorCode.CONFLICT, '节点域 UUID 不匹配')
@@ -513,7 +514,7 @@ def execute_hardware_change(task):
         result = AgentClient(instance.node.endpoint).domain_hardware(
             instance.libvirt_domain_name,
             change,
-            storage_pool=instance.storage_pool.name if instance.storage_pool_id else '',
+            storage_pool=agent_storage_pool(instance),
         )
         if not verify_result(result, change):
             raise AppError(ErrorCode.OPERATION_FAILED, '节点未确认目标硬件，保留预留以便核对')

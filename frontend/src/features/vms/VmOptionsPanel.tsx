@@ -21,6 +21,7 @@ export function VmOptionsPanel({ id, admin, storagePool }: { id: number; admin: 
   const [options, setOptions] = useState<Options | null>(null);
   const [autostart, setAutostart] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hardwareError, setHardwareError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [task, setTask] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
@@ -29,17 +30,27 @@ export function VmOptionsPanel({ id, admin, storagePool }: { id: number; admin: 
   useEffect(() => {
     let alive = true;
     setError(null);
-    Promise.all([
+    setHardwareError(null);
+    Promise.allSettled([
       api.request<Inventory>(`/instances/${id}/hardware${storagePool ? `?storage_pool=${encodeURIComponent(storagePool)}` : ""}`),
       api.request<Options>(`/instances/${id}/options`),
     ])
-      .then(([hardware, current]) => {
+      .then(([hardwareResult, optionsResult]) => {
         if (!alive) return;
-        setInventory(hardware);
-        setOptions(current);
-        setAutostart(current.autostart);
+        if (hardwareResult.status === "fulfilled") {
+          setInventory(hardwareResult.value);
+        } else {
+          setInventory(null);
+          setHardwareError(describeError(hardwareResult.reason));
+        }
+        if (optionsResult.status === "fulfilled") {
+          setOptions(optionsResult.value);
+          setAutostart(optionsResult.value.autostart);
+        } else {
+          setOptions(null);
+          setError(describeError(optionsResult.reason));
+        }
       })
-      .catch((err) => alive && setError(describeError(err)));
     return () => { alive = false; };
   }, [id, storagePool, revision]);
 
@@ -73,8 +84,9 @@ export function VmOptionsPanel({ id, admin, storagePool }: { id: number; admin: 
       <button className="action sm" onClick={() => setRevision((v) => v + 1)} disabled={busy}><Icon name="refresh" size={14} />刷新</button>
     </header>
     <ErrorBanner message={error} />
-    {(!inventory || !options) && !error && <p className="muted">正在读取节点实际配置…</p>}
-    {inventory && options && <>
+    {!options && !error && <p className="muted">正在读取虚拟机配置…</p>}
+    {hardwareError && <p className="banner banner-info">节点实际硬件清单暂不可读：{hardwareError}。启动选项仍可单独管理；请在节点恢复后刷新硬件信息。</p>}
+    {inventory && <>
       <div className="hardware-kpis vm-options-kpis">
         <div><span>处理器</span><strong>{inventory.vcpu}<small> vCPU</small></strong></div>
         <div><span>内存</span><strong>{inventory.memory_mib / 1024}<small> GiB</small></strong></div>
@@ -87,14 +99,14 @@ export function VmOptionsPanel({ id, admin, storagePool }: { id: number; admin: 
         <tr><td>启动顺序</td><td>{boot}</td><td>挂载 ISO 后优先从光驱启动；在磁盘页管理光驱</td></tr>
         <tr><td>显示与剪贴板</td><td>由虚拟显卡与客体驱动决定</td><td>硬件页的“显示与交互”</td></tr>
       </tbody></table></div>
-      <section className="vm-option-editor">
+    </>}
+    {options && <section className="vm-option-editor">
         <h4>启动选项</h4>
         <p className="muted">以下选项由异步任务写入 libvirt，任务成功后才更新平台记录。</p>
         <label className="check"><input type="checkbox" checked={autostart} disabled={!admin || busy || !!task} onChange={(event) => setAutostart(event.target.checked)} />宿主机启动后自动启动此虚拟机</label>
         <p className="muted">此选项不会立即启动或关闭虚拟机。{admin ? "" : "仅平台管理员可以修改。"}</p>
         {admin && <button className="action" disabled={busy || !!task || autostart === options.autostart} onClick={() => void save()}>{busy ? "正在提交…" : "保存启动选项"}</button>}
-      </section>
-    </>}
+      </section>}
     {confirm && <ConfirmOperationModal target={`虚拟机 #${id}`} operation={autostart ? "启用开机自启" : "关闭开机自启"} description="此操作只修改宿主机重启后的自动启动策略，不改变当前运行状态。" busy={busy} error={error} onCancel={() => setConfirm(false)} onConfirm={() => void save(true)} />}
     {task && <TaskProgressDrawer id={task} onClose={() => { setTask(null); setRevision((v) => v + 1); }} />}
   </section>;

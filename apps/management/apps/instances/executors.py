@@ -12,6 +12,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.instances.hardware import validate_creation_capabilities
+from apps.instances.storage_pool import agent_storage_pool, agent_storage_pool_path
 from apps.instances.models import (
     DiskStatus,
     Instance,
@@ -88,8 +89,8 @@ def execute_instance_create(task: Task) -> dict:
         'vcpu': instance.vcpu,
         'memory_mib': instance.memory_mib,
         'disk_relative_path': disk.relative_path,
-        'storage_pool': instance.storage_pool.name if instance.storage_pool_id else '',
-        'storage_pool_path': instance.storage_pool.path if instance.storage_pool_id else '',
+        'storage_pool': agent_storage_pool(instance),
+        'storage_pool_path': agent_storage_pool_path(instance),
         'disk_gib': instance.disk_gib,
         'network': instance.network_name,
         'network_type': (task.payload or {}).get('network_type', ''),
@@ -389,7 +390,8 @@ def execute_instance_delete(task: Task) -> dict:
     disk_relative_path = payload.get('disk_relative_path') or (disk.relative_path if disk else '')
 
     client = AgentClient(instance.node.endpoint)
-    pool_kwargs = {'storage_pool': instance.storage_pool.name} if instance.storage_pool_id else {}
+    pool_name = agent_storage_pool(instance)
+    pool_kwargs = {'storage_pool': pool_name} if pool_name else {}
     live_disks = instance.disks.exclude(status='DELETED')
     record_event(
         task,
