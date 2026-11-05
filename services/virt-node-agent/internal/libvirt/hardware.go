@@ -206,7 +206,8 @@ func parseHardware(ctx context.Context, content, root string) (HardwareInventory
 			} else {
 				item.Managed = true
 				item.RelativePath = relative
-				_, item.SizeBytes, infoErr := storage.DiskInfo(ctx, d.Source.File)
+				_, sizeBytes, infoErr := storage.DiskInfo(ctx, d.Source.File)
+				item.SizeBytes = sizeBytes
 				if infoErr != nil {
 					item.InfoError = "无法读取磁盘容量信息"
 				}
