@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/tl2004/cloude-virt/services/virt-node-agent/internal/apierr"
 	"github.com/tl2004/cloude-virt/services/virt-node-agent/internal/domainxml"
@@ -24,6 +25,76 @@ type StoragePool struct {
 		Path string `xml:"path" json:"path"`
 	} `xml:"target" json:"target"`
 	Active bool `xml:"-" json:"active"`
+}
+
+// StorageVolume is a read-only inventory entry. Paths are relative to the
+// selected directory pool and never expose files outside that pool.
+type StorageVolume struct {
+	Path      string    `json:"path"`
+	Format    string    `json:"format"`
+	SizeBytes int64     `json:"size_bytes"`
+	Modified  time.Time `json:"modified_at"`
+}
+
+func storageVolumeFormat(path string) string {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".iso":
+		return "ISO"
+	case ".qcow2":
+		return "QCOW2"
+	case ".raw", ".img":
+		return "RAW"
+	case ".vmdk":
+		return "VMDK"
+	default:
+		return "FILE"
+	}
+}
+
+// ListStorageVolumes walks a directory pool without following symlinks.
+// A bounded result keeps a pathological storage directory from exhausting the
+// management API response while still exposing the most recent files.
+func (c *Client) ListStorageVolumes(ctx context.Context, root string) ([]StorageVolume, bool, error) {
+	const limit = 2000
+	volumes := make([]StorageVolume, 0)
+	truncated := false
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if entry.IsDir() || !entry.Type().IsRegular() {
+			return nil
+		}
+		if len(volumes) >= limit {
+			truncated = true
+			return nil
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil || relative == "." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+			return apierr.New(apierr.CodeInvalidArgument, "存储卷路径无效", err)
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		volumes = append(volumes, StorageVolume{
+			Path: relative, Format: storageVolumeFormat(relative), SizeBytes: info.Size(), Modified: info.ModTime().UTC(),
+		})
+		return nil
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	return volumes, truncated, nil
 }
 
 func (c *Client) ListStoragePools(ctx context.Context) ([]StoragePool, error) {

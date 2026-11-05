@@ -75,6 +75,7 @@ func NewRouter(deps Dependencies) http.Handler {
 	api.HandleFunc("DELETE /api/v1/images/uploads/{id}", imageUploadHandler(deps))
 	api.HandleFunc("GET /api/v1/storage-pools", infrastructureHandler(deps, false))
 	api.HandleFunc("POST /api/v1/storage-pools", infrastructureHandler(deps, false))
+	api.HandleFunc("GET /api/v1/storage-pools/{name}/volumes", storagePoolVolumesHandler(deps))
 	api.HandleFunc("GET /api/v1/domains/{name}/snapshots", infrastructureHandler(deps, true))
 	api.HandleFunc("POST /api/v1/domains/{name}/snapshots", infrastructureHandler(deps, true))
 	api.HandleFunc("GET /api/v1/node/resources", resourcesHandler(deps))

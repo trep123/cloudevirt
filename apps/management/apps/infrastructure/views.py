@@ -360,6 +360,22 @@ class StoragePoolsView(APIView):
         )
 
 
+class StoragePoolVolumesView(APIView):
+    """Administrator-only, read-only volume browser for a managed directory pool."""
+
+    permission_classes = ADMIN_PERMISSIONS
+
+    def get(self, request, node_id, name):
+        node = node_for(node_id)
+        pool = get_object_or_404(ManagedStoragePool, node=node, name=name)
+        data = AgentClient(node.endpoint).get_json(
+            f'/api/v1/storage-pools/{quote(pool.name, safe="")}/volumes'
+        )
+        if data.get('pool') != pool.name or data.get('path') != pool.path:
+            raise AppError(ErrorCode.CONFLICT, '节点存储池目录与平台登记不一致')
+        return Response(data)
+
+
 class StoragePoolAccessView(APIView):
     permission_classes = ADMIN_PERMISSIONS
 

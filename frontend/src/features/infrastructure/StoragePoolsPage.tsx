@@ -38,6 +38,19 @@ type PoolResponse = {
   sampled_at: string;
   creatable_types: string[];
 };
+type StorageVolume = {
+  path: string;
+  format: string;
+  size_bytes: number;
+  modified_at: string;
+};
+type VolumeResponse = {
+  pool: string;
+  path: string;
+  results: StorageVolume[];
+  truncated: boolean;
+  sampled_at: string;
+};
 export function StoragePoolsPage() {
   const [nodes, setNodes] = useState<Node[]>([]),
     [node, setNode] = useState(0);
@@ -57,6 +70,10 @@ export function StoragePoolsPage() {
   const [defaultUsers, setDefaultUsers] = useState<number[]>([]);
   const [defaultPool, setDefaultPool] = useState(false);
   const [editing, setEditing] = useState<StoragePool | null>(null);
+  const [volumePool, setVolumePool] = useState<StoragePool | null>(null);
+  const [volumeData, setVolumeData] = useState<VolumeResponse | null>(null);
+  const [volumeSearch, setVolumeSearch] = useState("");
+  const [volumeLoading, setVolumeLoading] = useState(false);
   useEffect(() => {
     let live = true;
     Promise.all([allResources<Node>("/nodes"), infra.configuration(), allResources<UserOption>("/users")])
@@ -100,6 +117,23 @@ export function StoragePoolsPage() {
       live = false;
     };
   }, [node, refresh]);
+  const browseVolumes = async (pool: StoragePool) => {
+    setVolumePool(pool);
+    setVolumeSearch("");
+    setVolumeData(null);
+    setVolumeLoading(true);
+    setError(null);
+    try {
+      const response = await api.request<VolumeResponse>(
+        `/admin/nodes/${node}/storage-pools/${encodeURIComponent(pool.name)}/volumes/`,
+      );
+      setVolumeData(response);
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setVolumeLoading(false);
+    }
+  };
   return (
     <>
       <PageHeader
@@ -215,6 +249,11 @@ export function StoragePoolsPage() {
                           {p.default_user_ids.length ? ` · ${p.default_user_ids.length} 人默认` : ""}
                         </td>
                         <td>
+                          {p.managed && (
+                            <button className="action" disabled={!p.active || busy} onClick={() => void browseVolumes(p)}>
+                              浏览卷
+                            </button>
+                          )}
                           {p.managed && (
                             <button className="action" onClick={() => {
                               setEditing(p);
@@ -392,6 +431,28 @@ export function StoragePoolsPage() {
               设为此节点的默认存储池
             </label>
           </form>
+        </Drawer>
+      )}
+      {volumePool && (
+        <Drawer title={`存储卷 · ${volumePool.name}`} onClose={() => !volumeLoading && setVolumePool(null)}
+          footer={<><span className="muted">卷操作请在镜像、数据卷或虚拟机页执行，避免绕过资源记录。</span><button className="action" disabled={volumeLoading} onClick={() => void browseVolumes(volumePool)}>刷新</button><button className="action" disabled={volumeLoading} onClick={() => setVolumePool(null)}>关闭</button></>}>
+          <p className="muted">目录：{volumeData?.path || volumePool.target.path}</p>
+          {volumeLoading && <p role="status">正在读取存储卷…</p>}
+          {volumeData && <>
+            <div className="storage-volume-summary">
+              <span><strong>{volumeData.results.length}</strong> 个文件</span>
+              <span><strong>{formatBytes(volumeData.results.reduce((total, volume) => total + volume.size_bytes, 0))}</strong> 实际占用</span>
+              <span>采集于 {formatTime(volumeData.sampled_at)}</span>
+            </div>
+            <label className="storage-volume-search">筛选路径或格式
+              <input value={volumeSearch} placeholder="例如 isos/、qcow2" onChange={(event) => setVolumeSearch(event.target.value)} />
+            </label>
+            <div className="table-scroll storage-volume-table"><table><thead><tr><th>相对路径</th><th>格式</th><th>实际大小</th><th>最后修改</th></tr></thead><tbody>
+              {volumeData.results.filter((volume) => `${volume.path} ${volume.format}`.toLowerCase().includes(volumeSearch.toLowerCase())).map((volume) => <tr key={volume.path}><td><code>{volume.path}</code></td><td><span className="hardware-tag">{volume.format}</span></td><td>{formatBytes(volume.size_bytes)}</td><td>{formatTime(volume.modified_at)}</td></tr>)}
+              {!volumeData.results.some((volume) => `${volume.path} ${volume.format}`.toLowerCase().includes(volumeSearch.toLowerCase())) && <tr><td colSpan={4} className="empty">没有匹配的存储卷。</td></tr>}
+            </tbody></table></div>
+            {volumeData.truncated && <p className="banner banner-info">卷数量超过 2000，当前仅显示前 2000 个文件；请使用更具体的目录或归档策略。</p>}
+          </>}
         </Drawer>
       )}
       {task ? (

@@ -20,6 +20,33 @@ type infrastructureOperator interface {
 	SnapshotAction(context.Context, string, string, string, string) error
 }
 
+func storagePoolVolumesHandler(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		requestID := RequestIDFromContext(r.Context())
+		name := r.PathValue("name")
+		root, err := diskRootForPool(r.Context(), deps, name)
+		if err != nil {
+			writeAPIError(w, deps.Logger, err, requestID)
+			return
+		}
+		lister, ok := deps.Virtualizer.(interface {
+			ListStorageVolumes(context.Context, string) ([]libvirt.StorageVolume, bool, error)
+		})
+		if !ok {
+			writeAPIError(w, deps.Logger, apierr.New(apierr.CodeConflict, "节点尚未提供存储卷浏览能力", nil), requestID)
+			return
+		}
+		volumes, truncated, err := lister.ListStorageVolumes(r.Context(), root)
+		if err != nil {
+			writeAPIError(w, deps.Logger, err, requestID)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"pool": name, "path": root, "results": volumes, "truncated": truncated, "sampled_at": time.Now().UTC(),
+		})
+	}
+}
+
 // Serialize infrastructure mutations within this Agent process.
 var infrastructureMutation sync.Mutex
 
