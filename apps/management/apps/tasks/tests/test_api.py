@@ -62,6 +62,26 @@ class TaskApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.task.refresh_from_db()
         self.assertEqual(self.task.status, TaskStatus.CANCELLED)
+        self.assertIsNotNone(self.task.finished_at)
+        self.assertIsNone(self.task.next_retry_at)
+
+    def test_task_detail_excludes_private_worker_data(self):
+        self.task.payload = {
+            'vcpu': 2,
+            'creation_config': {'initialization': {'password': 'private-value'}},
+            'disk_relative_path': 'private/path',
+        }
+        self.task.result = {'state': 'RUNNING', 'agent_response': {'token': 'private-value'}}
+        self.task.save(update_fields=['payload', 'result'])
+        self.client.force_login(self.operator)
+
+        response = self.client.get(f'/api/v1/tasks/{self.task.pk}')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['payload'], {'vcpu': 2})
+        self.assertEqual(response.json()['result'], {'state': 'RUNNING'})
+        self.task.refresh_from_db()
+        self.assertIn('creation_config', self.task.payload)
 
     def test_viewer_cannot_cancel_task(self) -> None:
         """Viewer 无取消权限应返回 403。"""

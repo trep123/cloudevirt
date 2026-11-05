@@ -79,6 +79,7 @@ type HardwareCDROM struct {
 	Target string `json:"target"`
 	Bus string `json:"bus"`
 	Mounted bool `json:"mounted"`
+	CloudInit bool `json:"cloud_init"`
 }
 type HardwareSystem struct {
 	OS struct {
@@ -186,7 +187,8 @@ func parseHardware(ctx context.Context, content, root string) (HardwareInventory
 	}
 	for _, d := range parsed.Devices.Disks {
 		if d.Device == "cdrom" {
-			result.CDROMs = append(result.CDROMs, HardwareCDROM{Target:d.Target.Dev, Bus:d.Target.Bus, Mounted:d.Source.File != "", Source:d.Source.File})
+			base := filepath.Base(d.Source.File)
+			result.CDROMs = append(result.CDROMs, HardwareCDROM{Target:d.Target.Dev, Bus:d.Target.Bus, Mounted:d.Source.File != "", Source:d.Source.File, CloudInit:strings.HasPrefix(base, ".init-")})
 		}
 		if d.Device != "disk" {
 			continue
@@ -354,7 +356,7 @@ func (c *Client) ChangeHardware(ctx context.Context, name, root string, change H
 	case "cdrom-set", "cdrom-remove":
 		updated, err = replaceCDROM(content, change.Target, change.MediaPath, change.Operation == "cdrom-remove")
 		if err != nil { return before, err }
-		updated, err = opticalBootOrder(updated, change.Operation == "cdrom-remove")
+		updated, err = opticalBootOrder(updated, hasOpticalMedia(updated))
 		if err != nil { return before, err }
 	case "compute":
 		if change.VCPU < 1 || change.VCPU > 128 || change.MemoryMiB < 128 || change.MemoryMiB > 1048576 {

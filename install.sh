@@ -13,6 +13,8 @@ REPO_REF="${CLOUDVIRT_REPO_REF:-master}"
 SOURCE_DIR=""
 OFFLINE_DIR="${CLOUDVIRT_OFFLINE_DIR:-}"
 DOMAIN="${CLOUDVIRT_DOMAIN:-}"
+APT_MIRROR="${CLOUDVIRT_APT_MIRROR:-}"
+APT_SECURITY_MIRROR="${CLOUDVIRT_APT_SECURITY_MIRROR:-http://security.ubuntu.com/ubuntu}"
 PORT="${CLOUDVIRT_PORT:-443}"
 HTTPS=true
 ENABLE_OVS=false
@@ -32,6 +34,9 @@ CloudVirt / Ubuntu 26.x amd64
   --source DIR          Install this complete local source tree (preferred).
   --offline-dir DIR     Use verified local Node/Python/npm/Go packages.
   --domain HOST         Hostname or IPv4 address; defaults to primary host IP.
+  --apt-mirror URL      Use this Ubuntu archive mirror for installation packages;
+                        accepts an HTTP(S) hostname or IP (for example http://10.0.0.2/ubuntu).
+  --apt-security-mirror URL  Override the security archive (default: Ubuntu official server).
   --port PORT           HTTPS listen port; default 443.
   --http                Use HTTP instead of self-signed HTTPS (default port 80).
   --enable-ovs          Configure a dedicated OVS bridge, DHCP and NAT.
@@ -73,9 +78,9 @@ trap cleanup EXIT
 
 while (($#)); do
     case "$1" in
-        --source|--offline-dir|--domain|--port)
+        --source|--offline-dir|--domain|--port|--apt-mirror|--apt-security-mirror)
             (($# >= 2)) || die "Missing value for $1"
-            case "$1" in --source) SOURCE_DIR=$2;; --offline-dir) OFFLINE_DIR=$2;; --domain) DOMAIN=$2;; --port) PORT=$2;; esac
+            case "$1" in --source) SOURCE_DIR=$2;; --offline-dir) OFFLINE_DIR=$2;; --domain) DOMAIN=$2;; --port) PORT=$2;; --apt-mirror) APT_MIRROR=$2;; --apt-security-mirror) APT_SECURITY_MIRROR=$2;; esac
             shift 2;;
         --http) HTTPS=false; [[ "$PORT" != 443 ]] || PORT=80; shift;;
         --enable-ovs) ENABLE_OVS=true; shift;;
@@ -138,6 +143,16 @@ if [[ -z "$DOMAIN" ]]; then
     DOMAIN=$(ip -4 route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++)if($i=="src"){print $(i+1);exit}}')
 fi
 [[ "$DOMAIN" =~ ^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$ ]] || die "Specify --domain with a hostname or IPv4 address"
+for mirror_var in APT_MIRROR APT_SECURITY_MIRROR; do
+    mirror=${!mirror_var}
+    if [[ "$mirror_var" == APT_MIRROR && -z "$mirror" ]]; then continue; fi
+    [[ "$mirror" =~ ^https?://([A-Za-z0-9][A-Za-z0-9.-]*|\[[0-9A-Fa-f:]+\])(:[0-9]{1,5})?(/[A-Za-z0-9._~/-]*)?$ ]] || die "Invalid $mirror_var URL; use an HTTP(S) archive URL without credentials or query parameters"
+    [[ "$mirror" != *..* ]] || die "Invalid $mirror_var path"
+    printf -v "$mirror_var" '%s' "${mirror%/}"
+done
+if [[ -z "$APT_MIRROR" && "$APT_SECURITY_MIRROR" != http://security.ubuntu.com/ubuntu ]]; then
+    die "--apt-security-mirror requires --apt-mirror"
+fi
 
 STEP=packages
 INSTALL_STATE=/var/lib/cloudvirt-installer
@@ -151,17 +166,27 @@ fi
 dpkg-query -W -f='${binary:Package}\t${Status}\n' | awk -F '\t' '$2 == "install ok installed" {print $1}' | sort -u > "$INSTALL_STATE/before-packages.txt"
 log "Installing Ubuntu packages"
 export DEBIAN_FRONTEND=noninteractive
+TMP_DIR=$(mktemp -d /var/tmp/cloudvirt-install.XXXXXX)
+if [[ -n "$APT_MIRROR" ]]; then
+    printf 'deb [arch=amd64] %s %s main restricted universe multiverse\n' "$APT_MIRROR" "$VERSION_CODENAME" > "$TMP_DIR/apt-sources.list"
+    printf 'deb [arch=amd64] %s %s-updates main restricted universe multiverse\n' "$APT_MIRROR" "$VERSION_CODENAME" >> "$TMP_DIR/apt-sources.list"
+    printf 'deb [arch=amd64] %s %s-backports main restricted universe multiverse\n' "$APT_MIRROR" "$VERSION_CODENAME" >> "$TMP_DIR/apt-sources.list"
+    printf 'deb [arch=amd64] %s %s-security main restricted universe multiverse\n' "$APT_SECURITY_MIRROR" "$VERSION_CODENAME" >> "$TMP_DIR/apt-sources.list"
+    mkdir -p "$TMP_DIR/apt-lists/partial"
+    printf 'Dir::Etc::sourcelist "%s/apt-sources.list";\nDir::Etc::sourceparts "-";\nDir::State::lists "%s/apt-lists";\nDir::Cache::pkgcache "%s/pkgcache.bin";\nDir::Cache::srcpkgcache "%s/srcpkgcache.bin";\n' \
+        "$TMP_DIR" "$TMP_DIR" "$TMP_DIR" "$TMP_DIR" > "$TMP_DIR/apt.conf"
+    export APT_CONFIG="$TMP_DIR/apt.conf"
+    log "Using Ubuntu archive mirror $APT_MIRROR for this installation only"
+fi
 apt-get update
 apt-get install -y software-properties-common ca-certificates curl git rsync xz-utils openssl
-add-apt-repository -y universe
+if [[ -z "$APT_MIRROR" ]]; then add-apt-repository -y universe; fi
 apt-get update
 apt-get install -y python3 python3-venv python3-dev build-essential libpq-dev \
     postgresql postgresql-client nginx golang-go qemu-system-x86 qemu-utils \
     libvirt-daemon-system libvirt-clients libvirt-daemon-config-network acl genisoimage ovmf swtpm iproute2
 [[ -x /usr/bin/qemu-system-x86_64 ]] || die "qemu-system-x86 did not provide /usr/bin/qemu-system-x86_64"
 python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3,14) else 1)' || die "Python >=3.14 is required by the pinned Django requirements"
-TMP_DIR=$(mktemp -d /var/tmp/cloudvirt-install.XXXXXX)
-
 STEP=source
 if [[ -z "$SOURCE_DIR" ]]; then
     log "Cloning $REPO_URL / $REPO_REF"

@@ -164,12 +164,26 @@ def delete_image(
     Raises:
         AppError: 未指定节点或 Agent 拒绝删除。
     """
-    references = image.instances.filter(is_deleted=False).count()
     from apps.instances.models import Instance
 
-    references += Instance.objects.filter(
-        is_deleted=False, creation_config__installation_media=image.pk
-    ).count()
+    from django.db.models import Q
+
+    mounted_query = Q(creation_config__installation_media=image.pk)
+    for letter in 'abcdefgh':
+        mounted_query |= Q(
+            **{
+                'creation_config__installation_media_by_target__contains': {
+                    f'sd{letter}': image.pk
+                }
+            }
+        )
+    references = set(image.instances.filter(is_deleted=False).values_list('pk', flat=True))
+    references.update(
+        Instance.objects.filter(is_deleted=False)
+        .filter(mounted_query)
+        .values_list('pk', flat=True)
+    )
+    reference_count = len(references)
     from apps.tasks.models import ACTIVE_STATUSES, Task
 
     if image.status == ImageStatus.UPLOADING:
@@ -182,11 +196,11 @@ def delete_image(
         type='INSTANCE_HARDWARE', status__in=ACTIVE_STATUSES, payload__metadata__image_id=image.pk
     ).exists():
         raise AppError(ErrorCode.OPERATION_IN_PROGRESS, '镜像存在未完成的光驱挂载任务')
-    if references:
+    if reference_count:
         raise AppError(
             ErrorCode.IMAGE_IN_USE,
             '镜像被实例引用，禁止删除',
-            details={'instances': references},
+            details={'instances': reference_count},
         )
 
     if purge_file:

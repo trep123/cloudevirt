@@ -49,7 +49,7 @@ class DeviceInput(StrictInput):
     )
     live = serializers.BooleanField(required=False)
     image_id = serializers.IntegerField(min_value=1, required=False)
-    target = serializers.RegexField(r'^sda$', required=False)
+    target = serializers.RegexField(r'^sd[a-h]$', required=False)
     vcpu = serializers.IntegerField(min_value=1, max_value=128, required=False)
     memory_mib = serializers.IntegerField(min_value=128, max_value=1048576, required=False)
     disk_id = serializers.IntegerField(min_value=1, required=False)
@@ -291,7 +291,7 @@ class InstanceHardwareView(APIView):
                 .exclude(status__in=['DETACHED', 'DELETED'])
                 .exists()
             ):
-                raise AppError(ErrorCode.CONFLICT, '安装光驱设备号已被磁盘占用，禁止替换')
+                raise AppError(ErrorCode.CONFLICT, '光驱设备号已被磁盘占用，禁止替换')
             payload['target'] = data['target']
             if op == 'cdrom-set':
                 from apps.images.models import Image
@@ -555,7 +555,16 @@ def execute_hardware_change(task):
                     )
                 )
             elif op in {'cdrom-set', 'cdrom-remove'}:
-                config['installation_media'] = meta.get('image_id') if op == 'cdrom-set' else None
+                mounted = dict(config.get('installation_media_by_target') or {})
+                if op == 'cdrom-set':
+                    mounted[change['target']] = meta['image_id']
+                    if change['target'] == 'sda':
+                        config['installation_media'] = meta['image_id']
+                else:
+                    mounted.pop(change['target'], None)
+                    if change['target'] == 'sda':
+                        config['installation_media'] = None
+                config['installation_media_by_target'] = mounted
             elif op == 'nic-add':
                 InstanceNIC.objects.get_or_create(
                     instance=instance,

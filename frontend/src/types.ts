@@ -121,6 +121,7 @@ export interface Instance {
   node_name: string;
   image: number;
   image_name: string;
+  creation_config?: { installation_media?: number | null };
   network_name: string;
   vcpu: number;
   memory_mib: number;

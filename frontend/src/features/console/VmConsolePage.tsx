@@ -100,6 +100,7 @@ export function VmConsolePage({ id, admin }: { id: number; admin: boolean }) {
             instanceId={id}
             desktopAvailable={vm.observed_state === "RUNNING"}
             instanceName={vm.name}
+            installationMedia={Boolean(vm.creation_config?.installation_media)}
             clipboardConfigured={clipboardConfigured}
           />
         </Suspense>

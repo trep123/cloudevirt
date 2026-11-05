@@ -22,11 +22,13 @@ export function VncConsole({
   instanceId,
   desktopAvailable = true,
   instanceName,
+  installationMedia = false,
   clipboardConfigured = null,
 }: {
   instanceId: number;
   desktopAvailable?: boolean;
   instanceName?: string;
+  installationMedia?: boolean;
   clipboardConfigured?: boolean | null;
 }) {
   const target = useRef<HTMLDivElement>(null),
@@ -214,6 +216,20 @@ export function VncConsole({
           >
             <Icon name="power" size={15} />
           </button>
+          {installationMedia && (
+            <button
+              className="action sm"
+              disabled={!connected || viewOnly}
+              onClick={() => {
+                if (engine.current?.continueBoot())
+                  setMessage("已向虚拟机发送空格键。安装介质启动可能需要数分钟，请稍候。");
+              }}
+              title="向虚拟机发送空格键，继续从安装介质启动"
+            >
+              <Icon name="key" size={14} />
+              继续启动安装介质
+            </button>
+          )}
           <span className="console-toolbar-divider" />
           <button
             className={`action sm ${connected && !pageFull ? "primary" : ""}`}

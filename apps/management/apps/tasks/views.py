@@ -1,6 +1,7 @@
 """任务 API：列表、详情、取消、重试。"""
 
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import generics
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -67,10 +68,20 @@ class TaskCancelView(APIView):
                     ErrorCode.CONFLICT, '该硬件任务已尝试执行，请核对并重试，不能直接取消资源预留'
                 )
         task.status = TaskStatus.CANCELLED
-        task.finished_at = None
+        task.finished_at = timezone.now()
+        task.next_retry_at = None
         task.locked_at = None
         task.locked_by = ''
-        task.save(update_fields=['status', 'locked_at', 'locked_by', 'updated_at'])
+        task.save(
+            update_fields=[
+                'status',
+                'finished_at',
+                'next_retry_at',
+                'locked_at',
+                'locked_by',
+                'updated_at',
+            ]
+        )
         record_event(task, to_status=TaskStatus.CANCELLED, message='任务被用户取消')
         release_cancelled_task(task)
         if task.type == 'IMAGE_IMPORT' and task.resource_type == 'image':
@@ -117,9 +128,11 @@ class TaskRetryView(APIView):
             from apps.instances.models import Instance
 
             require_admin(request.user, 'instances.change_instance')
-            instance = Instance.objects.select_for_update().get(
+            instance = Instance.objects.select_for_update().filter(
                 pk=task.resource_id, is_deleted=False
-            )
+            ).first()
+            if instance is None:
+                raise AppError(ErrorCode.CONFLICT, '虚拟机已不存在，不能重试硬件任务')
             from common.permissions import check_permission
 
             check_permission(
@@ -128,7 +141,8 @@ class TaskRetryView(APIView):
                 target_type='instance',
                 target_id=str(instance.pk),
             )
-            if task.reservation.status != 'HELD':
+            reservation = getattr(task, 'reservation', None)
+            if reservation is None or reservation.status != 'HELD':
                 raise AppError(ErrorCode.CONFLICT, '硬件任务的资源预留已结束，禁止重放已完成配置')
             ensure_no_active_task(instance)
         task.status = TaskStatus.PENDING

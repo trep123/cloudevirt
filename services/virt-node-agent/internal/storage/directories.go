@@ -9,7 +9,7 @@ import (
 	"github.com/tl2004/cloude-virt/services/virt-node-agent/internal/apierr"
 )
 
-var managedDirectory = regexp.MustCompile(`^(images|vms)/user-[0-9]+/[a-f0-9-]{32,36}$`)
+var managedDirectory = regexp.MustCompile(`^(images|isos|vms)/user-[0-9]+/[a-f0-9-]{32,36}$`)
 
 // EnsureManagedDirectory creates only server-generated user namespaces beneath a root.
 func EnsureManagedDirectory(root, relative string) (string, error) {

@@ -36,7 +36,7 @@ def pool_query(image, prefix='&'):
         else ''
     )
     directory = str(PurePath(image.relative_path).parent)
-    if directory.startswith('images/user-'):
+    if directory.startswith(('images/user-', 'isos/user-')):
         query += ('&' if query else prefix) + 'directory=' + quote(directory, safe='')
     return query
 
@@ -109,7 +109,7 @@ def register_image(data, user):
                 node=node,
                 relative_path=path,
                 storage_pool=pool,
-                format='QCOW2',
+                format='ISO' if path.lower().endswith('.iso') else 'QCOW2',
                 created_by=user,
                 os_family=data.get('os_family', ''),
                 os_version=data.get('os_version', ''),
@@ -238,8 +238,17 @@ class UploadCreateView(APIView):
                     node=data['node'],
                     storage_pool=selected_pool,
                     created_by=request.user,
-                    relative_path=f'images/user-{request.user.pk}/{data["id"].hex}/upload-{data["id"].hex}{data["extension"]}',
-                    format='QCOW2',
+                    relative_path=(
+                        f'{"isos" if data["extension"] == ".iso" else "images"}/'
+                        f'user-{request.user.pk}/{data["id"].hex}/'
+                        f'upload-{data["id"].hex}{data["extension"]}'
+                    ),
+                    format={
+                        '.iso': 'ISO',
+                        '.qcow2': 'QCOW2',
+                        '.raw': 'RAW',
+                        '.img': 'RAW',
+                    }[data['extension']],
                     status=ImageStatus.UPLOADING,
                     os_family=data['os_family'],
                     os_version=data['os_version'],
@@ -328,7 +337,7 @@ class UploadChunkView(APIView):
             upload.extension,
             data,
             directory=str(PurePath(upload.image.relative_path).parent)
-            if upload.image.relative_path.startswith('images/user-')
+            if upload.image.relative_path.startswith(('images/user-', 'isos/user-'))
             else '',
             **pool_kwargs(upload.image),
         )
@@ -404,6 +413,18 @@ def execute_image_import(task):
         detected = str(info.get('format', '')).upper()
         if detected not in allowed_formats() or int(info.get('size_bytes', 0)) <= 0:
             raise AppError(ErrorCode.VALIDATION_ERROR, '镜像格式不受支持或文件为空')
+        if upload:
+            expected_by_extension = {
+                '.iso': {'ISO'},
+                '.qcow2': {'QCOW2'},
+                '.raw': {'RAW'},
+                '.img': {'QCOW2', 'RAW'},
+            }
+            if detected not in expected_by_extension.get(upload.extension, set()):
+                raise AppError(
+                    ErrorCode.VALIDATION_ERROR,
+                    '文件内容格式与扩展名不匹配；ISO 安装介质与虚拟磁盘镜像分别上传',
+                )
         if upload and int(info['size_bytes']) != upload.size_bytes:
             raise AppError(ErrorCode.CONFLICT, '镜像大小与上传声明不一致')
     except Exception as error:

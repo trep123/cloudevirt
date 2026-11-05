@@ -24,6 +24,7 @@ import { can } from "../permissions";
 import type { CurrentUser, Image, Node } from "../types";
 
 export function ImagesPage({ user }: { user: CurrentUser }) {
+  const [category, setCategory] = useState<"iso" | "disk">("iso");
   const [images, setImages] = useState<Image[]>([]);
   const [nodes, setNodes] = useState<Node[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +52,9 @@ export function ImagesPage({ user }: { user: CurrentUser }) {
 
   const canImport = can(user, "images.add_image");
   const canDelete = can(user, "images.delete_image");
+  const visibleImages = images.filter((image) =>
+    category === "iso" ? image.format === "ISO" : image.format !== "ISO",
+  );
 
   const reload = useCallback(async () => {
     try {
@@ -166,8 +170,10 @@ export function ImagesPage({ user }: { user: CurrentUser }) {
   return (
     <>
       <PageHeader
-        title="镜像"
-        description="管理可用于创建虚拟机的操作系统镜像，支持浏览器分片上传与校验"
+        title={category === "iso" ? "ISO 安装介质" : "虚拟磁盘镜像"}
+        description={category === "iso"
+          ? "集中管理只读光驱使用的 ISO 文件；可为虚拟机配置多个光驱并分别挂载介质。"
+          : "管理用于全克隆、链接克隆或直接登记的 QCOW2、RAW 虚拟磁盘镜像。"}
       >
         <button className="action" onClick={() => void reload()}>
           刷新
@@ -175,8 +181,13 @@ export function ImagesPage({ user }: { user: CurrentUser }) {
       </PageHeader>
       <ErrorBanner message={error} />
       {notice ? <div className="banner banner-info">{notice}</div> : null}
+      <nav className="detail-tabs" role="tablist" aria-label="镜像分类">
+        <button type="button" role="tab" aria-selected={category === "iso"} className={category === "iso" ? "active" : ""} onClick={() => setCategory("iso")}>ISO 安装介质 <span className="segmented-count">{images.filter((image) => image.format === "ISO").length}</span></button>
+        <button type="button" role="tab" aria-selected={category === "disk"} className={category === "disk" ? "active" : ""} onClick={() => setCategory("disk")}>虚拟磁盘镜像 <span className="segmented-count">{images.filter((image) => image.format !== "ISO").length}</span></button>
+      </nav>
       {canImport ? (
-        <details className="resource-import"><summary>上传镜像 <span>从浏览器分片上传到节点</span></summary><BrowserUpload
+        <details className="resource-import"><summary>{category === "iso" ? "上传 ISO 安装介质" : "上传虚拟磁盘镜像"} <span>浏览器分片上传至所选节点和存储池，按类型隔离目录</span></summary><BrowserUpload
+          kind={category}
           nodes={nodes}
           onChanged={() => void reload()}
           onSubmitted={(id) => {
@@ -289,15 +300,15 @@ export function ImagesPage({ user }: { user: CurrentUser }) {
         </Card>
       ) : null}
       <Card
-        title={`共 ${images.length} 个镜像`}
+        title={`共 ${visibleImages.length} 个${category === "iso" ? " ISO" : "虚拟磁盘镜像"}`}
         description={
           canDelete
             ? `删除时${purgeFile ? "将同时清理" : "默认保留"}节点文件，可在删除确认框中调整`
             : undefined
         }
       >
-        {images.length === 0 ? (
-          <Empty text="暂无镜像" />
+        {visibleImages.length === 0 ? (
+          <Empty text={category === "iso" ? "暂无 ISO 安装介质" : "暂无虚拟磁盘镜像"} />
         ) : (
           <div className="table-scroll">
             <table>
@@ -313,7 +324,7 @@ export function ImagesPage({ user }: { user: CurrentUser }) {
                 </tr>
               </thead>
               <tbody>
-                {images.map((image) => (
+                {visibleImages.map((image) => (
                   <tr key={image.id}>
                     <td>
                       <div className="cell-stack">

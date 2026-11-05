@@ -307,6 +307,12 @@ export class DesktopEngine {
   ctrlAltDel() {
     this.client?.sendCtrlAltDel();
   }
+  continueBoot() {
+    if (!this.client || this.options.viewOnly) return false;
+    this.client.sendKey(0x20, "Space", true);
+    this.client.sendKey(0x20, "Space", false);
+    return true;
+  }
   stop() {
     this.stopped = true;
     this.release();

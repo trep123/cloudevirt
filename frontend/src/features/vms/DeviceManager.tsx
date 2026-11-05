@@ -20,7 +20,7 @@ type Disk = {
 };
 type NIC = { mac: string; model: string; source: string; type: string };
 type Inventory = {
-  cdroms?: {target:string; bus:string; mounted:boolean; source:string}[];
+  cdroms?: {target:string; bus:string; mounted:boolean; source:string; cloud_init?:boolean}[];
   system?: {
     os: { firmware: string; loader: string; type: { machine: string; arch: string }; boot: { device: string }[] | null };
     cpu: { mode: string; model: string; topology: { sockets: number; cores: number; threads: number } | null };
@@ -55,6 +55,7 @@ export function DeviceManager({
   const pendingKeys = useRef(new Map<string, string>());
   const [isoImages, setIsoImages] = useState<Image[]>([]);
   const [isoImage, setIsoImage] = useState("");
+  const [isoTarget, setIsoTarget] = useState("sda");
   useEffect(() => {
     let alive = true;
     if (admin && section === "disks") void allResources<Image>("/images").then((images) => {
@@ -92,6 +93,17 @@ export function DeviceManager({
     (section === "nics" && canAddNIC);
   const locked = busy || !stopped || !info || !!task;
   const connectLocked = busy || (!stopped && !running) || !info || !!task;
+  const cdroms = info?.cdroms || [];
+  const usedDiskTargets = new Set((info?.disks || []).map((disk) => disk.target));
+  const freeOpticalTargets = ["sda", "sdb", "sdc", "sdd", "sde", "sdf", "sdg", "sdh"]
+    .filter((target) => !usedDiskTargets.has(target) && !cdroms.some((drive) => drive.target === target));
+  const opticalTargetOptions = [
+    ...cdroms.filter((drive) => !drive.cloud_init).map((drive) => drive.target),
+    ...(cdroms.length < 8 ? freeOpticalTargets : []),
+  ];
+  const selectedOpticalTarget = opticalTargetOptions.includes(isoTarget)
+    ? isoTarget
+    : opticalTargetOptions[0] || "";
   useEffect(() => {
     let alive = true;
     setInfo(null);
@@ -388,20 +400,37 @@ export function DeviceManager({
       {info && section === "disks" && (
         <>
           <section className="card">
-            <h3>安装光驱 · ISO 镜像</h3>
-            <p className="muted">安装光驱使用 SATA sda，修改前须关机。弹出或移除光驱不删除镜像文件；cloud-init 光驱不在此处修改。</p>
-            {(info.cdroms || []).map((drive) => <p key={drive.target}>{drive.target} · {drive.bus} · {drive.mounted ? drive.source.split("/").pop() : "无介质"}</p>)}
+            <h3>光驱与 ISO 介质</h3>
+            <p className="muted">支持最多 8 个独立 SATA 光驱。每个光驱可挂载不同 ISO；更改前需关闭虚拟机。弹出介质不会删除 ISO 文件。</p>
+            <div className="table-scroll">
+              <table className="data-table">
+                <thead><tr><th>设备</th><th>总线</th><th>挂载介质</th><th>操作</th></tr></thead>
+                <tbody>
+                  {cdroms.length ? cdroms.map((drive) => {
+                    const image = isoImages.find((item) => drive.source.endsWith(item.relative_path));
+                    return <tr key={drive.target}>
+                      <td><strong>{drive.target}</strong></td>
+                      <td>{drive.bus.toUpperCase()}</td>
+                      <td>{drive.cloud_init ? "初始化介质（受保护）" : drive.mounted ? image?.name || drive.source.split("/").pop() : "空光驱"}</td>
+                      <td>{admin && <button className="action sm danger" disabled={locked || !!drive.cloud_init} onClick={() => void submit({operation:"cdrom-remove",target:drive.target},`弹出 ${drive.target} 介质并移除光驱（保留 ISO 文件）`)}>移除光驱</button>}</td>
+                    </tr>;
+                  }) : <tr><td colSpan={4} className="muted">尚未配置光驱，可选择设备号添加。</td></tr>}
+                </tbody>
+              </table>
+            </div>
             {admin && <div className="infra-form">
-              <label>安装 ISO<select value={isoImage} disabled={locked} onChange={(e) => setIsoImage(e.target.value)}>
+              <label>目标光驱<select value={selectedOpticalTarget} disabled={locked || !opticalTargetOptions.length} onChange={(e) => setIsoTarget(e.target.value)}>
+                {!opticalTargetOptions.length && <option value="">无可用 SATA 设备号</option>}
+                {opticalTargetOptions.map((target) => <option key={target} value={target}>{target}{cdroms.some((drive) => drive.target === target) ? " · 已存在（可更换介质）" : " · 新光驱"}</option>)}
+              </select></label>
+              <label>ISO 安装介质<select value={isoImage} disabled={locked} onChange={(e) => setIsoImage(e.target.value)}>
                 <option value="">选择本节点已就绪的 ISO</option>
                 {isoImages.map((image) => <option key={image.id} value={image.id}>{image.name} · {image.storage_pool_name || "节点原有镜像目录"}</option>)}
               </select></label>
               <div className="device-actions">
-                <button className="action" disabled={locked || !isoImage || !info.cdroms || info.disks.some((disk) => disk.target === "sda")} onClick={() => void submit({operation:"cdrom-set",target:"sda",image_id:Number(isoImage)},"挂载或更换安装 ISO，设置光驱优先启动")}>挂载 / 更换 ISO</button>
-                <button className="action danger" disabled={locked || !info.cdroms?.some((drive) => drive.target === "sda")} onClick={() => void submit({operation:"cdrom-remove",target:"sda"},"弹出安装介质并移除安装光驱（保留 ISO 文件）")}>弹出 / 移除光驱</button>
+                <button className="action" disabled={locked || !isoImage || !selectedOpticalTarget} onClick={() => void submit({operation:"cdrom-set",target:selectedOpticalTarget,image_id:Number(isoImage)},`将 ${isoImages.find((image) => image.id === Number(isoImage))?.name || "ISO"} 挂载到 ${selectedOpticalTarget}`)}>挂载 / 更换 ISO</button>
               </div>
-              {!info.cdroms && <p className="muted">节点尚未返回光驱清单，请升级 Agent。</p>}
-              {info.disks.some((disk) => disk.target === "sda") && <p className="muted">sda 已被磁盘占用，禁止替换为光驱。</p>}
+              {cdroms.length >= 8 && <p className="muted field-wide">已达到 8 个光驱上限；仍可更换现有光驱的介质。</p>}
             </div>}
           </section>
           <div className="table-scroll">

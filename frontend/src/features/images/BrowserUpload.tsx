@@ -21,10 +21,12 @@ type Upload = {
 };
 export function BrowserUpload({
   nodes,
+  kind,
   onSubmitted,
   onChanged,
 }: {
   nodes: Node[];
+  kind: "iso" | "disk";
   onSubmitted: (id: string) => void;
   onChanged: () => void;
 }) {
@@ -179,7 +181,7 @@ export function BrowserUpload({
     }
   }
   return (
-    <Card title="从浏览器上传镜像">
+    <Card title={kind === "iso" ? "上传 ISO 安装介质" : "上传虚拟磁盘镜像"}>
       <ErrorBanner message={error} />
       <form
         className="inline"
@@ -193,11 +195,19 @@ export function BrowserUpload({
           <input
             ref={input}
             type="file"
-            accept=".qcow2,.raw,.img,.iso"
+            accept={kind === "iso" ? ".iso" : ".qcow2,.raw,.img"}
             required={!file}
             disabled={attempted || busy}
             onChange={(e) => {
               const selected = e.target.files?.[0] || null;
+              const extension = selected?.name.split(".").pop()?.toLowerCase();
+              const valid = kind === "iso" ? extension === "iso" : ["qcow2", "raw", "img"].includes(extension || "");
+              if (selected && !valid) {
+                setFile(null);
+                setError(kind === "iso" ? "ISO 分类只接受 .iso 文件" : "磁盘镜像分类只接受 .qcow2、.raw 或 .img 文件");
+                return;
+              }
+              setError(null);
               setFile(selected);
               if (selected && !name)
                 setName(selected.name.replace(/\.(qcow2|raw|img|iso)$/i, ""));
