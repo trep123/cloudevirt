@@ -309,8 +309,19 @@ export class DesktopEngine {
   }
   continueBoot() {
     if (!this.client || this.options.viewOnly) return false;
-    this.client.sendKey(0x20, "Space", true);
-    this.client.sendKey(0x20, "Space", false);
+    // Windows optical boot prompts have a very short timeout. Explicitly
+    // focus the RFB canvas before sending the key; a toolbar click otherwise
+    // leaves focus on the browser button in some noVNC/browser combinations.
+    this.client.focus({ preventScroll: true });
+    const sendSpace = () => {
+      if (!this.client || this.options.viewOnly) return;
+      this.client.sendKey(0x20, "Space", true);
+      this.client.sendKey(0x20, "Space", false);
+    };
+    sendSpace();
+    // A second event covers the initial focus handoff without continuously
+    // injecting input into the installer after it has accepted the boot key.
+    window.setTimeout(sendSpace, 140);
     return true;
   }
   stop() {

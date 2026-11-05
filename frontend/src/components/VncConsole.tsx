@@ -221,10 +221,12 @@ export function VncConsole({
               className="action sm"
               disabled={!connected || viewOnly}
               onClick={() => {
-                if (engine.current?.continueBoot())
-                  setMessage("已向虚拟机发送空格键。安装介质启动可能需要数分钟，请稍候。");
+                if (engine.current?.continueBoot()) {
+                  setCaptured(true);
+                  setMessage("已聚焦远程画面并发送启动键。正在从安装介质引导，请稍候。");
+                }
               }}
-              title="向虚拟机发送空格键，继续从安装介质启动"
+              title="聚焦远程画面并发送启动键，继续从安装介质启动"
             >
               <Icon name="key" size={14} />
               继续启动安装介质
