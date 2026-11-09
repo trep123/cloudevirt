@@ -22,6 +22,9 @@ STORAGE_ROOTS=()
 BRIDGE_ALLOWED=()
 ALLOW_DESTRUCTIVE=false
 TMP_DIR=""
+STAGING_DIR=""
+OLD_DIR=""
+STAGED_UPGRADE=false
 INSTALL_STATE=""
 INSTALL_TRACKING=false
 STEP=preflight
@@ -56,8 +59,23 @@ HELP
 }
 
 log() { printf '\n[CloudVirt] %s\n' "$*"; }
+# Restore the previous application tree when a staged upgrade fails after the
+# directory swap, so a bad build can never leave the host without a running app.
+rollback_staged_upgrade() {
+    [[ ${STAGED_UPGRADE:-false} == true && -n "${OLD_DIR:-}" && -d "${OLD_DIR:-}" ]] || return 0
+    printf '\n[CloudVirt] Rolling back to the previous application tree: %s\n' "$OLD_DIR" >&2
+    systemctl stop cloudvirt-worker cloudvirt-management cloudvirt-agent 2>/dev/null || true
+    rm -rf -- "$APP_DIR"
+    mv -- "$OLD_DIR" "$APP_DIR"
+    systemctl start cloudvirt-worker cloudvirt-management cloudvirt-agent 2>/dev/null || true
+    systemctl start cloudvirt-collect_node_status.timer cloudvirt-reconcile.timer \
+        cloudvirt-cleanup_console_sessions.timer cloudvirt-cleanup_account_batches.timer 2>/dev/null || true
+    OLD_DIR=""
+    STAGED_UPGRADE=false
+}
 die() {
     printf '\n[CloudVirt] ERROR: %s\n' "$*" >&2
+    rollback_staged_upgrade
     [[ ${INSTALL_TRACKING:-false} != true ]] || touch "$INSTALL_STATE/provenance-incomplete"
     exit 1
 }
@@ -66,12 +84,19 @@ on_error() {
     [[ ${INSTALL_TRACKING:-false} != true ]] || touch "$INSTALL_STATE/provenance-incomplete"
     printf '\n[CloudVirt] Failed at step %s (line %s, exit %s).\n' "$STEP" "$1" "$rc" >&2
     printf 'Existing database and disk images were not deleted. Review: journalctl -u cloudvirt-management -u cloudvirt-agent -u cloudvirt-worker -n 80\n' >&2
+    rollback_staged_upgrade
     exit "$rc"
 }
 cleanup() {
     if [[ -n "$TMP_DIR" && "$TMP_DIR" == /var/tmp/cloudvirt-install.* && -d "$TMP_DIR" ]]; then
         rm -rf -- "$TMP_DIR"
     fi
+    local leftover
+    for leftover in "$STAGING_DIR" "$OLD_DIR"; do
+        if [[ -n "$leftover" && "$leftover" == "$APP_DIR".* && "$leftover" != "$APP_DIR" && -d "$leftover" ]]; then
+            rm -rf -- "$leftover"
+        fi
+    done
 }
 trap 'on_error "$LINENO"' ERR
 trap cleanup EXIT
@@ -140,7 +165,11 @@ if [[ -n "$SOURCE_DIR" ]]; then
     [[ -f "$SOURCE_DIR/apps/management/manage.py" && -f "$SOURCE_DIR/services/virt-node-agent/go.mod" && -f "$SOURCE_DIR/frontend/package-lock.json" ]] || die "Incomplete source tree"
 fi
 if [[ -z "$DOMAIN" ]]; then
-    DOMAIN=$(ip -4 route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++)if($i=="src"){print $(i+1);exit}}')
+    # An air-gapped host often has no default route, so `ip route get` fails.
+    # Fall back to the first globally scoped IPv4 address on the host.
+    DOMAIN=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++)if($i=="src"){print $(i+1);exit}}')
+    [[ -n "$DOMAIN" ]] || DOMAIN=$(hostname -I 2>/dev/null | awk '{print $1}')
+    [[ -n "$DOMAIN" ]] || DOMAIN=$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1)
 fi
 [[ "$DOMAIN" =~ ^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$ ]] || die "Specify --domain with a hostname or IPv4 address"
 for mirror_var in APT_MIRROR APT_SECURITY_MIRROR; do
@@ -222,11 +251,21 @@ for entry in pathlib.Path(sys.argv[2]).read_text().splitlines():
         raise SystemExit(f'Lock file mismatch: {name}')
 PY
 fi
+IS_UPGRADE=false
 if [[ -e "$APP_DIR/apps/management/manage.py" && "$SOURCE_DIR" != "$APP_DIR" ]]; then
+    IS_UPGRADE=true
     install -d -m 0700 /var/backups/cloudvirt
     log "Backing up existing application files"
     tar --exclude=.venv --exclude=node_modules --exclude=.git --exclude=frontend/dist \
         -czf "/var/backups/cloudvirt/source-$(date -u +%Y%m%dT%H%M%SZ).tar.gz" -C "$APP_DIR" .
+fi
+# Build upgrades into a sibling staging directory on the same filesystem so the
+# verified tree can be swapped in with an atomic rename and rolled back on failure.
+BUILD_DIR="$APP_DIR"
+if [[ "$IS_UPGRADE" == true ]]; then
+    STAGING_DIR="${APP_DIR}.staging.$$"
+    rm -rf -- "$STAGING_DIR"
+    BUILD_DIR="$STAGING_DIR"
 fi
 if [[ -f "$CONFIG_DIR/install-secrets.env" ]]; then
     # Retire optional services from older releases before updating the schema.
@@ -236,20 +275,16 @@ if [[ -f "$CONFIG_DIR/install-secrets.env" ]]; then
         [[ "$legacy_unit" =~ ^cloudvirt-workbench-[0-9a-f-]{36}\.service$ ]] || continue
         systemctl stop "$legacy_unit"
     done < <(systemctl list-units --all --plain --no-legend 'cloudvirt-workbench-*.service')
-    log "Stopping application jobs while deploying (running guests are not stopped)"
-    systemctl stop cloudvirt-collect_node_status.timer cloudvirt-reconcile.timer cloudvirt-cleanup_console_sessions.timer cloudvirt-cleanup_account_batches.timer 2>/dev/null || true
-    systemctl stop cloudvirt-collect_node_status.service cloudvirt-reconcile.service cloudvirt-cleanup_console_sessions.service cloudvirt-cleanup_account_batches.service 2>/dev/null || true
-    systemctl stop cloudvirt-worker cloudvirt-management cloudvirt-agent 2>/dev/null || true
 fi
-install -d -m 0755 "$APP_DIR" "$WEB_ROOT"
+install -d -m 0755 "$BUILD_DIR" "$WEB_ROOT"
 if [[ "$SOURCE_DIR" != "$APP_DIR" ]]; then
     rsync -a --exclude=.git --exclude=.venv --exclude=node_modules --exclude=dist \
         --exclude=outputs --exclude=work --include=.env.example --exclude='.env*' \
-        "$SOURCE_DIR/" "$APP_DIR/"
+        "$SOURCE_DIR/" "$BUILD_DIR/"
 fi
 # ZIP files extracted from Windows may contain CRLF in shell scripts.
-find "$APP_DIR/scripts" -maxdepth 1 -type f -name '*.sh' -exec sed -i 's/\r$//' {} +
-chmod 0755 "$APP_DIR" "$APP_DIR/scripts"
+find "$BUILD_DIR/scripts" -maxdepth 1 -type f -name '*.sh' -exec sed -i 's/\r$//' {} +
+chmod 0755 "$BUILD_DIR" "$BUILD_DIR/scripts"
 
 STEP=accounts
 if ! getent passwd cloudvirt >/dev/null; then
@@ -272,10 +307,10 @@ for root in "${STORAGE_ROOTS[@]}"; do
     install -d -o cloudvirt-agent -g kvm -m 2770 "$root"
 done
 # The management account can read application code, but cannot modify it.
-chown -R root:root "$APP_DIR"
-find "$APP_DIR" -type d -exec chmod a+rx {} +
-find "$APP_DIR" -type f ! -name '.env' ! -name '.env.*' ! -name '*.pem' ! -name '*.key' -exec chmod a+r {} +
-find "$APP_DIR" -type f \( -name '.env' -o -name '.env.*' \) ! -name '.env.example' -exec chmod 0600 {} +
+chown -R root:root "$BUILD_DIR"
+find "$BUILD_DIR" -type d -exec chmod a+rx {} +
+find "$BUILD_DIR" -type f ! -name '.env' ! -name '.env.*' ! -name '*.pem' ! -name '*.key' -exec chmod a+r {} +
+find "$BUILD_DIR" -type f \( -name '.env' -o -name '.env.*' \) ! -name '.env.example' -exec chmod 0600 {} +
 install -d -o root -g cloudvirt -m 0750 "$CONFIG_DIR"
 
 STEP=secrets
@@ -319,7 +354,13 @@ unset CLOUDVIRT_DB_PASSWORD
 
 STEP=runtime
 log "Installing private Node.js 24 runtime with official SHA-256 verification"
-NODE_HOME="$APP_DIR/runtime/node"
+NODE_HOME="$BUILD_DIR/runtime/node"
+# Reuse the already-verified runtime from the live tree so a staged upgrade does
+# not re-download Node.js and both trees stay byte-identical.
+if [[ "$BUILD_DIR" != "$APP_DIR" && ! -x "$NODE_HOME/bin/node" && -x "$APP_DIR/runtime/node/bin/node" ]]; then
+    install -d -m 0755 "$BUILD_DIR/runtime"
+    cp -a "$APP_DIR/runtime/node" "$NODE_HOME"
+fi
 if [[ ! -x "$NODE_HOME/bin/node" ]] || [[ $("$NODE_HOME/bin/node" -p 'process.versions.node.split(".")[0]') != 24 ]]; then
     if [[ -n "$OFFLINE_DIR" ]]; then
         node_archives=("$OFFLINE_DIR"/node-v24.*-linux-x64.tar.xz)
@@ -342,7 +383,7 @@ fi
 export PATH="$NODE_HOME/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 export CLOUDVIRT_NPM_REGISTRY="${CLOUDVIRT_NPM_REGISTRY:-https://registry.npmjs.org}"
 # Preserve lockfile integrity hashes while avoiding a hard dependency on the original mirror.
-python3 - "$APP_DIR/frontend/package-lock.json" <<'PY'
+python3 - "$BUILD_DIR/frontend/package-lock.json" <<'PY'
 import json, os, pathlib
 path = pathlib.Path(__import__('sys').argv[1])
 registry = os.environ['CLOUDVIRT_NPM_REGISTRY'].rstrip('/')
@@ -358,28 +399,52 @@ for package in lock.get('packages', {}).values():
 path.write_text(json.dumps(lock, indent=2) + '\n')
 PY
 log "Building Python backend, React frontend and Go Agent"
-python3 -m venv "$APP_DIR/.venv"
+python3 -m venv "$BUILD_DIR/.venv"
 if [[ -n "$OFFLINE_DIR" ]]; then
-    "$APP_DIR/.venv/bin/python" -m pip install --no-index --find-links "$OFFLINE_DIR/wheels" --upgrade pip
-    "$APP_DIR/.venv/bin/python" -m pip install --no-index --find-links "$OFFLINE_DIR/wheels" -r "$APP_DIR/apps/management/requirements/prod.txt"
+    "$BUILD_DIR/.venv/bin/python" -m pip install --no-index --find-links "$OFFLINE_DIR/wheels" --upgrade pip
+    "$BUILD_DIR/.venv/bin/python" -m pip install --no-index --find-links "$OFFLINE_DIR/wheels" -r "$BUILD_DIR/apps/management/requirements/prod.txt"
     install -d -m 0700 "$TMP_DIR/npm-cache"
     tar -xzf "$OFFLINE_DIR/npm-cache.tar.gz" -C "$TMP_DIR/npm-cache"
-    (cd "$APP_DIR/frontend"; npm ci --offline --cache "$TMP_DIR/npm-cache" --registry="$CLOUDVIRT_NPM_REGISTRY" --no-audit --no-fund; npm run build)
+    (cd "$BUILD_DIR/frontend"; npm ci --offline --cache "$TMP_DIR/npm-cache" --registry="$CLOUDVIRT_NPM_REGISTRY" --no-audit --no-fund; npm run build)
 else
-    "$APP_DIR/.venv/bin/python" -m pip install --upgrade pip
-    "$APP_DIR/.venv/bin/python" -m pip install -r "$APP_DIR/apps/management/requirements/prod.txt"
-    (cd "$APP_DIR/frontend"; npm ci --registry="$CLOUDVIRT_NPM_REGISTRY"; npm run build)
+    "$BUILD_DIR/.venv/bin/python" -m pip install --upgrade pip
+    "$BUILD_DIR/.venv/bin/python" -m pip install -r "$BUILD_DIR/apps/management/requirements/prod.txt"
+    (cd "$BUILD_DIR/frontend"; npm ci --registry="$CLOUDVIRT_NPM_REGISTRY"; npm run build)
 fi
-install -d -m 0755 "$APP_DIR/services/virt-node-agent/bin"
-if [[ -n "$OFFLINE_DIR" ]]; then
-    tar -xzf "$OFFLINE_DIR/go-vendor.tar.gz" -C "$APP_DIR/services/virt-node-agent"
-    (cd "$APP_DIR/services/virt-node-agent"; CGO_ENABLED=0 GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off GOFLAGS=-mod=vendor go build -trimpath -o bin/virt-node-agent ./cmd/virt-node-agent)
+install -d -m 0755 "$BUILD_DIR/services/virt-node-agent/bin"
+AGENT_SRC="$BUILD_DIR/services/virt-node-agent"
+# The committed vendor tree is authoritative and matches the verified source
+# locks; only fall back to the offline bundle when the source ships no vendor.
+if [[ ! -d "$AGENT_SRC/vendor" && -n "$OFFLINE_DIR" ]]; then
+    tar -xzf "$OFFLINE_DIR/go-vendor.tar.gz" -C "$AGENT_SRC"
+fi
+if [[ -d "$AGENT_SRC/vendor" ]]; then
+    (cd "$AGENT_SRC"; CGO_ENABLED=0 GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off GOFLAGS=-mod=vendor go build -trimpath -o bin/virt-node-agent ./cmd/virt-node-agent)
+elif [[ -n "$OFFLINE_DIR" ]]; then
+    die "No Go vendor tree is available for an offline build"
 else
-    (cd "$APP_DIR/services/virt-node-agent"; CGO_ENABLED=0 GOTOOLCHAIN=auto GOFLAGS=-mod=mod go build -trimpath -o bin/virt-node-agent ./cmd/virt-node-agent)
+    (cd "$AGENT_SRC"; CGO_ENABLED=0 GOTOOLCHAIN=auto GOFLAGS=-mod=mod go build -trimpath -o bin/virt-node-agent ./cmd/virt-node-agent)
+fi
+log "Verifying the build artifacts before publishing"
+[[ -x "$BUILD_DIR/.venv/bin/python" ]] || die "Python virtualenv was not created"
+"$BUILD_DIR/.venv/bin/python" -c 'import django' >/dev/null 2>&1 || die "Backend dependencies are missing from the virtualenv"
+[[ -f "$BUILD_DIR/frontend/dist/index.html" ]] || die "Frontend build did not produce dist/index.html"
+[[ -x "$BUILD_DIR/services/virt-node-agent/bin/virt-node-agent" ]] || die "Agent binary was not produced"
+chmod -R a+rX "$BUILD_DIR/.venv"
+chmod 0755 "$BUILD_DIR/services/virt-node-agent/bin/virt-node-agent"
+if [[ "$BUILD_DIR" != "$APP_DIR" ]]; then
+    log "Stopping application jobs and swapping in the verified build (running guests are not stopped)"
+    systemctl stop cloudvirt-collect_node_status.timer cloudvirt-reconcile.timer cloudvirt-cleanup_console_sessions.timer cloudvirt-cleanup_account_batches.timer 2>/dev/null || true
+    systemctl stop cloudvirt-collect_node_status.service cloudvirt-reconcile.service cloudvirt-cleanup_console_sessions.service cloudvirt-cleanup_account_batches.service 2>/dev/null || true
+    systemctl stop cloudvirt-worker cloudvirt-management cloudvirt-agent 2>/dev/null || true
+    OLD_DIR="${APP_DIR}.previous.$$"
+    rm -rf -- "$OLD_DIR"
+    mv -- "$APP_DIR" "$OLD_DIR"
+    STAGED_UPGRADE=true
+    mv -- "$BUILD_DIR" "$APP_DIR"
+    STAGING_DIR=""
 fi
 rsync -a --chmod=D755,F644 "$APP_DIR/frontend/dist/" "$WEB_ROOT/"
-chmod -R a+rX "$APP_DIR/.venv"
-chmod 0755 "$APP_DIR/services/virt-node-agent/bin/virt-node-agent"
 
 STEP=config
 SCHEME=https
@@ -753,6 +818,12 @@ for service in cloudvirt-agent cloudvirt-management cloudvirt-worker cloudvirt-n
     fi
     systemctl is-active --quiet "$service" || die "Service is not active: $service"
 done
+# The upgraded deployment is healthy; retire the retained previous tree.
+if [[ -n "$OLD_DIR" && -d "$OLD_DIR" ]]; then
+    rm -rf -- "$OLD_DIR"
+    OLD_DIR=""
+fi
+STAGED_UPGRADE=false
 log "Deployment completed"
 dpkg-query -W -f='${binary:Package}\t${Status}\n' | awk -F '\t' '$2 == "install ok installed" {print $1}' | sort -u > "$INSTALL_STATE/current-packages.txt"
 comm -13 "$INSTALL_STATE/before-packages.txt" "$INSTALL_STATE/current-packages.txt" > "$INSTALL_STATE/new-packages.txt"

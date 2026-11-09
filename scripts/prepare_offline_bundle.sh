@@ -59,9 +59,12 @@ rm -rf -- "$WORK/frontend/node_modules"
     --registry=https://registry.npmjs.org --no-audit --no-fund)
 tar -czf "$WORK/bundle/npm-cache.tar.gz" -C "$WORK/npm-cache" .
 
-echo '[CloudVirt offline] Vendoring and building locked Go modules'
-rsync -a --exclude=bin --exclude=vendor "$ROOT/services/virt-node-agent/" "$WORK/go/"
-(cd "$WORK/go"; GOTOOLCHAIN=local go mod vendor)
+echo '[CloudVirt offline] Reusing the committed Go vendor tree and building locked modules'
+[[ -f "$ROOT/services/virt-node-agent/vendor/modules.txt" ]] || {
+    echo 'Committed vendor tree missing; run: cd services/virt-node-agent && go mod vendor' >&2
+    exit 1
+}
+rsync -a --exclude=bin "$ROOT/services/virt-node-agent/" "$WORK/go/"
 (cd "$WORK/go"; CGO_ENABLED=0 GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off \
     GOFLAGS=-mod=vendor go build -o "$WORK/virt-node-agent" ./cmd/virt-node-agent)
 tar -czf "$WORK/bundle/go-vendor.tar.gz" -C "$WORK/go" vendor

@@ -14,8 +14,8 @@ func TestOpticalChangesPreserveDisksAndAreReplayable(t *testing.T) {
 	removed, err := replaceCDROM(added, "sda", "", true)
 	if err != nil || removed != base { t.Fatal("eject modified other devices") }
 	if _, err := replaceCDROM(strings.Replace(base, `dev="vda"`, `dev="sda"`, 1), "sda", "/iso/a.iso", false); err == nil { t.Fatal("replaced system disk with optical drive") }
-	boot, err := opticalBootOrder(added, false)
+	boot, err := opticalBootOrder(added, true)
 	if err != nil || !strings.Contains(boot, `<boot dev="cdrom"/><boot dev="hd"/>`) { t.Fatal("installation boot order missing") }
-	boot, err = opticalBootOrder(boot, true)
+	boot, err = opticalBootOrder(boot, false)
 	if err != nil || strings.Contains(boot, `<boot dev="cdrom"/>`) { t.Fatal("eject retained optical boot") }
 }
