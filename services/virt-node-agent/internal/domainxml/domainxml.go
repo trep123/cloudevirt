@@ -99,6 +99,15 @@ type devices struct {
 	Interfaces []*iface           `xml:"interface,omitempty"`
 	Console    consoleSpec        `xml:"console"`
 	Graphics   *graphicsSpec      `xml:"graphics,omitempty"`
+	Inputs     []inputSpec        `xml:"input,omitempty"`
+}
+
+// inputSpec 声明 guest 输入设备。libvirt 对 x86 只会隐式补充 ps2 键鼠，不含绝对指针设备，
+// 显式声明 usb tablet 后 VNC/noVNC 控制台才能获得正确的鼠标定位；
+// usb keyboard 为客户机提供标准 HID 键盘，与固件及 Windows/Linux 输入栈兼容性最好。
+type inputSpec struct {
+	Type string `xml:"type,attr"`
+	Bus  string `xml:"bus,attr"`
 }
 
 type disk struct {
@@ -240,6 +249,10 @@ func Build(spec Spec) (string, error) {
 				Autoport: "yes",
 				Listen:   "127.0.0.1",
 				Passwd:   spec.VNCPassword,
+			},
+			Inputs: []inputSpec{
+				{Type: "keyboard", Bus: "usb"},
+				{Type: "tablet", Bus: "usb"},
 			},
 		},
 	}

@@ -41,6 +41,23 @@ func TestBuildAndValidate(t *testing.T) {
 	}
 }
 
+// TestBuildEmitsUSBInputDevices 校验生成的 XML 显式包含 USB 键盘与平板，
+// 保证控制台拥有标准 HID 键盘与绝对指针设备。
+func TestBuildEmitsUSBInputDevices(t *testing.T) {
+	content, err := Build(validSpec())
+	if err != nil {
+		t.Fatalf("生成失败: %v", err)
+	}
+	for _, fragment := range []string{
+		`<input type="keyboard" bus="usb">`,
+		`<input type="tablet" bus="usb">`,
+	} {
+		if !strings.Contains(content, fragment) {
+			t.Errorf("XML 缺少 USB 输入设备 %q:\n%s", fragment, content)
+		}
+	}
+}
+
 // TestBuildOVSInterface 校验 OVS 接口注入 bridge 与 openvswitch 虚拟端口。
 func TestBuildOVSInterface(t *testing.T) {
 	spec := validSpec()
