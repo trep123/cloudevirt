@@ -65,3 +65,13 @@ func claimCreation(root string, payload createDomainRequest, paths []string) (bo
 	}
 	return false, file.Sync()
 }
+
+// clearCreationJournal 在创建成功后移除续跑日志，避免隐藏文件无限累积。
+// 该文件仅用于崩溃续跑，创建成功后已无意义；删除失败不影响创建结果。
+func clearCreationJournal(root string, uuid string) {
+	path, err := storage.SafePathAllowMissing(root, ".create-"+uuid+".json")
+	if err != nil {
+		return
+	}
+	_ = os.Remove(path)
+}

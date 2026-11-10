@@ -52,6 +52,17 @@ class InstanceExecutorTests(TestCase):
         )
         capabilities.start()
         self.addCleanup(capabilities.stop)
+        # 终态创建失败会触发回滚删除；测试节点 endpoint 指向真实 Agent，
+        # 这里统一拦截删除调用，避免用例对宿主机发出破坏性请求。
+        for method, result in (
+            ('delete_domain_disks', {'result': 'deleted', 'disk_removed': True}),
+            ('delete_domain', {'result': 'deleted', 'disk_removed': False}),
+        ):
+            patcher = mock.patch(
+                f'apps.nodes.client.AgentClient.{method}', return_value=result
+            )
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     def test_success_commits_reservation_and_updates_state(self) -> None:
         """创建成功应更新观测状态、磁盘状态并提交预留。"""
@@ -124,3 +135,68 @@ class InstanceExecutorTests(TestCase):
         self.assertEqual(payload['memory_mib'], 1024)
         self.assertEqual(payload['disk_gib'], 10)
         self.assertEqual(payload['name'], self.instance.libvirt_domain_name)
+
+    def test_terminal_start_failure_rolls_back_and_releases(self) -> None:
+        """创建到达节点但启动校验终态失败：回滚残留域与磁盘并释放预留。"""
+        result = dict(AGENT_RESULT, state='SHUTOFF')
+        with mock.patch(
+            'apps.nodes.client.AgentClient.create_domain', return_value=result
+        ), mock.patch(
+            'apps.nodes.client.AgentClient.delete_domain_disks',
+            return_value={'result': 'deleted', 'disk_removed': True},
+        ) as delete_disks:
+            call_command('run_worker', '--once')
+
+        self.instance.refresh_from_db()
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, TaskStatus.FAILED)
+        self.assertEqual(self.instance.operation_status, 'FAILED')
+        delete_disks.assert_called_once()
+        purged = delete_disks.call_args.args[1]
+        disk = self.instance.disks.first()
+        self.assertEqual(purged, [disk.relative_path])
+        disk.refresh_from_db()
+        self.assertEqual(disk.status, DiskStatus.DELETED)
+        reservation = ResourceReservation.objects.get(instance=self.instance)
+        self.assertEqual(reservation.status, ReservationStatus.RELEASED)
+
+    def test_rollback_preserves_existing_system_disk(self) -> None:
+        """直接挂载既有系统盘时，回滚只解除域定义，不删除用户磁盘。"""
+        from apps.instances.executors import _rollback_failed_creation
+
+        self.instance.creation_config = {
+            'existing_system_file': 'vms/pre.qcow2',
+            'clone_mode': 'direct',
+        }
+        self.instance.save(update_fields=['creation_config'])
+        disk = self.instance.disks.first()
+        disk.relative_path = 'vms/pre.qcow2'
+        disk.save(update_fields=['relative_path'])
+
+        with mock.patch(
+            'apps.nodes.client.AgentClient.delete_domain',
+            return_value={'result': 'deleted', 'disk_removed': False},
+        ) as delete_domain, mock.patch(
+            'apps.nodes.client.AgentClient.delete_domain_disks'
+        ) as delete_disks:
+            rolled_back = _rollback_failed_creation(self.instance, self.task)
+
+        self.assertTrue(rolled_back)
+        delete_disks.assert_not_called()
+        delete_domain.assert_called_once()
+        disk.refresh_from_db()
+        self.assertEqual(disk.status, DiskStatus.READY)
+
+    def test_rollback_failure_retains_reservation(self) -> None:
+        """回滚调用失败时不能假设资源已清理，保留预留待人工核对。"""
+        from apps.instances.executors import _rollback_failed_creation
+
+        with mock.patch(
+            'apps.nodes.client.AgentClient.delete_domain_disks',
+            side_effect=AppError(ErrorCode.NODE_OFFLINE, '节点离线'),
+        ):
+            rolled_back = _rollback_failed_creation(self.instance, self.task)
+
+        self.assertFalse(rolled_back)
+        reservation = ResourceReservation.objects.get(instance=self.instance)
+        self.assertEqual(reservation.status, ReservationStatus.HELD)

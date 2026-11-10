@@ -457,17 +457,29 @@ func (c *Client) DumpXML(ctx context.Context, name string) (string, error) {
 	return c.run(ctx, "dumpxml", name)
 }
 
+// nameExists 在 virsh 的 `--name` 枚举输出中精确匹配名称。
+//
+// 以机器可读的名称列表判断存在性，避免解析随 libvirt 版本或语言环境
+// 变化的错误文本；命令本身失败（连接不可用等）时原样返回错误。
+func (c *Client) nameExists(ctx context.Context, name string, args ...string) (bool, error) {
+	output, err := c.run(ctx, args...)
+	if err != nil {
+		return false, err
+	}
+	for _, line := range strings.Split(output, "\n") {
+		if line = strings.TrimSpace(line); line != "" && line == name {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // DomainExists 判断域是否已定义。
 func (c *Client) DomainExists(ctx context.Context, name string) (bool, error) {
-	_, err := c.run(ctx, "dominfo", name)
-	if err == nil {
-		return true, nil
+	if strings.TrimSpace(name) == "" {
+		return false, apierr.New(apierr.CodeInvalidArgument, "域名称不能为空", nil)
 	}
-	var apiError *apierr.Error
-	if errors.As(err, &apiError) && strings.Contains(strings.ToLower(apiError.Error()), "failed to get domain") {
-		return false, nil
-	}
-	return false, err
+	return c.nameExists(ctx, name, "list", "--all", "--name")
 }
 
 // Network 是 libvirt 网络摘要。
@@ -502,13 +514,5 @@ func (c *Client) NetworkExists(ctx context.Context, name string) (bool, error) {
 	if strings.TrimSpace(name) == "" {
 		return false, apierr.New(apierr.CodeInvalidArgument, "网络名称不能为空", nil)
 	}
-	_, err := c.run(ctx, "net-info", name)
-	if err == nil {
-		return true, nil
-	}
-	var apiError *apierr.Error
-	if errors.As(err, &apiError) && strings.Contains(strings.ToLower(apiError.Error()), "failed to get network") {
-		return false, nil
-	}
-	return false, err
+	return c.nameExists(ctx, name, "net-list", "--all", "--name")
 }

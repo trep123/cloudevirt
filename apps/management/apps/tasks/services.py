@@ -250,8 +250,12 @@ def recover_stale_tasks(
     now = timezone.now()
     summary = {'requeued': 0, 'reconciling': 0}
 
+    # PREPARING only precedes idempotent operations (node refresh, instance
+    # start/stop/reboot), so a crashed worker's task is safe to requeue. Leaving
+    # it uncovered would keep the task active forever and, via the per-resource
+    # active-task constraint, permanently lock the instance.
     stale_pending = Task.objects.filter(
-        status__in=[TaskStatus.PENDING, TaskStatus.VALIDATING],
+        status__in=[TaskStatus.PENDING, TaskStatus.VALIDATING, TaskStatus.PREPARING],
         updated_at__lte=now - timedelta(seconds=pending_after_seconds),
     )
     for task in stale_pending:
@@ -274,8 +278,10 @@ def recover_stale_tasks(
         record_event(task, to_status=TaskStatus.PENDING, message='服务重启后重新排队')
         summary['requeued'] += 1
 
+    # CREATING/VERIFYING follow irreversible side effects, so recover by
+    # reconciling against the node's actual state rather than replaying.
     stuck_creating = Task.objects.filter(
-        status=TaskStatus.CREATING,
+        status__in=[TaskStatus.CREATING, TaskStatus.VERIFYING],
         updated_at__lte=now - timedelta(seconds=creating_after_seconds),
     )
     for task in stuck_creating:

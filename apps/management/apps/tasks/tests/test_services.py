@@ -156,6 +156,35 @@ class TaskServiceTests(TestCase):
             TaskEvent.objects.filter(task=creating, to_status=TaskStatus.RECONCILING).exists()
         )
 
+    def test_recovery_covers_preparing_and_verifying(self) -> None:
+        """崩溃遗留的 PREPARING 应重新排队，VERIFYING 应转入对账，避免实例被永久锁死。"""
+        preparing = enqueue(
+            task_type=TaskType.INSTANCE_START, resource_type='instance', resource_id='21'
+        )
+        verifying = enqueue(
+            task_type=TaskType.INSTANCE_CREATE, resource_type='instance', resource_id='22'
+        )
+        Task.objects.filter(pk=preparing.pk).update(
+            status=TaskStatus.PREPARING,
+            locked_by='dead-worker',
+            updated_at=timezone.now() - timedelta(seconds=600),
+        )
+        Task.objects.filter(pk=verifying.pk).update(
+            status=TaskStatus.VERIFYING,
+            locked_by='dead-worker',
+            updated_at=timezone.now() - timedelta(seconds=1800),
+        )
+
+        summary = recover_stale_tasks()
+
+        self.assertEqual(summary['requeued'], 1)
+        self.assertEqual(summary['reconciling'], 1)
+        preparing.refresh_from_db()
+        verifying.refresh_from_db()
+        self.assertEqual(preparing.status, TaskStatus.PENDING)
+        self.assertEqual(preparing.locked_by, '')
+        self.assertEqual(verifying.status, TaskStatus.RECONCILING)
+
     def test_unregistered_task_type_fails_clearly(self) -> None:
         """未登记执行器的任务类型应明确失败而不是静默成功。"""
         task = enqueue(task_type=TaskType.RECONCILE, resource_type='instance', resource_id='13')

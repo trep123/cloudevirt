@@ -421,6 +421,7 @@ func createDomainHandler(deps Dependencies) http.HandlerFunc {
 			writeAPIError(writer, deps.Logger, err, requestID)
 			return
 		}
+		clearCreationJournal(diskRoot, payload.UUID)
 		writeJSON(writer, http.StatusCreated, createDomainResponse{
 			InitializationDelivered: payload.Initialization != nil,
 			UUID:                    actual.UUID,

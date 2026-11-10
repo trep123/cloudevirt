@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -244,5 +247,33 @@ func TestCreateDomainRejectsUnknownNetwork(t *testing.T) {
 
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("未知网络应返回 400: got=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
+// TestCreateDomainClearsJournalOnSuccess 校验创建成功后清理续跑日志，避免隐藏文件累积。
+func TestCreateDomainClearsJournalOnSuccess(t *testing.T) {
+	if _, err := exec.LookPath("qemu-img"); err != nil {
+		t.Skipf("缺少 qemu-img，跳过磁盘创建: %v", err)
+	}
+	operator := &fakeOperator{exists: false, state: libvirt.StateRunning, dumpXML: fakeDump()}
+	deps := testDependencies()
+	deps.DiskDir = t.TempDir()
+	deps.Virtualizer = operator
+	router := NewRouter(deps)
+
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/domains", strings.NewReader(createPayload(t)))
+	request.Header.Set("Authorization", "Bearer "+deps.Token)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("成功创建应返回 201: got=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	if operator.defineCall != 1 {
+		t.Errorf("应定义一次域: got=%d", operator.defineCall)
+	}
+	journal := filepath.Join(deps.DiskDir, ".create-0f6f2b1e-3333-4a44-9f55-000000000003.json")
+	if _, err := os.Stat(journal); !os.IsNotExist(err) {
+		t.Errorf("创建成功后应清理续跑日志: stat err=%v", err)
 	}
 }

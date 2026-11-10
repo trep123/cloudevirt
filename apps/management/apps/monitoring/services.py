@@ -226,7 +226,12 @@ def reconcile_node(
     active_disk_size: set[tuple[str, str]] = set()
     lister = getattr(agent, 'list_disks', None)
     try:
-        files = {str(item.get('name')): item for item in lister()} if lister else None
+        # 系统盘文件名固定为 system.qcow2，basename 会跨实例冲突；按 Agent
+        # 返回的相对路径建索引，缺相对路径时退回 name 以兼容旧 Agent。
+        files = {
+            str(item.get('relative_path') or item.get('name')): item
+            for item in (lister() if lister else [])
+        } if lister else None
     except AppError as exc:
         # Agent 版本较旧或磁盘目录不可读时，跳过磁盘部分但不影响域对账
         logger.warning(
@@ -243,7 +248,7 @@ def reconcile_node(
         )
         for disk in records:
             detail_key = ('disk', str(disk.pk))
-            item = files.pop(disk.name, None)
+            item = files.pop(disk.relative_path, None)
             if item is None:
                 summary['disk_missing'] = summary.get('disk_missing', 0) + 1
                 active_disk_missing.add(detail_key)
@@ -253,12 +258,16 @@ def reconcile_node(
                     node=node,
                     resource_type='disk',
                     resource_id=str(disk.pk),
-                    detail={'name': disk.name, 'instance_id': disk.instance_id},
+                    detail={
+                        'name': disk.name,
+                        'relative_path': disk.relative_path,
+                        'instance_id': disk.instance_id,
+                    },
                     resolution=DiffResolution.MANUAL,
                 )
                 _upsert_alert(
                     AlertType.DISK_FILE_MISSING,
-                    f'实例磁盘文件缺失：{disk.name}',
+                    f'实例磁盘文件缺失：{disk.relative_path}',
                     node=node,
                     instance=disk.instance,
                     resource_type='disk',
@@ -277,36 +286,41 @@ def reconcile_node(
                     node=node,
                     resource_type='disk',
                     resource_id=str(disk.pk),
-                    detail={'name': disk.name, 'expected_bytes': expected, 'actual_bytes': actual},
+                    detail={
+                        'name': disk.name,
+                        'relative_path': disk.relative_path,
+                        'expected_bytes': expected,
+                        'actual_bytes': actual,
+                    },
                     resolution=DiffResolution.MANUAL,
                 )
                 _upsert_alert(
                     AlertType.DISK_SIZE_MISMATCH,
-                    f'磁盘容量与记录不一致：{disk.name}',
+                    f'磁盘容量与记录不一致：{disk.relative_path}',
                     node=node,
                     instance=disk.instance,
                     resource_type='disk',
                     resource_id=str(disk.pk),
                 )
 
-        for name, item in files.items():
+        for relative_path, item in files.items():
             summary['disk_orphan'] = summary.get('disk_orphan', 0) + 1
-            active_disk_orphan.add(('file', name))
+            active_disk_orphan.add(('file', relative_path))
             ReconciliationDiff.objects.create(
                 run=run,
                 kind=DiffKind.DISK_NOT_IN_DB,
                 node=node,
                 resource_type='file',
-                resource_id=name,
+                resource_id=relative_path,
                 detail={'virtual_size_bytes': item.get('virtual_size_bytes')},
                 resolution=DiffResolution.MANUAL,
             )
             _upsert_alert(
                 AlertType.DISK_NOT_IN_DB,
-                f'存在未登记的磁盘文件 {name}',
+                f'存在未登记的磁盘文件 {relative_path}',
                 node=node,
                 resource_type='file',
-                resource_id=name,
+                resource_id=relative_path,
             )
 
         _resolve_alerts(AlertType.DISK_FILE_MISSING, active_disk_missing, node=node)

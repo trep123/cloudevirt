@@ -69,9 +69,22 @@ def available_resources(node) -> dict[str, int]:
         memory=Sum('memory_reserved_mib'),
         disk=Sum('disk_reserved_bytes'),
     )
-    allocated = Instance.objects.filter(node=node, is_deleted=False).exclude(
-        reservations__status__in=[ReservationStatus.HELD, ReservationStatus.RELEASED]
+    # An instance consumes node capacity only once its creation is committed.
+    # Select on a COMMITTED reservation through a de-duplicated id subquery:
+    # excluding instances that have ANY HELD/RELEASED reservation would drop a
+    # live instance that also carries a RELEASED reservation from an earlier
+    # failed attempt (oversell), and joining the reverse FK into the aggregate
+    # below would double-count instances holding several reservations.
+    allocated_ids = (
+        Instance.objects.filter(
+            node=node,
+            is_deleted=False,
+            reservations__status=ReservationStatus.COMMITTED,
+        )
+        .values_list('id', flat=True)
+        .distinct()
     )
+    allocated = Instance.objects.filter(id__in=allocated_ids)
     usage = allocated.aggregate(vcpu=Sum('vcpu'), memory=Sum('memory_mib'))
     used_vcpu = usage['vcpu'] or 0
     used_memory = usage['memory'] or 0

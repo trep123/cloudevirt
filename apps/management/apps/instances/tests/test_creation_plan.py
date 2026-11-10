@@ -21,6 +21,10 @@ class CreationPlanTests(TestCase):
                 return_value={'image_clone': True, 'iso_install': True, 'start_control': True},
             ),
             patch('apps.nodes.client.AgentClient.create_domain', return_value={'state': 'SHUTOFF'}),
+            patch(
+                'apps.nodes.client.AgentClient.delete_domain_disks',
+                return_value={'result': 'deleted', 'disk_removed': True},
+            ),
             self.assertRaises(AppError),
         ):
             execute_instance_create(Task.objects.get())
@@ -136,6 +140,48 @@ class CreationPlanTests(TestCase):
         self.assertEqual(ResourceReservation.objects.get().disk_reserved_bytes, 45 * 1024**3)
         self.assertEqual(available_resources(self.node)['vcpu'], self.node.cpu_total - 2)
         self.assertEqual(vm.desired_state, 'SHUTOFF')
+
+    def test_committed_instance_with_stale_released_reservation_still_counts(self):
+        from django.utils import timezone
+
+        from apps.instances.models import ReservationStatus
+        from apps.instances.services import available_resources
+
+        vm = Instance.objects.create(
+            name='retried-vm',
+            libvirt_domain_name='cv-retried',
+            node=self.node,
+            image=self.image,
+            created_by=self.user,
+            vcpu=2,
+            memory_mib=1024,
+            disk_gib=20,
+            observed_state='SHUTOFF',
+            observed_state_is_stale=False,
+        )
+        # A failed first attempt leaves a RELEASED reservation; the successful
+        # retry adds a COMMITTED one. The instance is live and must be charged.
+        for status, task_status in (
+            (ReservationStatus.RELEASED, 'FAILED'),
+            (ReservationStatus.COMMITTED, 'SUCCEEDED'),
+        ):
+            task = Task.objects.create(
+                type='INSTANCE_CREATE',
+                resource_type='instance',
+                resource_id=str(vm.pk),
+                status=task_status,
+            )
+            ResourceReservation.objects.create(
+                node=self.node,
+                task=task,
+                instance=vm,
+                vcpu_reserved=2,
+                memory_reserved_mib=1024,
+                disk_reserved_bytes=20 * 1024**3,
+                status=status,
+                expires_at=timezone.now(),
+            )
+        self.assertEqual(available_resources(self.node)['vcpu'], self.node.cpu_total - 2)
 
     def test_invalid_topology_rejected_without_writes(self):
         response = self.post(

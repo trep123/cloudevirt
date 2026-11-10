@@ -77,3 +77,62 @@ func TestNewClientDefaults(t *testing.T) {
 		t.Errorf("超时必须为正值: %v", client.Timeout)
 	}
 }
+
+// writeFakeVirsh 写入一个按参数回显机器可读名称列表的假 virsh。
+func writeFakeVirsh(t *testing.T, body string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "virsh")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body+"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// TestExistsUsesMachineReadableListing 校验存在性判断只依赖 `--name` 枚举，
+// 不解析会随 libvirt 版本或语言环境变化的错误文本。
+func TestExistsUsesMachineReadableListing(t *testing.T) {
+	client := NewClient(0)
+	client.Binary = writeFakeVirsh(t, `case "$*" in
+*net-list*) printf 'default\nbr0\n' ;;
+*list*) printf 'cv-alpha\ncv-beta\n' ;;
+*) exit 99 ;;
+esac`)
+
+	ctx := t.Context()
+	if ok, err := client.DomainExists(ctx, "cv-alpha"); err != nil || !ok {
+		t.Errorf("已定义域应存在: ok=%v err=%v", ok, err)
+	}
+	if ok, err := client.DomainExists(ctx, "cv-gamma"); err != nil || ok {
+		t.Errorf("未定义域不应存在: ok=%v err=%v", ok, err)
+	}
+	if ok, err := client.NetworkExists(ctx, "default"); err != nil || !ok {
+		t.Errorf("已定义网络应存在: ok=%v err=%v", ok, err)
+	}
+	if ok, err := client.NetworkExists(ctx, "missing"); err != nil || ok {
+		t.Errorf("未定义网络不应存在: ok=%v err=%v", ok, err)
+	}
+}
+
+// TestExistsRejectsEmptyName 校验空名称被拒绝，避免误匹配空行。
+func TestExistsRejectsEmptyName(t *testing.T) {
+	client := NewClient(0)
+	client.Binary = writeFakeVirsh(t, `printf 'cv-alpha\n\n'`)
+	ctx := t.Context()
+	if _, err := client.DomainExists(ctx, "  "); err == nil {
+		t.Error("空域名应返回错误")
+	}
+	if _, err := client.NetworkExists(ctx, ""); err == nil {
+		t.Error("空网络名应返回错误")
+	}
+}
+
+// TestExistsPropagatesCommandFailure 校验 virsh 自身失败时返回错误，
+// 而不是被误判为“不存在”。
+func TestExistsPropagatesCommandFailure(t *testing.T) {
+	client := NewClient(0)
+	client.Binary = writeFakeVirsh(t, `echo 'connection refused' >&2; exit 1`)
+	ctx := t.Context()
+	if _, err := client.DomainExists(ctx, "cv-alpha"); err == nil {
+		t.Error("命令失败应返回错误")
+	}
+}

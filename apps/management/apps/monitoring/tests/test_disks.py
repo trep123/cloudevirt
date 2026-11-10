@@ -111,6 +111,47 @@ class DiskReconcileTests(TestCase):
         self.assertEqual(summary['disk_orphan'], 0)
         self.assertEqual(summary['disk_size_mismatch'], 0)
 
+    def test_same_basename_across_instances_matched_by_relative_path(self) -> None:
+        """同名 system.qcow2 分布在不同实例目录时按相对路径匹配，避免误报缺失/孤儿。"""
+        from django.contrib.auth import get_user_model
+
+        user = get_user_model().objects.get(username='disk-user')
+        second = Instance.objects.create(
+            name='vm-disk-2',
+            libvirt_domain_name='cv-disk-2',
+            node=self.node,
+            image=self.instance.image,
+            vcpu=1,
+            memory_mib=512,
+            disk_gib=10,
+            observed_state=ObservedState.RUNNING,
+            created_by=user,
+        )
+        first_path = f'vms/user-1/{self.instance.uuid}/system.qcow2'
+        second_path = f'vms/user-1/{second.uuid}/system.qcow2'
+        self.disk.name = 'system.qcow2'
+        self.disk.relative_path = first_path
+        self.disk.save(update_fields=['name', 'relative_path'])
+        Disk.objects.create(
+            instance=second, name='system.qcow2', relative_path=second_path, size_gib=10
+        )
+        agent = FakeAgentClient()
+        agent.domains = lambda: [
+            {'name': 'cv-disk', 'state': 'RUNNING'},
+            {'name': 'cv-disk-2', 'state': 'RUNNING'},
+        ]
+        agent._disk_files = [
+            {'name': 'system.qcow2', 'relative_path': first_path, 'virtual_size_bytes': 10 * GIB},
+            {'name': 'system.qcow2', 'relative_path': second_path, 'virtual_size_bytes': 10 * GIB},
+        ]
+        run = ReconciliationRun.objects.create(scope='test')
+
+        summary = reconcile_node(self.node, client=agent, run=run)
+
+        self.assertEqual(summary['disk_missing'], 0)
+        self.assertEqual(summary['disk_orphan'], 0)
+        self.assertEqual(summary['disk_size_mismatch'], 0)
+
     def test_disk_scan_failure_does_not_break_domain_reconcile(self) -> None:
         """磁盘清单不可用时，域对账仍然完成。"""
         agent = FakeAgentClient()

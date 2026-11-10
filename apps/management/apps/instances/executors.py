@@ -21,7 +21,7 @@ from apps.instances.models import (
 )
 from apps.instances.services import commit_reservation, release_reservation
 from apps.nodes.client import AgentClient
-from apps.tasks.models import Task, TaskStatus
+from apps.tasks.models import RETRYABLE_ERROR_CODES, Task, TaskStatus
 from apps.tasks.services import record_event
 from common.errors import AppError, ErrorCode
 
@@ -202,18 +202,42 @@ def execute_instance_create(task: Task) -> dict:
         )
         disk.status = DiskStatus.FAILED
         disk.save(update_fields=['status', 'updated_at'])
-        # A failed response can occur after disks/domain creation. Reconcile before releasing.
-        record_event(
-            task,
-            from_status=task.status,
-            to_status=task.status,
-            message='创建结果需核对，保留资源预留以避免重复分配',
+        # 仍会自动重试的瞬时错误交给 Agent 幂等续跑；只有终态失败才回滚，避免误删续跑中的域。
+        will_retry = exc.code in RETRYABLE_ERROR_CODES and task.attempt_count < task.max_attempts
+        rolled_back = creation_requested and not will_retry and _rollback_failed_creation(
+            instance, task
         )
-        if not creation_requested:
+        if rolled_back:
             release_reservation(instance)
+            record_event(
+                task,
+                from_status=task.status,
+                to_status=task.status,
+                message='创建失败已回滚节点资源并释放预留',
+            )
+        elif not creation_requested:
+            release_reservation(instance)
+            record_event(
+                task,
+                from_status=task.status,
+                to_status=task.status,
+                message='创建未到达节点，释放资源预留',
+            )
+        else:
+            # A failed response can occur after disks/domain creation. Reconcile before releasing.
+            record_event(
+                task,
+                from_status=task.status,
+                to_status=task.status,
+                message='创建结果需核对，保留资源预留以避免重复分配',
+            )
         logger.error(
             '实例创建失败',
-            extra={'instance_id': instance.pk, 'error_code': exc.code},
+            extra={
+                'instance_id': instance.pk,
+                'error_code': exc.code,
+                'rolled_back': rolled_back,
+            },
         )
         raise
 
@@ -256,6 +280,77 @@ def execute_instance_create(task: Task) -> dict:
         'state': instance.observed_state,
         'created': bool(result.get('created', True)),
     }
+
+
+def _rollback_failed_creation(instance, task) -> bool:
+    """回滚已到达节点的失败创建：解除域定义并清理本次新建的磁盘。
+
+    只删除本次创建产生的磁盘；直接挂载的既有系统盘保留，避免误删用户数据。
+    节点确认清理完成后返回 True，调用方据此释放资源预留。
+
+    Args:
+        instance: 目标实例。
+        task: 创建任务，用于写入事件。
+
+    Returns:
+        节点是否已确认回滚完成。
+    """
+    config = instance.creation_config or {}
+    mode = config.get('clone_mode', 'direct' if config.get('existing_system_file') else 'full')
+    system_disk_is_new = not (config.get('existing_system_file') and mode == 'direct')
+
+    live_disks = list(instance.disks.exclude(status=DiskStatus.DELETED))
+    purge_paths = [
+        item.relative_path
+        for item in live_disks
+        if item.role != 'SYSTEM' or system_disk_is_new
+    ]
+    client = AgentClient(instance.node.endpoint)
+    pool_name = agent_storage_pool(instance)
+    pool_kwargs = {'storage_pool': pool_name} if pool_name else {}
+    try:
+        if purge_paths:
+            result = client.delete_domain_disks(
+                instance.libvirt_domain_name, purge_paths, **pool_kwargs
+            )
+        else:
+            result = client.delete_domain(instance.libvirt_domain_name, **pool_kwargs)
+    except AppError as exc:
+        record_event(
+            task,
+            from_status=task.status,
+            to_status=task.status,
+            message=f'创建回滚失败，节点可能残留资源，请人工核对：{exc.message}',
+        )
+        logger.warning(
+            '创建失败回滚未完成',
+            extra={'instance_id': instance.pk, 'error_code': exc.code},
+        )
+        return False
+    if not isinstance(result, dict):
+        record_event(
+            task,
+            from_status=task.status,
+            to_status=task.status,
+            message='创建回滚响应格式无效，请人工核对节点资源',
+        )
+        return False
+
+    purged = set(purge_paths)
+    for item in live_disks:
+        if item.relative_path in purged:
+            item.status = DiskStatus.DELETED
+        elif item.role == 'SYSTEM':
+            # 既有系统盘只解除挂载，磁盘文件保留
+            item.status = DiskStatus.READY
+        item.save(update_fields=['status', 'updated_at'])
+    record_event(
+        task,
+        from_status=task.status,
+        to_status=task.status,
+        message='创建失败已回滚：解除域定义并清理本次新建的磁盘',
+    )
+    return True
 
 
 def wait_for_state(

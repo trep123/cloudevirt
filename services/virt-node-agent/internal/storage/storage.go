@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -311,49 +312,74 @@ func SafePathAllowMissing(root, relative string) (string, error) {
 // DiskFile 是磁盘目录中单个文件的摘要。
 type DiskFile struct {
 	Name             string `json:"name"`
+	RelativePath     string `json:"relative_path"`
 	Format           string `json:"format"`
 	SizeBytes        int64  `json:"size_bytes"`
 	VirtualSizeBytes int64  `json:"virtual_size_bytes"`
 	ActualSizeBytes  int64  `json:"actual_size_bytes"`
 }
 
-// ListDiskFiles 列出磁盘目录下的常规文件及其容量信息。
+// ListDiskFiles 递归列出磁盘目录下的常规文件及其容量信息。
 //
-// 只读取目录内的一层文件，跳过子目录与符号链接，避免意外遍历或越界。
+// 磁盘按 vms/user-<id>/<uuid>/<file> 的相对路径存放，且系统盘文件名固定为
+// system.qcow2，仅凭 basename 无法跨实例区分；因此额外返回相对 root 的路径
+// （统一正斜杠）供后端按 relative_path 精确对账。WalkDir 不跟随符号链接，
+// 隐藏目录与符号链接一律跳过，避免越界遍历；单个文件不可读或非镜像文件不会
+// 中断整次扫描。
 func ListDiskFiles(ctx context.Context, root string) ([]DiskFile, error) {
-	entries, err := os.ReadDir(root)
+	rootInfo, err := os.Stat(root)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, apierr.New(apierr.CodeNotFound, "磁盘目录不存在", err)
 		}
 		return nil, apierr.New(apierr.CodeOperationFailed, "读取磁盘目录失败", err)
 	}
+	if !rootInfo.IsDir() {
+		return nil, apierr.New(apierr.CodeOperationFailed, "磁盘根路径不是目录", nil)
+	}
 
-	files := make([]DiskFile, 0, len(entries))
-	for _, entry := range entries {
-		if strings.HasPrefix(entry.Name(), ".") {
-			continue
+	files := make([]DiskFile, 0, 64)
+	walkErr := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			if entry != nil && entry.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
 		}
-		if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
-			continue
+		name := entry.Name()
+		if entry.IsDir() {
+			if path != root && strings.HasPrefix(name, ".") {
+				return fs.SkipDir
+			}
+			return nil
 		}
-		path := filepath.Join(root, entry.Name())
-		info, err := entry.Info()
-		if err != nil {
-			continue
+		if strings.HasPrefix(name, ".") || entry.Type()&os.ModeSymlink != 0 {
+			return nil
 		}
-		format, virtualSize, err := DiskInfo(ctx, path)
-		if err != nil {
-			// 非镜像文件（如临时文件）不应导致整次扫描失败
-			continue
+		relative, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			return nil
+		}
+		format, virtualSize, infoErr := DiskInfo(ctx, path)
+		if infoErr != nil {
+			return nil
+		}
+		stat, statErr := entry.Info()
+		if statErr != nil {
+			return nil
 		}
 		files = append(files, DiskFile{
-			Name:             entry.Name(),
+			Name:             name,
+			RelativePath:     filepath.ToSlash(relative),
 			Format:           format,
-			SizeBytes:        info.Size(),
+			SizeBytes:        stat.Size(),
 			VirtualSizeBytes: virtualSize,
-			ActualSizeBytes:  info.Size(),
+			ActualSizeBytes:  stat.Size(),
 		})
+		return nil
+	})
+	if walkErr != nil {
+		return nil, apierr.New(apierr.CodeOperationFailed, "遍历磁盘目录失败", walkErr)
 	}
 	return files, nil
 }
