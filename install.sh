@@ -439,10 +439,22 @@ if [[ "$BUILD_DIR" != "$APP_DIR" ]]; then
     systemctl stop cloudvirt-worker cloudvirt-management cloudvirt-agent 2>/dev/null || true
     OLD_DIR="${APP_DIR}.previous.$$"
     rm -rf -- "$OLD_DIR"
+    STAGED_VENV_BIN="$BUILD_DIR/.venv/bin"
     mv -- "$APP_DIR" "$OLD_DIR"
     STAGED_UPGRADE=true
     mv -- "$BUILD_DIR" "$APP_DIR"
     STAGING_DIR=""
+    # 交换后修复 venv 控制台脚本的 shebang：pip 在 staging 目录里生成脚本时写入了
+    # staging 绝对路径，重命名后该路径不存在，systemd 直接执行 .venv/bin/gunicorn
+    # 会因解释器缺失报 ENOENT（status=203/EXEC）。改写为最终 APP_DIR 路径。
+    if [[ -d "$APP_DIR/.venv/bin" ]]; then
+        for venv_script in "$APP_DIR/.venv/bin"/*; do
+            [[ -f "$venv_script" && ! -L "$venv_script" ]] || continue
+            if head -n1 "$venv_script" | grep -qF "#!$STAGED_VENV_BIN"; then
+                sed -i "1s|.*|#!$APP_DIR/.venv/bin/python|" "$venv_script"
+            fi
+        done
+    fi
 fi
 rsync -a --chmod=D755,F644 "$APP_DIR/frontend/dist/" "$WEB_ROOT/"
 
